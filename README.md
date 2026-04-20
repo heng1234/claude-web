@@ -205,7 +205,7 @@ claude-web/
 
 ## 📄 License
 
-MIT — 见 [LICENSE](LICENSE)
+Apache License 2.0 — 见 [LICENSE](LICENSE)
 
 ## 🙏 致谢
 
