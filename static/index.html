@@ -1145,6 +1145,8 @@ form.addEventListener('submit', (e) => {
 });
 
 input.addEventListener('keydown', (e) => {
+  // Skip when IME composition is active (e.g. 中文拼音输入法)
+  if (e.isComposing || e.keyCode === 229) return;
   if (!filePicker.classList.contains('hidden')) {
     if (e.key === 'ArrowDown') { e.preventDefault(); pickerSel = Math.min(pickerSel+1, pickerFiles.length-1); renderPicker(); return; }
     if (e.key === 'ArrowUp') { e.preventDefault(); pickerSel = Math.max(pickerSel-1, 0); renderPicker(); return; }
