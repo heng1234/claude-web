@@ -211,7 +211,3 @@ MIT — 见 [LICENSE](LICENSE)
 
 - [Claude Code](https://docs.claude.com/claude-code) — Anthropic
 - [FastAPI](https://fastapi.tiangolo.com/) · [TailwindCSS](https://tailwindcss.com/) · [marked](https://github.com/markedjs/marked)
-
----
-
-> 本工具由 [Claude Code](https://docs.claude.com/claude-code) 本身协助开发完成 🤖
