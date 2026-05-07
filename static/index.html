@@ -97,6 +97,58 @@
   .lightbox img { max-width:95%; max-height:95%; border-radius:4px; }
   .tag-chip { display:inline-block; font-size:10px; padding:1px 6px; background:#fde68a; color:#713f12; border-radius:9999px; margin-right:4px; }
   .dark .tag-chip { background:#78350f; color:#fef3c7; }
+  .url-chip { display:inline-flex; align-items:center; gap:6px; max-width:280px; padding:4px 10px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:10px; font-size:12px; }
+  .dark .url-chip { background:#1e293b; border-color:#334155; }
+  .url-chip.loading { border-color:#fdba74; }
+  .url-chip.error { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+  .dark .url-chip.error { background:#450a0a; border-color:#7f1d1d; color:#fca5a5; }
+  .url-chip .host { font-weight:500; }
+  .url-chip .meta { color:#64748b; font-size:10px; }
+  .url-chip .close { cursor:pointer; color:#94a3b8; margin-left:4px; }
+  .url-chip .close:hover { color:#ef4444; }
+  .toolbar-btn-active { background:#fb923c !important; color:#fff; }
+  .dark .toolbar-btn-active { background:#c2410c !important; color:#fff; }
+
+  /* TodoWrite live panel */
+  .todo-panel {
+    position: fixed; top: 80px; right: 20px;
+    width: 320px; max-height: 60vh;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    z-index: 30;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transition: opacity .3s, transform .3s;
+  }
+  .dark .todo-panel { background:#1e293b; border-color:#334155; }
+  .todo-panel.hidden { display: none; }
+  .todo-panel-header {
+    padding: 10px 14px;
+    background: linear-gradient(135deg, #fff7ed, #ffedd5);
+    border-bottom: 1px solid #fed7aa;
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 13px; color: #9a3412;
+  }
+  .dark .todo-panel-header { background: linear-gradient(135deg,#431407,#7c2d12); border-color:#9a3412; color:#fed7aa; }
+  .todo-progress-track { height: 3px; background:#fed7aa; }
+  .dark .todo-progress-track { background:#7c2d12; }
+  .todo-progress-fill { height: 100%; background:#f97316; transition: width .4s; }
+  .todo-panel-list { overflow-y:auto; padding: 6px 0; flex: 1; }
+  .todo-item {
+    padding: 6px 14px;
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 13px; line-height: 1.45;
+    border-left: 3px solid transparent;
+  }
+  .todo-item.completed { color:#9ca3af; text-decoration: line-through; }
+  .todo-item.in_progress { background:#fef3c7; border-left-color:#f59e0b; font-weight: 500; }
+  .dark .todo-item.in_progress { background:#422006; }
+  .todo-icon { flex-shrink: 0; }
+  @media (max-width: 768px) {
+    .todo-panel { right: 10px; left: 10px; width: auto; top: 70px; }
+  }
   .sidebar-toggle { display:none; }
   @media (max-width: 768px) {
     #sidebar { position:fixed; left:-288px; top:0; bottom:0; z-index:30; transition:left .2s; box-shadow: 2px 0 10px rgba(0,0,0,0.1); }
@@ -198,6 +250,7 @@
     </div>
   </main>
 
+  <div id="urlChips" class="hidden bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 px-4 pt-2 pb-1 max-w-4xl mx-auto w-full flex flex-wrap gap-2"></div>
   <div id="attachments" class="hidden bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 px-4 pt-3 pb-1 max-w-4xl mx-auto w-full flex flex-wrap gap-2"></div>
 
   <footer class="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-3">
@@ -205,6 +258,8 @@
       <input type="file" id="fileInput" accept="image/*" multiple class="hidden" />
       <button type="button" id="attachBtn" title="上传图片 (支持粘贴/拖拽)"
         class="px-3 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg">📎</button>
+      <button type="button" id="webSearchBtn" title="联网搜索：开启后 Claude 会优先用 WebSearch / WebFetch 获取最新信息"
+        class="px-3 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg">🌐</button>
       <div class="flex-1 relative">
         <textarea id="input" rows="2" placeholder="输入消息...  (Enter 发送, Shift+Enter 换行, @ 引用文件)"
           class="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"></textarea>
@@ -247,6 +302,10 @@
         <label class="block font-medium mb-1">完成提示</label>
         <label class="inline-flex items-center gap-2"><input type="checkbox" id="notifyEnabled" /> 浏览器通知</label>
         <label class="inline-flex items-center gap-2 ml-4"><input type="checkbox" id="soundEnabled" /> 声音</label>
+      </div>
+      <div>
+        <label class="block font-medium mb-1">URL 上下文</label>
+        <label class="inline-flex items-center gap-2"><input type="checkbox" id="urlAutoFetch" /> 自动识别 URL，发送时抓取网页内容作为上下文</label>
       </div>
     </div>
   </div>
@@ -324,6 +383,18 @@
   </div>
 </div>
 
+<!-- TodoWrite live panel -->
+<div id="todoPanel" class="todo-panel hidden">
+  <div class="todo-panel-header">
+    <span>📋 任务进度</span>
+    <span id="todoProgress" class="ml-auto text-xs font-normal opacity-75">0/0</span>
+    <button id="todoCollapseBtn" title="折叠/展开" class="hover:opacity-70">−</button>
+    <button id="todoCloseBtn" title="关闭" class="hover:opacity-70 ml-1">×</button>
+  </div>
+  <div class="todo-progress-track"><div id="todoProgressFill" class="todo-progress-fill" style="width:0%"></div></div>
+  <div class="todo-panel-list" id="todoPanelList"></div>
+</div>
+
 <!-- Lightbox -->
 <div id="lightbox" class="lightbox hidden"><img /></div>
 
@@ -350,6 +421,8 @@ const settings = {
   toolResultOpen: LS.get('toolResultOpen', false),
   notifyEnabled: LS.get('notifyEnabled', false),
   soundEnabled: LS.get('soundEnabled', false),
+  urlAutoFetch: LS.get('urlAutoFetch', true),
+  webSearch: LS.get('webSearch', false),
 };
 
 let sessionId = null;
@@ -376,6 +449,13 @@ const cwdInput = $('cwdInput'), cwdList = $('cwdList');
 const newSessionBtn = $('newSession'), welcome = $('welcome');
 const sessionList = $('sessionList');
 const fileInput = $('fileInput'), attachBtn = $('attachBtn'), attachmentsEl = $('attachments');
+const webSearchBtn = $('webSearchBtn');
+const todoPanel = $('todoPanel');
+const todoPanelList = $('todoPanelList');
+const todoProgress = $('todoProgress');
+const todoProgressFill = $('todoProgressFill');
+const todoCollapseBtn = $('todoCollapseBtn');
+const todoCloseBtn = $('todoCloseBtn');
 const searchInput = $('searchInput');
 const modelSelect = $('modelSelect');
 const permSelect = $('permSelect');
@@ -390,6 +470,7 @@ const settingsBtn = $('settingsBtn'), settingsModal = $('settingsModal');
 const systemPromptInput = $('systemPromptInput');
 const toolUseOpenEl = $('toolUseOpen'), toolResultOpenEl = $('toolResultOpen');
 const notifyEnabledEl = $('notifyEnabled'), soundEnabledEl = $('soundEnabled');
+const urlAutoFetchEl = $('urlAutoFetch');
 const promptsModal = $('promptsModal'), managePromptsBtn = $('managePrompts');
 const promptList = $('promptList'), promptsEditor = $('promptsEditor');
 const addPromptBtn = $('addPromptBtn'), newPromptName = $('newPromptName'), newPromptContent = $('newPromptContent');
@@ -584,6 +665,22 @@ function renderEditDiff(inputData) {
 }
 
 function addToolUseBlock(container, name, inputData) {
+  if (name === 'TodoWrite' && inputData && Array.isArray(inputData.todos)) {
+    updateTodoPanel(inputData.todos);
+    const total = inputData.todos.length;
+    const done = inputData.todos.filter(t => t.status === 'completed').length;
+    const chip = document.createElement('div');
+    chip.className = 'inline-flex items-center gap-2 px-3 py-1.5 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-900 rounded-full text-xs text-orange-700 dark:text-orange-300 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/60 self-start';
+    chip.innerHTML = `📋 任务清单已更新 <span class="font-semibold">(${done}/${total})</span>`;
+    chip.title = '点击聚焦右上角任务面板';
+    chip.addEventListener('click', () => {
+      todoPanel.classList.remove('hidden');
+      todoPanel.style.transform = 'scale(1.04)';
+      setTimeout(() => { todoPanel.style.transform = ''; }, 250);
+    });
+    container.appendChild(chip);
+    return;
+  }
   const block = document.createElement('details');
   if (settings.toolUseOpen) block.open = true;
   block.className = 'bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg overflow-hidden';
@@ -644,6 +741,79 @@ function addErrorBlock(message) {
   el.textContent = '错误: ' + message;
   chatEl.appendChild(el);
 }
+
+// ===== TodoWrite live panel =====
+let todoCollapsed = false;
+let todoFadeTimer = null;
+const todoSnapshotQueue = [];
+let todoDrainTimer = null;
+const TODO_PLAYBACK_INTERVAL = 600;
+
+function updateTodoPanel(todos) {
+  if (!Array.isArray(todos) || todos.length === 0) return;
+  // Skip duplicate snapshots (same status array as last queued)
+  const last = todoSnapshotQueue.length
+    ? todoSnapshotQueue[todoSnapshotQueue.length - 1]
+    : null;
+  if (last && JSON.stringify(last) === JSON.stringify(todos)) return;
+  todoSnapshotQueue.push(todos);
+  if (!todoDrainTimer) drainTodoSnapshots();
+}
+
+function drainTodoSnapshots() {
+  if (todoSnapshotQueue.length === 0) {
+    todoDrainTimer = null;
+    return;
+  }
+  const todos = todoSnapshotQueue.shift();
+  renderTodoSnapshot(todos);
+  if (todoSnapshotQueue.length > 0) {
+    todoDrainTimer = setTimeout(drainTodoSnapshots, TODO_PLAYBACK_INTERVAL);
+  } else {
+    todoDrainTimer = null;
+  }
+}
+
+function renderTodoSnapshot(todos) {
+  clearTimeout(todoFadeTimer);
+  const total = todos.length;
+  const completed = todos.filter(t => t.status === 'completed').length;
+  const inProgress = todos.find(t => t.status === 'in_progress');
+  todoProgress.textContent = `${completed}/${total}`;
+  todoProgressFill.style.width = `${total ? (completed / total * 100) : 0}%`;
+  todoPanelList.innerHTML = todos.map(t => {
+    const status = t.status || 'pending';
+    const icon = status === 'completed' ? '✅' : (status === 'in_progress' ? '⏳' : '⬜');
+    const label = status === 'in_progress' ? (t.activeForm || t.content || '') : (t.content || t.activeForm || '');
+    return `<div class="todo-item ${status}"><span class="todo-icon">${icon}</span><span>${escapeHtml(label)}</span></div>`;
+  }).join('');
+  todoPanel.classList.remove('hidden');
+  if (todoCollapsed) toggleTodoCollapse(false);
+  if (completed === total && !inProgress && todoSnapshotQueue.length === 0) {
+    todoFadeTimer = setTimeout(() => { todoPanel.style.opacity = '0.6'; }, 4000);
+  } else {
+    todoPanel.style.opacity = '1';
+  }
+}
+
+function toggleTodoCollapse(forceState) {
+  todoCollapsed = typeof forceState === 'boolean' ? forceState : !todoCollapsed;
+  todoPanelList.style.display = todoCollapsed ? 'none' : '';
+  todoCollapseBtn.textContent = todoCollapsed ? '+' : '−';
+}
+
+function hideTodoPanel() {
+  todoPanel.classList.add('hidden');
+  todoPanelList.innerHTML = '';
+  todoProgress.textContent = '0/0';
+  todoProgressFill.style.width = '0%';
+  todoPanel.style.opacity = '1';
+  todoSnapshotQueue.length = 0;
+  if (todoDrainTimer) { clearTimeout(todoDrainTimer); todoDrainTimer = null; }
+}
+
+todoCloseBtn.addEventListener('click', hideTodoPanel);
+todoCollapseBtn.addEventListener('click', () => toggleTodoCollapse());
 
 function createThinkingIndicator(label) {
   const el = document.createElement('div');
@@ -1112,11 +1282,31 @@ async function sendRaw(sentMessage, displayMessage) {
 
 async function sendCore(message, displayMessage, imagePaths) {
   const isFork = !!displayMessage;
+
+  // Gemini-style: fetch detected URLs at send time
+  if (!isFork && urlContext.size > 0) {
+    sendBtn.disabled = true;
+    await fetchAllPendingUrls();
+    sendBtn.disabled = false;
+  }
+
+  let actualMessage = message;
+  let actualDisplay = displayMessage;
+  if (!isFork) {
+    const urlBlock = composeUrlContext();
+    const wsPrefix = webSearchPrefix();
+    if (urlBlock || wsPrefix) {
+      actualDisplay = message;
+      actualMessage = wsPrefix + urlBlock + message;
+    }
+  }
+
   if (!isFork) {
     addUserMessage(message, imagePaths);
     pendingImages = [];
     renderAttachments();
     clearDraft();
+    clearUrlContext();
   } else {
     addUserMessage(displayMessage, imagePaths);
   }
@@ -1138,13 +1328,13 @@ async function sendCore(message, displayMessage, imagePaths) {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        message,
+        message: actualMessage,
         session_id: sessionId,
         cwd: cwdInput.value.trim() || null,
         images: imagePaths,
         model: modelSelect.value || null,
         system_prompt: settings.systemPrompt || null,
-        display_message: displayMessage || null,
+        display_message: actualDisplay || null,
         permission_mode: perm.permission_mode,
         allowed_tools: perm.allowed_tools,
         disallowed_tools: perm.disallowed_tools,
@@ -1225,6 +1415,7 @@ input.addEventListener('input', () => {
   updateTokenCount();
   saveDraft();
   maybeShowPicker();
+  scheduleUrlDetect();
 });
 
 // ===== sessions sidebar =====
@@ -1239,6 +1430,8 @@ function startNewSession() {
   chatEl.appendChild(welcome);
   pendingImages = [];
   renderAttachments();
+  clearUrlContext();
+  hideTodoPanel();
   currentUserIndex = 0;
   lastUserIndex = -1;
   streamedIds.clear();
@@ -1390,6 +1583,7 @@ async function loadSession(id) {
     sessionLabel.textContent = '会话 ' + data.id.slice(0, 8);
     streamedIds.clear();
     lastStreamingMsgId = null;
+    hideTodoPanel();
     currentUserIndex = 0;
     lastUserIndex = -1;
     if (data.cwd) cwdInput.value = data.cwd;
@@ -1516,6 +1710,7 @@ settingsBtn.addEventListener('click', () => {
   toolResultOpenEl.checked = settings.toolResultOpen;
   notifyEnabledEl.checked = settings.notifyEnabled;
   soundEnabledEl.checked = settings.soundEnabled;
+  urlAutoFetchEl.checked = settings.urlAutoFetch;
   openModal(settingsModal);
 });
 
@@ -1528,6 +1723,12 @@ notifyEnabledEl.addEventListener('change', () => {
   if (settings.notifyEnabled) maybeRequestNotifyPermission();
 });
 soundEnabledEl.addEventListener('change', () => { settings.soundEnabled = soundEnabledEl.checked; LS.set('soundEnabled', settings.soundEnabled); });
+urlAutoFetchEl.addEventListener('change', () => {
+  settings.urlAutoFetch = urlAutoFetchEl.checked;
+  LS.set('urlAutoFetch', settings.urlAutoFetch);
+  if (!settings.urlAutoFetch) clearUrlContext();
+  else scheduleUrlDetect();
+});
 
 document.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
 
@@ -1644,6 +1845,161 @@ document.addEventListener('keydown', (e) => {
     if (!lightbox.classList.contains('hidden')) lightbox.classList.add('hidden');
   }
 });
+
+// ===== URL auto-detect (Gemini-style) =====
+const urlChipsEl = $('urlChips');
+const URL_REGEX = /https?:\/\/[^\s<>"'`]+/g;
+const MAX_URL_CHARS = 8000;
+// url -> { status:'loading'|'ready'|'error', title?, content?, length?, truncated?, error? }
+const urlContext = new Map();
+
+function extractUrls(text) {
+  if (!text) return [];
+  const matches = text.match(URL_REGEX) || [];
+  const cleaned = matches.map(u => u.replace(/[.,;!?)\]]+$/, ''));
+  return Array.from(new Set(cleaned));
+}
+
+function hostOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+
+function renderUrlChips() {
+  if (urlContext.size === 0) {
+    urlChipsEl.classList.add('hidden');
+    urlChipsEl.innerHTML = '';
+    return;
+  }
+  urlChipsEl.classList.remove('hidden');
+  const parts = [];
+  for (const [url, state] of urlContext.entries()) {
+    const host = hostOf(url);
+    let icon = '🔗', cls = '', meta = '';
+    if (state.status === 'pending') { icon = '🔗'; cls = ''; meta = '发送时抓取'; }
+    else if (state.status === 'loading') { icon = '⏳'; cls = 'loading'; meta = '抓取中...'; }
+    else if (state.status === 'error') { icon = '❌'; cls = 'error'; meta = state.error || '失败'; }
+    else if (state.status === 'ready') {
+      icon = '📄';
+      meta = state.truncated ? `已截断 · ${state.length} 字` : `${state.length} 字`;
+    }
+    parts.push(`
+      <span class="url-chip ${cls}" title="${escapeHtml(url)}">
+        <span>${icon}</span>
+        <span class="host truncate">${escapeHtml(state.title || host)}</span>
+        <span class="meta">${escapeHtml(meta)}</span>
+        <span class="close" data-url-remove="${encodeURIComponent(url)}">×</span>
+      </span>
+    `);
+  }
+  urlChipsEl.innerHTML = parts.join('');
+  urlChipsEl.querySelectorAll('[data-url-remove]').forEach(el => {
+    el.addEventListener('click', () => {
+      const u = decodeURIComponent(el.dataset.urlRemove);
+      urlContext.delete(u);
+      // also strip URL from input textarea
+      input.value = input.value.split(u).join('').replace(/\s{2,}/g, ' ').trim();
+      updateTokenCount();
+      renderUrlChips();
+    });
+  });
+}
+
+async function fetchUrlInBackground(url) {
+  try {
+    const r = await fetch('/api/fetch-url', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ url, max_chars: MAX_URL_CHARS }),
+    });
+    if (!urlContext.has(url)) return;
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      urlContext.set(url, { status: 'error', error: d.detail || `HTTP ${r.status}` });
+    } else {
+      const data = await r.json();
+      urlContext.set(url, {
+        status: 'ready',
+        title: data.title,
+        content: data.content,
+        length: data.length,
+        truncated: data.truncated,
+      });
+    }
+  } catch (e) {
+    if (urlContext.has(url)) urlContext.set(url, { status: 'error', error: e.message });
+  }
+  renderUrlChips();
+}
+
+let urlDetectTimer = null;
+function scheduleUrlDetect() {
+  clearTimeout(urlDetectTimer);
+  if (!settings.urlAutoFetch) {
+    if (urlContext.size > 0) clearUrlContext();
+    return;
+  }
+  urlDetectTimer = setTimeout(() => {
+    const urls = extractUrls(input.value);
+    const currentSet = new Set(urls);
+    for (const u of Array.from(urlContext.keys())) {
+      if (!currentSet.has(u)) urlContext.delete(u);
+    }
+    for (const u of urls) {
+      if (!urlContext.has(u)) {
+        urlContext.set(u, { status: 'pending' });
+      }
+    }
+    renderUrlChips();
+  }, 300);
+}
+
+async function fetchAllPendingUrls() {
+  const tasks = [];
+  for (const [url, state] of urlContext.entries()) {
+    if (state.status === 'pending' || state.status === 'error') {
+      urlContext.set(url, { status: 'loading' });
+      tasks.push(fetchUrlInBackground(url));
+    }
+  }
+  if (tasks.length === 0) return;
+  renderUrlChips();
+  await Promise.all(tasks);
+}
+
+function composeUrlContext() {
+  const blocks = [];
+  for (const [url, state] of urlContext.entries()) {
+    if (state.status !== 'ready' || !state.content) continue;
+    const t = state.title || url;
+    const suffix = state.truncated ? `\n(已截断，原文共约 ${state.length} 字)` : '';
+    blocks.push(`【网页: ${t}】\n${url}\n---\n${state.content}\n---${suffix}`);
+  }
+  return blocks.length ? blocks.join('\n\n') + '\n\n' : '';
+}
+
+function clearUrlContext() {
+  urlContext.clear();
+  renderUrlChips();
+}
+
+// ===== web search toggle =====
+function applyWebSearchBtnState() {
+  webSearchBtn.classList.toggle('toolbar-btn-active', settings.webSearch);
+  webSearchBtn.title = settings.webSearch
+    ? '联网搜索已开启：Claude 会优先用 WebSearch / WebFetch 联网查询。点击关闭'
+    : '联网搜索：开启后 Claude 会优先用 WebSearch / WebFetch 获取最新信息';
+}
+webSearchBtn.addEventListener('click', () => {
+  settings.webSearch = !settings.webSearch;
+  LS.set('webSearch', settings.webSearch);
+  applyWebSearchBtnState();
+});
+applyWebSearchBtnState();
+
+function webSearchPrefix() {
+  if (!settings.webSearch) return '';
+  return '【启用联网搜索】请优先使用 WebSearch 工具进行联网查询，必要时用 WebFetch 抓取页面详情，确保信息是最新的。\n\n';
+}
 
 // ===== mobile sidebar toggle =====
 toggleSidebar.addEventListener('click', () => sidebar.classList.toggle('open'));

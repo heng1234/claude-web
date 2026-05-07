@@ -1,13 +1,20 @@
 import asyncio
+import ipaddress
 import json
 import os
+import re
 import signal
+import socket
 import sqlite3
 import time
+import urllib.error
+import urllib.request
 import uuid
 from collections import defaultdict
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -167,6 +174,11 @@ class RestoreRequest(BaseModel):
     event_index: int
 
 
+class FetchUrlRequest(BaseModel):
+    url: str
+    max_chars: Optional[int] = 10000
+
+
 def build_args(
     message: str,
     session_id: str,
@@ -176,10 +188,14 @@ def build_args(
     permission_mode: Optional[str] = None,
     allowed_tools: Optional[List[str]] = None,
     disallowed_tools: Optional[List[str]] = None,
+    use_stdin: bool = False,
 ) -> List[str]:
-    args = [
-        "claude",
-        "-p", message,
+    args = ["claude"]
+    if use_stdin:
+        args += ["-p", "--input-format", "stream-json"]
+    else:
+        args += ["-p", message]
+    args += [
         "--output-format", "stream-json",
         "--verbose",
         "--include-partial-messages",
@@ -204,10 +220,25 @@ def build_args(
 def compose_message(message: str, images: Optional[List[str]]) -> str:
     if not images:
         return message
-    lines = [message.rstrip(), "", "[附加图片]"]
-    for p in images:
-        lines.append(f"- {p}")
-    return "\n".join(lines)
+    return message
+
+
+def build_image_input_message(message: str, images: List[str]) -> bytes:
+    import base64 as b64mod
+    content: List[dict] = []
+    for img_path in images:
+        p = Path(img_path)
+        if not p.exists():
+            continue
+        ext = p.suffix.lower()
+        media_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                     ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp"}
+        media_type = media_map.get(ext, "image/png")
+        data = b64mod.b64encode(p.read_bytes()).decode()
+        content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}})
+    content.append({"type": "text", "text": message})
+    msg = {"type": "user", "message": {"role": "user", "content": content}}
+    return json.dumps(msg, ensure_ascii=False).encode() + b"\n"
 
 
 async def _git_run(cwd: str, *args: str) -> Optional[str]:
@@ -318,6 +349,7 @@ async def chat(req: ChatRequest):
         }
         yield f"data: {json.dumps(meta)}\n\n"
 
+        has_images = bool(req.images)
         args = build_args(
             full_message, session_id,
             resume=not is_new,
@@ -326,15 +358,23 @@ async def chat(req: ChatRequest):
             permission_mode=req.permission_mode,
             allowed_tools=req.allowed_tools,
             disallowed_tools=req.disallowed_tools,
+            use_stdin=has_images,
         )
+        stdin_data: Optional[bytes] = None
+        if has_images:
+            stdin_data = build_image_input_message(full_message, req.images or [])
         try:
             process = await asyncio.create_subprocess_exec(
                 *args,
+                stdin=asyncio.subprocess.PIPE if has_images else None,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=work_dir,
                 limit=16 * 1024 * 1024,
             )
+            if has_images and stdin_data and process.stdin:
+                process.stdin.write(stdin_data)
+                process.stdin.close()
         except FileNotFoundError:
             err_event = {"type": "error", "message": "claude CLI not found in PATH"}
             append_event(session_id, err_event)
@@ -818,6 +858,103 @@ async def git_status(cwd: str = Query(...)):
 
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+
+
+class _TextExtractor(HTMLParser):
+    _SKIP_TAGS = {"script", "style", "noscript", "svg", "iframe", "head"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: List[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: List) -> None:
+        if tag in self._SKIP_TAGS:
+            self._skip_depth += 1
+        elif tag in {"p", "br", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr"}:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth > 0:
+            return
+        chunk = data.strip()
+        if chunk:
+            self._parts.append(chunk)
+
+    def get_text(self) -> str:
+        raw = " ".join(self._parts)
+        collapsed = re.sub(r"[ \t]+", " ", raw)
+        collapsed = re.sub(r"\n\s*", "\n", collapsed)
+        return re.sub(r"\n{3,}", "\n\n", collapsed).strip()
+
+
+def _is_private_host(host: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(host)
+        return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+    except ValueError:
+        try:
+            resolved = socket.gethostbyname(host)
+            ip = ipaddress.ip_address(resolved)
+            return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+        except Exception:
+            return True
+
+
+@app.post("/api/fetch-url")
+async def fetch_url(req: FetchUrlRequest):
+    parsed = urlparse(req.url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="only http/https allowed")
+    if not parsed.hostname:
+        raise HTTPException(status_code=400, detail="invalid url")
+    if _is_private_host(parsed.hostname):
+        raise HTTPException(status_code=400, detail="refusing to fetch private/internal host")
+
+    def _do_fetch() -> Dict[str, str]:
+        request = urllib.request.Request(
+            req.url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; ClaudeWeb/1.0)",
+                "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=10) as resp:
+            content_type = resp.headers.get("Content-Type", "") or ""
+            charset = "utf-8"
+            if "charset=" in content_type:
+                charset = content_type.split("charset=", 1)[1].split(";")[0].strip()
+            raw = resp.read(2 * 1024 * 1024)
+        html = raw.decode(charset, errors="replace")
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
+        title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else req.url
+        extractor = _TextExtractor()
+        extractor.feed(html)
+        text = extractor.get_text()
+        return {"title": title, "content": text}
+
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(None, _do_fetch)
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"remote {e.code}")
+    except urllib.error.URLError as e:
+        raise HTTPException(status_code=502, detail=f"fetch failed: {e.reason}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    limit = max(500, min(req.max_chars or 10000, 50000))
+    content = result["content"][:limit]
+    return {
+        "url": req.url,
+        "title": result["title"] or req.url,
+        "content": content,
+        "truncated": len(result["content"]) > limit,
+        "length": len(result["content"]),
+    }
 
 
 @app.get("/")
