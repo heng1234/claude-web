@@ -12,16 +12,16 @@
         { "type": "fix", "text": "停止会话改用 SIGTERM + 3 秒后 SIGKILL 兜底" },
         { "type": "fix", "text": "/api/files 优先使用 git ls-files，大型 monorepo 不再卡死" },
         { "type": "fix", "text": "前端图片上传去重：相同文件多次拖拽/粘贴不再重复上传" },
-        { "type": "new", "text": "启动时检测 claude CLI 是否安装，未安装时给出友好提示" },
-        { "type": "new", "text": "graceful shutdown：Ctrl+C 关服务时清理所有运行中的子进程" },
-        { "type": "new", "text": "待发送的图片缩略图支持点击放大预览" }
+        { "type": "feature", "text": "启动时检测 claude CLI 是否安装，未安装时给出友好提示" },
+        { "type": "feature", "text": "graceful shutdown：Ctrl+C 关服务时清理所有运行中的子进程" },
+        { "type": "feature", "text": "待发送的图片缩略图支持点击放大预览" }
       ]
     },
     {
       "version": "1.2.0",
       "date": "2026-05-12",
       "highlights": [
-        { "type": "new", "text": "上传不再限制文件类型白名单，任意文本文件都可上传" },
+        { "type": "feature", "text": "上传不再限制文件类型白名单，任意文本文件都可上传" },
         { "type": "fix", "text": "智能编码检测：UTF-8 / GB18030 / UTF-16 自动识别" }
       ]
     },
@@ -29,21 +29,21 @@
       "version": "1.1.0",
       "date": "2026-05-09",
       "highlights": [
-        { "type": "new", "text": "MCP Server 管理面板：可视化查看 / 启用 / 禁用 / 新增（多 scope）" },
-        { "type": "new", "text": "支持上传 Excel（xlsx / xls）和粘贴板文件" },
-        { "type": "new", "text": "敏感字段自动脱敏显示（token / key / secret 仅显示前 4 位）" }
+        { "type": "feature", "text": "MCP Server 管理面板：可视化查看 / 启用 / 禁用 / 新增（多 scope）" },
+        { "type": "feature", "text": "支持上传 Excel（xlsx / xls）和粘贴板文件" },
+        { "type": "feature", "text": "敏感字段自动脱敏显示（token / key / secret 仅显示前 4 位）" }
       ]
     },
     {
       "version": "1.0.0",
       "date": "2026-05-01",
       "highlights": [
-        { "type": "new", "text": "PyPI 发包：pip install claude-web-ui 一键安装" },
-        { "type": "new", "text": "Token 级流式输出、工具调用可视化、Edit 工具并排 diff" },
-        { "type": "new", "text": "多轮对话、停止任务、图片输入、文档上传、URL 抓取" },
-        { "type": "new", "text": "会话置顶 / 归档 / 标签 / 搜索 / 导出 / AI 智能命名" },
-        { "type": "new", "text": "Git Checkpoint 回滚、历史消息分叉 / 编辑继续" },
-        { "type": "new", "text": "TodoWrite 实时看板、统计面板、暗黑模式、移动端响应" }
+        { "type": "feature", "text": "PyPI 发包：pip install claude-web-ui 一键安装" },
+        { "type": "feature", "text": "Token 级流式输出、工具调用可视化、Edit 工具并排 diff" },
+        { "type": "feature", "text": "多轮对话、停止任务、图片输入、文档上传、URL 抓取" },
+        { "type": "feature", "text": "会话置顶 / 归档 / 标签 / 搜索 / 导出 / AI 智能命名" },
+        { "type": "feature", "text": "Git Checkpoint 回滚、历史消息分叉 / 编辑继续" },
+        { "type": "feature", "text": "TodoWrite 实时看板、统计面板、暗黑模式、移动端响应" }
       ]
     }
   ]

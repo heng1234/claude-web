@@ -1049,6 +1049,7 @@ let sessionId = null;
 let pendingImages = [];
 let pendingImageKeys = new Set();
 let activeImageUploadKeys = new Set();
+let activeImageUploadPromises = new Set();
 let pendingImageGeneration = 0;
 let currentController = null;
 let archivedView = false;
@@ -2188,25 +2189,36 @@ function clearPendingImages() {
   renderAttachments();
 }
 
+async function waitForImageUploads() {
+  while (activeImageUploadPromises.size > 0) {
+    await Promise.allSettled(Array.from(activeImageUploadPromises));
+  }
+}
+
 async function uploadFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
   const imageKey = await imageFileKey(file);
   if (pendingImageKeys.has(imageKey) || activeImageUploadKeys.has(imageKey)) return;
   activeImageUploadKeys.add(imageKey);
   const uploadGeneration = pendingImageGeneration;
-  const fd = new FormData();
-  fd.append('file', file);
-  try {
-    const r = await fetch('/api/upload', { method:'POST', body: fd });
-    if (!r.ok) { alert('上传失败: ' + r.status); return; }
-    const data = await r.json();
-    if (uploadGeneration !== pendingImageGeneration) return;
-    data._imageKey = imageKey;
-    pendingImages.push(data);
-    pendingImageKeys.add(imageKey);
-    renderAttachments();
-  } catch (e) { alert('上传出错: ' + e.message); }
-  finally { activeImageUploadKeys.delete(imageKey); }
+  const uploadPromise = (async () => {
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const r = await fetch('/api/upload', { method:'POST', body: fd });
+      if (!r.ok) { alert('上传失败: ' + r.status); return; }
+      const data = await r.json();
+      if (uploadGeneration !== pendingImageGeneration) return;
+      data._imageKey = imageKey;
+      pendingImages.push(data);
+      pendingImageKeys.add(imageKey);
+      renderAttachments();
+    } catch (e) { alert('上传出错: ' + e.message); }
+    finally { activeImageUploadKeys.delete(imageKey); }
+  })();
+  activeImageUploadPromises.add(uploadPromise);
+  try { await uploadPromise; }
+  finally { activeImageUploadPromises.delete(uploadPromise); }
 }
 attachBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', async () => {
@@ -2385,6 +2397,11 @@ function buildPermissionPayload() {
 }
 
 async function send(message) {
+  if (activeImageUploadPromises.size > 0) {
+    sendBtn.disabled = true;
+    try { await waitForImageUploads(); }
+    finally { sendBtn.disabled = false; }
+  }
   return sendCore(message, null, pendingImages.map(i => i.path));
 }
 
@@ -2508,7 +2525,7 @@ stopBtn.addEventListener('click', async () => {
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = input.value.trim();
-  if (!text && pendingImages.length === 0) return;
+  if (!text && pendingImages.length === 0 && activeImageUploadPromises.size === 0) return;
   input.value = '';
   updateTokenCount();
   autosizeTextarea();
@@ -3462,6 +3479,24 @@ function changelogSince(seenVersion) {
   return changelogData.releases.filter(r => compareVersion(r.version, seenVersion) > 0);
 }
 
+function changelogType(type) {
+  if (type === 'feature' || type === 'new') return 'feature';
+  if (type === 'breaking') return 'breaking';
+  return 'fix';
+}
+
+function changelogLabel(type) {
+  const normalized = changelogType(type);
+  if (normalized === 'feature') return 'FEATURE';
+  if (normalized === 'breaking') return 'BREAKING';
+  return 'FIX';
+}
+
+function isFeatureHighlight(highlight) {
+  const normalized = changelogType(highlight?.type);
+  return normalized === 'feature' || normalized === 'breaking';
+}
+
 // ----- Onboarding tour -----
 const TOUR_STEPS = [
   {
@@ -3588,7 +3623,7 @@ function showWhatsNew(releases) {
   const latest = releases[0];
   $('whatsnewVersion').textContent = 'v' + latest.version;
   const items = releases.slice(0, 2).flatMap(r =>
-    r.highlights.filter(h => h.type === 'new' || h.type === 'breaking').slice(0, 4).map(h => h.text)
+    r.highlights.filter(isFeatureHighlight).slice(0, 4).map(h => h.text)
   );
   const fixCount = releases.flatMap(r => r.highlights.filter(h => h.type === 'fix')).length;
   let html = items.map(t => `<li>${escapeHtml(t)}</li>`).join('');
@@ -3621,7 +3656,7 @@ function renderChangelog() {
       <div class="changelog-version">v${escapeHtml(r.version)} <span class="changelog-date">${escapeHtml(r.date || '')}</span></div>
       ${r.highlights.map(h => `
         <div class="changelog-item">
-          <span class="changelog-tag ${h.type}">${h.type === 'new' ? 'NEW' : h.type === 'fix' ? 'FIX' : 'BREAKING'}</span>
+          <span class="changelog-tag ${changelogType(h.type)}">${changelogLabel(h.type)}</span>
           ${escapeHtml(h.text)}
         </div>
       `).join('')}
@@ -3662,7 +3697,7 @@ $('helpReplayTour').addEventListener('click', () => {
 
   if (compareVersion(appVersion, seenVersion) > 0) {
     const newReleases = changelogSince(seenVersion);
-    const hasFeature = newReleases.some(r => r.highlights.some(h => h.type === 'new' || h.type === 'breaking'));
+    const hasFeature = newReleases.some(r => r.highlights.some(isFeatureHighlight));
     if (hasFeature) {
       // Active toast for feature releases
       setTimeout(() => showWhatsNew(newReleases), 800);

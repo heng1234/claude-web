@@ -50,3 +50,14 @@ path = "claude_web/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["claude_web"]
+
+[tool.hatch.build.targets.sdist]
+# Root-level server.py / static/ are dev-time convenience copies of the package
+# contents. Don't ship duplicates in the source distribution.
+include = [
+    "claude_web/**",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+    "requirements.txt",
+]

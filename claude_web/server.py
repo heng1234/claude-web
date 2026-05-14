@@ -3,7 +3,6 @@ import ipaddress
 import json
 import os
 import re
-import signal
 import socket
 import sqlite3
 import time
@@ -11,15 +10,18 @@ import urllib.error
 import urllib.request
 import uuid
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from claude_web import __version__
 
 _PKG_DIR = Path(__file__).parent
 _DATA_DIR = Path(os.environ.get("CLAUDE_WEB_DATA_DIR", "")).resolve() if os.environ.get("CLAUDE_WEB_DATA_DIR") else Path.cwd()
@@ -40,21 +42,8 @@ KNOWN_TOOL_NAMES = {
     "WebFetch", "WebSearch", "TodoWrite", "Task", "NotebookEdit",
 }
 
-app = FastAPI(title="Claude Code Web")
-
-
-@app.on_event("shutdown")
-async def _shutdown_terminate_running_processes() -> None:
-    if not _running_processes:
-        return
-    processes = list(_running_processes.values())
-    _running_processes.clear()
-    await asyncio.gather(
-        *(_terminate_process(p) for p in processes),
-        return_exceptions=True,
-    )
-
 _running_processes: Dict[str, asyncio.subprocess.Process] = {}
+_stopped_sessions: Set[str] = set()
 
 
 async def _terminate_process(process: asyncio.subprocess.Process, grace: float = 3.0) -> None:
@@ -77,6 +66,52 @@ async def _terminate_process(process: asyncio.subprocess.Process, grace: float =
         await asyncio.wait_for(process.wait(), timeout=2.0)
     except asyncio.TimeoutError:
         pass
+
+
+async def _shutdown_terminate_running_processes() -> None:
+    if not _running_processes:
+        return
+    processes = list(_running_processes.values())
+    _running_processes.clear()
+    await asyncio.gather(
+        *(_terminate_process(p) for p in processes),
+        return_exceptions=True,
+    )
+
+
+_UPLOAD_RETENTION_SECONDS = 30 * 24 * 60 * 60  # 30 days
+
+
+def _prune_old_uploads(retention_seconds: int = _UPLOAD_RETENTION_SECONDS) -> int:
+    """Delete files in UPLOADS_DIR older than retention_seconds. Returns count
+    of files removed. Best-effort: silently skips entries we can't stat/unlink."""
+    if not UPLOADS_DIR.exists():
+        return 0
+    cutoff = time.time() - retention_seconds
+    removed = 0
+    for entry in UPLOADS_DIR.iterdir():
+        if not entry.is_file():
+            continue
+        try:
+            if entry.stat().st_mtime < cutoff:
+                entry.unlink()
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Prune stale uploads in a background thread so startup isn't blocked on disk IO.
+    asyncio.get_event_loop().run_in_executor(None, _prune_old_uploads)
+    try:
+        yield
+    finally:
+        await _shutdown_terminate_running_processes()
+
+
+app = FastAPI(title="Claude Code Web", lifespan=_lifespan)
 
 
 async def _drain_stream(stream: asyncio.StreamReader, buffer: bytearray, limit: int = 256 * 1024) -> None:
@@ -345,12 +380,6 @@ def classify_claude_error(message: str) -> dict:
     return {"type": "error", "message": text}
 
 
-def compose_message(message: str, images: Optional[List[str]]) -> str:
-    if not images:
-        return message
-    return message
-
-
 def build_image_input_message(message: str, images: List[str]) -> bytes:
     import base64 as b64mod
     content: List[dict] = []
@@ -444,8 +473,34 @@ def format_context_snippet(events: List[dict], max_chars: int = 6000) -> str:
 
 
 def derive_title(message: str) -> str:
-    text = message.strip().replace("\n", " ")
-    return text[:60] if text else "未命名会话"
+    """First line of the user message, with code fences / markdown headers / bullet
+    markers stripped so the title reads naturally even when the message starts with
+    a code block or markdown."""
+    if not message:
+        return "未命名会话"
+    lines = message.splitlines()
+    in_fence = False
+    first_in_fence: Optional[str] = None
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        # Toggle on triple-backtick fences and skip their content.
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            if first_in_fence is None:
+                first_in_fence = stripped
+            continue
+        # Strip markdown header / quote / list prefixes for nicer titles.
+        cleaned = re.sub(r"^[#>\-*+\d.\s]+", "", stripped).strip()
+        if cleaned:
+            return cleaned[:60]
+    if first_in_fence:
+        return first_in_fence[:60]
+    fallback = message.strip().replace("\n", " ")
+    return fallback[:60] if fallback else "未命名会话"
 
 
 def session_has_remote_conversation(events: List[dict]) -> bool:
@@ -500,7 +555,7 @@ async def chat(req: ChatRequest):
 
     is_new = not remote_ready
     work_dir = req.cwd or (row["cwd"] if row and row["cwd"] else os.path.expanduser("~"))
-    full_message = compose_message(req.message, req.images)
+    full_message = req.message
     display_text = req.display_message if req.display_message is not None else req.message
 
     checkpoint = await create_git_checkpoint(work_dir)
@@ -525,6 +580,14 @@ async def chat(req: ChatRequest):
             "has_checkpoint": checkpoint is not None,
         }
         yield f"data: {json.dumps(meta)}\n\n"
+
+        # If a previous chat for the same session is still running (e.g. duplicate
+        # request, network retry, fast double-click), terminate it before spawning
+        # a new one. Otherwise the old subprocess would be orphaned, burning tokens
+        # and producing stray events.
+        existing = _running_processes.pop(session_id, None)
+        if existing is not None:
+            await _terminate_process(existing)
 
         has_images = bool(req.images)
         args = build_args(
@@ -596,7 +659,8 @@ async def chat(req: ChatRequest):
                     await asyncio.wait_for(asyncio.shield(stderr_task), timeout=1.0)
                 except asyncio.TimeoutError:
                     pass
-            if rc != 0:
+            stopped_by_user = session_id in _stopped_sessions
+            if rc != 0 and not stopped_by_user:
                 err_text = bytes(stderr_buffer).decode("utf-8", errors="replace")
                 err_event = classify_claude_error(err_text or f"claude exited with code {rc}")
                 append_event(session_id, err_event)
@@ -610,6 +674,7 @@ async def chat(req: ChatRequest):
                     pass
             await _terminate_process(process)
             _running_processes.pop(session_id, None)
+            _stopped_sessions.discard(session_id)
 
         upsert_session(session_id, derive_title(display_text), work_dir)
         if remote_became_ready:
@@ -628,6 +693,7 @@ async def stop_chat(session_id: str):
     process = _running_processes.get(session_id)
     if process is None:
         raise HTTPException(status_code=404, detail="no running process for this session")
+    _stopped_sessions.add(session_id)
     await _terminate_process(process)
     stop_event = {"type": "error", "message": "用户中止", "ts": time.time()}
     append_event(session_id, stop_event)
@@ -1964,7 +2030,6 @@ async def fetch_url(req: FetchUrlRequest):
 
 @app.get("/api/version")
 async def get_version():
-    from claude_web import __version__
     return {"version": __version__}
 
 
@@ -2017,11 +2082,10 @@ def main():
     args = parser.parse_args()
 
     if args.version:
-        from claude_web import __version__
         print(f"claude-web {__version__}")
         return
 
-    print(f"Claude Code Web v{__import__('claude_web').__version__}")
+    print(f"Claude Code Web v{__version__}")
     print(f"  → http://{args.host}:{args.port}")
     print(f"  → Data: {_DATA_DIR}")
 
@@ -2037,6 +2101,14 @@ def main():
             print()
             sys.exit(1)
         print(f"  → Claude CLI: {claude_version}")
+
+    _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+    if args.host not in _LOCAL_HOSTS:
+        print()
+        print(f"  ⚠️  WARNING: binding to {args.host} exposes the server beyond localhost.", file=sys.stderr)
+        print("     claude-web has NO built-in authentication. Anyone who can reach this", file=sys.stderr)
+        print("     address can run commands, read your files, and burn your Claude quota.", file=sys.stderr)
+        print("     Only use --host on a trusted network (e.g. tailscale, VPN, SSH tunnel).", file=sys.stderr)
 
     print()
 

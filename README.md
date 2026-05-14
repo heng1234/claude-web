@@ -40,7 +40,8 @@ pip install claude-web-ui && claude-web
 - **思考动画**：等待响应时用跳动圆点 + 扫光文字提示
 
 ### 📝 输入
-- 文本 + 图片（**文件选择 / 粘贴 / 拖拽**）
+- 文本 + 图片（**文件选择 / 粘贴 / 拖拽**），同一图片不会重复上传
+- 待发送图片缩略图**点击放大预览**，确认上传内容
 - **文档上传**：PDF / DOCX / XLSX / XLS / CSV / TSV / TXT / MD / JSON / LOG 自动提取文本作为上下文
 - **URL 自动检测**：输入框里粘贴链接，发送时自动抓取网页正文
 - **联网搜索开关**：一键激活 WebSearch / WebFetch
@@ -86,13 +87,19 @@ pip install claude-web-ui && claude-web
 - 支持 `.mcp.json` 项目级配置
 - 修改后新建会话即生效
 
+### 🎓 上手 & 引导
+- **首次启动 5 步交互引导**：高亮 UI 控件 + 浮层 tooltip，半分钟学会主功能
+- **What's New 弹窗**：升级到新版本后右下角提示新增/破坏性变更，纯修复版本只显示小红点不打扰
+- **帮助面板（顶栏 `?`）**：快捷键速查 / 使用技巧 / 完整更新日志 / 一键重看引导
+- **新会话空状态**：4 张示例 prompt 卡片（代码审查 / 技术解释 / 写工具 / Mermaid）一键填入
+
 ### 📊 其它
 - 模型切换（Opus / Sonnet / Haiku）
 - 使用统计（总成本 / 每日成本柱图 / 工具使用排行）
 - Git 状态栏（branch / dirty 文件数）
 - 系统提示词自定义
 - 暗黑模式
-- 快捷键：`⌘K` 搜索 · `⌘N` 新会话 · `Esc` 关闭弹窗
+- 快捷键：`⌘K` 搜索 · `⌘N` 新会话 · `Esc` 关闭弹窗 / 引导 / 弹窗
 - 浏览器通知 + 完成提示音
 - 移动端响应式（侧栏可收起）
 - IME 输入法兼容（中文拼音回车不误发）
@@ -276,6 +283,10 @@ claude-web/
 | `/api/files` | GET | 当前目录文件列表（@ 引用用） |
 | `/api/cwds` | GET | 最近用过的工作目录 |
 | `/api/tags` | GET | 所有标签统计 |
+| `/api/mcp/servers` | GET | 列出所有 MCP server（含 disabled / 多 scope） |
+| `/api/mcp/servers/{name}` | POST/PATCH/DELETE | 新增 / 修改 / 删除 MCP server |
+| `/api/version` | GET | 当前后端版本（前端用于检测升级） |
+| `/changelog.json` | GET | 更新日志（用于 What's New 弹窗 + 帮助面板） |
 
 ---
 
@@ -304,6 +315,9 @@ claude-web/
 - [x] TodoWrite 实时看板、统计面板、Git 状态栏、暗黑模式、移动端侧栏
 - [x] 权限策略（CLI 默认 / 允许编辑 / 计划 / 只读 / 自定义工具）和权限失败后的本会话临时放行重试
 - [x] MCP Server 管理面板（多 scope 查看 / 启用 / 禁用 / 添加 / 删除 / 脱敏展示）
+- [x] **首次启动 5 步交互引导 + What's New 升级提醒 + 帮助面板（含完整更新日志）**
+- [x] **稳定性硬化：SQLite WAL / SSE 断开清理子进程 / stderr 并发 drain / JSONL 原子写 / SIGTERM+SIGKILL 兜底**
+- [x] **启动检测 claude CLI、`--host` 非 localhost 警告、`uploads/` 自动清理 > 30 天文件**
 - [x] PyPI 发包（`pip install claude-web-ui`）
 
 #### 部分实现 / 有限制 ⚠️
