@@ -2,7 +2,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/claude-web-ui.svg)](https://pypi.org/project/claude-web-ui/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 一个给 [Claude Code](https://docs.claude.com/claude-code) CLI 加可视化界面的 Web 应用。后端用 FastAPI 包装 `claude -p --output-format stream-json`，前端通过 SSE 流式渲染对话、工具调用、思考过程。
 
@@ -351,7 +351,7 @@ claude-web/
 
 ## 📄 License
 
-Apache License 2.0 — 见 [LICENSE](LICENSE)
+MIT License — 见 [LICENSE](LICENSE)
 
 ## 🙏 致谢
 

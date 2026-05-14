@@ -7,7 +7,7 @@ name = "claude-web-ui"
 dynamic = ["version"]
 description = "Web UI for Claude Code CLI — token streaming, tool visualization, checkpoint rollback, multi-session management"
 readme = "README.md"
-license = "Apache-2.0"
+license = "MIT"
 requires-python = ">=3.9"
 authors = [
     { name = "heng1234" },
@@ -18,7 +18,7 @@ classifiers = [
     "Environment :: Web Environment",
     "Framework :: FastAPI",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
