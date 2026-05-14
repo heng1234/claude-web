@@ -10,10 +10,10 @@ import urllib.error
 import urllib.request
 import uuid
 from collections import defaultdict
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, Iterator, List, Optional, Set
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
@@ -132,16 +132,24 @@ async def _drain_stream(stream: asyncio.StreamReader, buffer: bytearray, limit: 
 _DB_INITIALIZED = False
 
 
-def db_connect() -> sqlite3.Connection:
+@contextmanager
+def db_connect() -> Iterator[sqlite3.Connection]:
     global _DB_INITIALIZED
     conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.row_factory = sqlite3.Row
-    if not _DB_INITIALIZED:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        _DB_INITIALIZED = True
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
+    try:
+        conn.row_factory = sqlite3.Row
+        if not _DB_INITIALIZED:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            _DB_INITIALIZED = True
+        conn.execute("PRAGMA busy_timeout=5000")
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
@@ -405,7 +413,12 @@ async def _git_run(cwd: str, *args: str) -> Optional[str]:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return None
         if proc.returncode != 0:
             return None
         return stdout.decode("utf-8", errors="replace").strip()
@@ -1176,9 +1189,14 @@ async def suggest_title(session_id: str):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="title generation timeout")
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise HTTPException(status_code=504, detail="title generation timeout")
+    except HTTPException:
+        raise
     title = stdout.decode("utf-8", errors="replace").strip().splitlines()[0].strip(' "\'"""''').strip()[:60]
     if not title:
         raise HTTPException(status_code=500, detail="empty title")
@@ -1291,9 +1309,12 @@ async def suggest_followups(session_id: str = ""):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-    except asyncio.TimeoutError:
-        return {"suggestions": []}
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return {"suggestions": []}
     except Exception:
         return {"suggestions": []}
     lines = [l.strip() for l in stdout.decode("utf-8", errors="replace").splitlines() if l.strip()]
@@ -1739,7 +1760,12 @@ async def _list_files_via_git(base: Path, q_lower: str, limit: int) -> Optional[
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return None
         if proc.returncode != 0:
             return None
     except (FileNotFoundError, asyncio.TimeoutError):
@@ -1801,7 +1827,12 @@ async def git_status(cwd: str = Query(...)):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return {"branch": "", "dirty": 0, "available": False}
     except Exception:
         return {"branch": "", "dirty": 0, "available": False}
     if proc.returncode != 0:
