@@ -1719,7 +1719,94 @@ function renderEditDiff(inputData) {
   `;
 }
 
-function addToolUseBlock(container, name, inputData) {
+let toolUseBlocks = new Map();
+let pendingToolUseIds = [];
+
+function resetToolUseRuntimeState() {
+  toolUseBlocks.clear();
+  pendingToolUseIds = [];
+}
+
+function toolRunningText(name) {
+  const map = {
+    Bash: '正在执行...',
+    Read: '正在读取...',
+    Write: '正在写入...',
+    Edit: '正在编辑...',
+    MultiEdit: '正在编辑...',
+    Grep: '正在检索...',
+    Glob: '正在匹配...',
+    WebFetch: '正在抓取...',
+    WebSearch: '正在搜索...',
+    TodoWrite: '正在更新...',
+    Task: '子任务执行中...',
+    NotebookEdit: '正在编辑...',
+  };
+  return map[name] || '执行中...';
+}
+
+function toolStatusClass(kind) {
+  if (kind === 'error') return 'text-red-600 dark:text-red-300';
+  if (kind === 'done') return 'text-emerald-600 dark:text-emerald-300';
+  if (kind === 'stopped') return 'text-amber-600 dark:text-amber-300';
+  return 'text-blue-600 dark:text-blue-300 animate-pulse';
+}
+
+function setToolStatus(statusEl, text, kind) {
+  if (!statusEl) return;
+  statusEl.textContent = text;
+  statusEl.className = `tool-status ml-2 text-xs font-normal ${toolStatusClass(kind)}`;
+}
+
+function renderToolUseBody(name, inputData) {
+  if (name === 'Edit' || name === 'MultiEdit') {
+    return `<div data-tool-body class="p-3">${renderEditDiff(inputData || {})}</div>`;
+  }
+  return `<pre data-tool-body class="px-3 py-2 text-xs overflow-x-auto bg-blue-100/50 dark:bg-blue-950/60 m-0 rounded-none">${escapeHtml(JSON.stringify(inputData || {}, null, 2))}</pre>`;
+}
+
+function updateToolUseInput(id, inputData) {
+  if (!id) return false;
+  const info = toolUseBlocks.get(id);
+  if (!info) return false;
+  info.inputData = inputData || {};
+  const body = info.el.querySelector('[data-tool-body]');
+  if (body) body.outerHTML = renderToolUseBody(info.name, info.inputData);
+  return true;
+}
+
+function markToolUseComplete(toolUseId, isError) {
+  let id = toolUseId;
+  if (!id) {
+    id = pendingToolUseIds[pendingToolUseIds.length - 1];
+  }
+  if (!id) return;
+  const info = toolUseBlocks.get(id);
+  if (!info || !info.pending) return;
+  setToolStatus(info.statusEl, isError ? '出错' : '已返回结果', isError ? 'error' : 'done');
+  info.pending = false;
+  pendingToolUseIds = pendingToolUseIds.filter(x => x !== id);
+}
+
+function finishPendingToolUses(text = '已结束', kind = 'done') {
+  for (const id of [...pendingToolUseIds]) {
+    const info = toolUseBlocks.get(id);
+    if (!info || !info.pending) continue;
+    setToolStatus(info.statusEl, text, kind);
+    info.pending = false;
+  }
+  pendingToolUseIds = [];
+}
+
+function parseStreamToolInput(block) {
+  const json = (block && block.inputJson || '').trim();
+  if (json) {
+    try { return JSON.parse(json); } catch (_) {}
+  }
+  return (block && block.inputData) || {};
+}
+
+function addToolUseBlock(container, name, inputData, options = {}) {
   if (name === 'TodoWrite' && inputData && Array.isArray(inputData.todos)) {
     updateTodoPanel(inputData.todos);
     const total = inputData.todos.length;
@@ -1736,24 +1823,40 @@ function addToolUseBlock(container, name, inputData) {
     container.appendChild(chip);
     return;
   }
+  const id = options.id || '';
+  if (id && toolUseBlocks.has(id)) {
+    updateToolUseInput(id, inputData);
+    return toolUseBlocks.get(id).el;
+  }
   const block = document.createElement('details');
   if (settings.toolUseOpen) block.open = true;
   block.className = 'bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg overflow-hidden';
   const iconMap = { Bash:'⚡', Read:'📖', Write:'✏️', Edit:'✂️', Grep:'🔍', Glob:'📁', WebFetch:'🌐', WebSearch:'🔎', TodoWrite:'✅', Task:'🤖', MultiEdit:'✂️' };
   const icon = iconMap[name] || '🔧';
-  let body;
-  if (name === 'Edit' || name === 'MultiEdit') {
-    body = `<div class="p-3">${renderEditDiff(inputData)}</div>`;
-  } else {
-    body = `<pre class="px-3 py-2 text-xs overflow-x-auto bg-blue-100/50 dark:bg-blue-950/60 m-0 rounded-none">${escapeHtml(JSON.stringify(inputData, null, 2))}</pre>`;
-  }
+  const statusHtml = options.pending
+    ? `<span class="tool-status ml-2 text-xs font-normal ${toolStatusClass('running')}">${toolRunningText(name)}</span>`
+    : '';
+  const body = renderToolUseBody(name, inputData);
+  if (id) block.dataset.toolUseId = id;
   block.innerHTML = `
     <summary class="px-3 py-2 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/50">
-      ${icon} <code>${escapeHtml(name)}</code>
+      ${icon} <code>${escapeHtml(name)}</code>${statusHtml}
     </summary>
     ${body}
   `;
   container.appendChild(block);
+  if (id) {
+    const info = {
+      el: block,
+      statusEl: block.querySelector('.tool-status'),
+      name,
+      inputData: inputData || {},
+      pending: !!options.pending,
+    };
+    toolUseBlocks.set(id, info);
+    if (options.pending && !pendingToolUseIds.includes(id)) pendingToolUseIds.push(id);
+  }
+  return block;
 }
 
 function addToolResultBlock(container, content, isError) {
@@ -1775,6 +1878,7 @@ function addToolResultBlock(container, content, isError) {
 }
 
 function addThinkingBlock(container, text) {
+  if (!String(text || '').trim()) return null;
   const block = document.createElement('details');
   block.className = 'bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900 rounded-lg overflow-hidden';
   block.innerHTML = `
@@ -1782,6 +1886,7 @@ function addThinkingBlock(container, text) {
     <div class="px-3 py-2 text-xs text-purple-900 dark:text-purple-200 italic whitespace-pre-wrap">${escapeHtml(text)}</div>
   `;
   container.appendChild(block);
+  return block;
 }
 
 function addSystemInfo(text) {
@@ -2361,7 +2466,8 @@ function hideThinking(container) {
   if (existing) existing.remove();
 }
 
-function handleEvent(obj, container) {
+function handleEvent(obj, container, options = {}) {
+  const replay = !!options.replay;
   if (obj.type === 'meta') {
     sessionId = obj.session_id;
     sessionLabel.textContent = '会话 ' + sessionId.slice(0, 8);
@@ -2373,10 +2479,11 @@ function handleEvent(obj, container) {
   }
   if (obj.type === 'permission_error') {
     hideThinking(container);
+    finishPendingToolUses('权限被拒绝', 'error');
     return addPermissionErrorBlock(container, obj);
   }
-  if (obj.type === 'error') { addErrorBlock(obj.message); return container; }
-  if (obj.type === 'done') return container;
+  if (obj.type === 'error') { finishPendingToolUses('出错', 'error'); addErrorBlock(obj.message); return container; }
+  if (obj.type === 'done') { finishPendingToolUses('已结束', 'done'); return container; }
   if (obj.type === 'raw') { addSystemInfo(obj.text); return container; }
   if (obj.type === 'system' && obj.subtype === 'init') {
     return container;
@@ -2396,7 +2503,7 @@ function handleEvent(obj, container) {
     for (const block of content) {
       if (wasStreamed && (block.type === 'text' || block.type === 'thinking')) continue;
       if (block.type === 'text') { hideThinking(container); addTextBlock(container, block.text || ''); }
-      else if (block.type === 'tool_use') { hideThinking(container); addToolUseBlock(container, block.name, block.input); }
+      else if (block.type === 'tool_use') { hideThinking(container); addToolUseBlock(container, block.name, block.input, { id: block.id, pending: !replay }); }
       else if (block.type === 'thinking') { hideThinking(container); addThinkingBlock(container, block.thinking || ''); }
     }
     scrollBottom();
@@ -2406,10 +2513,13 @@ function handleEvent(obj, container) {
     const content = obj.message.content || [];
     if (!container) container = newAssistantBubble();
     for (const block of content) {
-      if (block.type === 'tool_result') addToolResultBlock(container, block.content, block.is_error);
+      if (block.type === 'tool_result') {
+        if (!replay) markToolUseComplete(block.tool_use_id, block.is_error);
+        addToolResultBlock(container, block.content, block.is_error);
+      }
     }
     // tool result shown; Claude may still be reasoning about next step — bring indicator back
-    showThinking(container, '处理结果中');
+    if (!replay) showThinking(container, '处理结果中');
     scrollBottom();
     return container;
   }
@@ -2428,8 +2538,10 @@ function handleEvent(obj, container) {
         hint: '请点击下方按钮放行工具后重试，或在顶部权限策略中切换为"自由"模式。',
       };
       hideThinking(container);
+      finishPendingToolUses('权限被拒绝', 'error');
       return addPermissionErrorBlock(container, info);
     }
+    finishPendingToolUses('已结束', 'done');
     return container;
   }
   return container;
@@ -2461,15 +2573,15 @@ function handleStreamEvent(ev, container) {
       state.blocks[idx] = { type: 'text', el, text: '' };
     } else if (block.type === 'thinking') {
       hideThinking(state.container);
-      const el = document.createElement('details');
-      el.open = true;
-      el.className = 'bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900 rounded-lg overflow-hidden';
-      el.innerHTML = '<summary class="px-3 py-2 text-xs text-purple-700 dark:text-purple-300 font-medium">💭 思考中...</summary><div class="stream-content px-3 py-2 text-xs text-purple-900 dark:text-purple-200 italic whitespace-pre-wrap"></div>';
-      state.container.appendChild(el);
-      state.blocks[idx] = { type: 'thinking', el, text: '' };
+      state.blocks[idx] = { type: 'thinking', el: null, text: '' };
     } else if (block.type === 'tool_use') {
       hideThinking(state.container);
-      state.blocks[idx] = { type: 'tool_use', name: block.name, id: block.id };
+      const shouldRenderNow = block.name !== 'TodoWrite';
+      const el = shouldRenderNow
+        ? addToolUseBlock(state.container, block.name, block.input || {}, { id: block.id, pending: true })
+        : null;
+      state.blocks[idx] = { type: 'tool_use', name: block.name, id: block.id, el, inputData: block.input || {}, inputJson: '' };
+      if (el) scrollBottom();
     }
     return container;
   }
@@ -2491,9 +2603,22 @@ function handleStreamEvent(ev, container) {
         });
       });
     } else if (d.type === 'thinking_delta' && block.type === 'thinking') {
-      block.text += d.thinking || '';
+      const chunk = d.thinking || '';
+      if (!chunk) return container;
+      block.text += chunk;
+      if (!block.el) {
+        const el = document.createElement('details');
+        el.open = true;
+        el.className = 'bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900 rounded-lg overflow-hidden';
+        el.innerHTML = '<summary class="px-3 py-2 text-xs text-purple-700 dark:text-purple-300 font-medium">💭 思考中...</summary><div class="stream-content px-3 py-2 text-xs text-purple-900 dark:text-purple-200 italic whitespace-pre-wrap"></div>';
+        state.container.appendChild(el);
+        block.el = el;
+      }
       const c = block.el.querySelector('.stream-content');
       if (c) c.textContent = block.text;
+      scrollBottom();
+    } else if (d.type === 'input_json_delta' && block.type === 'tool_use') {
+      block.inputJson += d.partial_json || '';
     }
     return container;
   }
@@ -2534,8 +2659,20 @@ function handleStreamEvent(ev, container) {
       reconcileStreamingArtifacts(state, ev.index, previewEntries);
       postProcessRendered(el);
     } else if (block.type === 'thinking' && block.el) {
-      const summary = block.el.querySelector('summary');
-      if (summary) summary.textContent = '💭 思考过程';
+      if (!block.text.trim()) {
+        block.el.remove();
+      } else {
+        const summary = block.el.querySelector('summary');
+        if (summary) summary.textContent = '💭 思考过程';
+      }
+    } else if (block.type === 'tool_use') {
+      if (block.name === 'TodoWrite') return container;
+      const inputData = parseStreamToolInput(block);
+      if (block.id && block.el) {
+        updateToolUseInput(block.id, inputData);
+      } else {
+        addToolUseBlock(state.container, block.name, inputData, { id: block.id, pending: true });
+      }
     }
     return container;
   }
@@ -3004,6 +3141,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   }
 
   lastStreamingMsgId = null;
+  resetToolUseRuntimeState();
 
   const container = newAssistantBubble();
   showThinking(container, '正在思考');
@@ -3060,13 +3198,19 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       }
     }
     hideThinking(asstContainer);
+    finishPendingToolUses('已结束', 'done');
     notifyUser('Claude Code 已完成', titleLabel.textContent);
     beep();
     fetchFollowupSuggestions();
   } catch (e) {
     hideThinking(container);
-    if (e.name !== 'AbortError') addErrorBlock(e.message);
-    else addSystemInfo('已中止');
+    if (e.name !== 'AbortError') {
+      finishPendingToolUses('出错', 'error');
+      addErrorBlock(e.message);
+    } else {
+      finishPendingToolUses('已中止', 'stopped');
+      addSystemInfo('已中止');
+    }
   } finally {
     sendBtn.disabled = false;
     stopBtn.classList.add('hidden');
@@ -3140,6 +3284,7 @@ function startNewSession() {
   lastUserIndex = -1;
   streamedIds.clear();
   lastStreamingMsgId = null;
+  resetToolUseRuntimeState();
   restoreDraft();
   highlightActiveSession();
 }
@@ -3280,6 +3425,7 @@ async function loadSession(id) {
     sessionLabel.textContent = '会话 ' + data.id.slice(0, 8);
     streamedIds.clear();
     lastStreamingMsgId = null;
+    resetToolUseRuntimeState();
     hideTodoPanel();
     clearArtifacts();
     currentUserIndex = 0;
@@ -3296,10 +3442,10 @@ async function loadSession(id) {
         addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '' });
         asstContainer = null;
       } else if (ev.type === 'assistant' || ev.type === 'user') {
-        const c = handleEvent(ev, asstContainer);
+        const c = handleEvent(ev, asstContainer, { replay: true });
         if (c) asstContainer = c;
       } else {
-        handleEvent(ev, asstContainer);
+        handleEvent(ev, asstContainer, { replay: true });
       }
     }
     forceScrollBottom();
