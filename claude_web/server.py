@@ -45,6 +45,21 @@ KNOWN_TOOL_NAMES = {
 _running_processes: Dict[str, asyncio.subprocess.Process] = {}
 _stopped_sessions: Set[str] = set()
 _compacting_sessions: Set[str] = set()
+_event_locks: Dict[str, "threading.Lock"] = {}
+
+
+def _get_event_lock(session_id: str) -> "threading.Lock":
+    import threading
+    lock = _event_locks.get(session_id)
+    if lock is None:
+        lock = threading.Lock()
+        _event_locks[session_id] = lock
+    return lock
+
+
+def _cleanup_event_lock(session_id: str) -> None:
+    if session_id not in _running_processes and session_id not in _compacting_sessions:
+        _event_locks.pop(session_id, None)
 
 
 async def _terminate_process(process: asyncio.subprocess.Process, grace: float = 3.0) -> None:
@@ -214,10 +229,24 @@ def init_db() -> None:
         ensure_column(conn, "sessions", "tags", "TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "sessions", "manual_title", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(conn, "sessions", "remote_session_id", "TEXT NOT NULL DEFAULT ''")
+        ensure_column(conn, "sessions", "summary_cache", "TEXT NOT NULL DEFAULT ''")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_summary ON sessions(summary_cache)")
         ensure_column(conn, "sessions", "remote_ready", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(conn, "prompts", "slash_trigger", "TEXT NOT NULL DEFAULT ''")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session_usage_session ON session_usage(session_id, turn_idx)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, enabled)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tool_calls (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                ts REAL NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_name ON tool_calls(tool_name)")
 
 
 init_db()
@@ -245,9 +274,11 @@ def upsert_session(session_id: str, title: str, cwd: str) -> None:
 
 
 def append_event(session_id: str, event: dict) -> None:
-    path = HISTORY_DIR / f"{session_id}.jsonl"
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(event, ensure_ascii=False) + "\n")
+    lock = _get_event_lock(session_id)
+    with lock:
+        path = HISTORY_DIR / f"{session_id}.jsonl"
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
 
 
 def record_usage(session_id: str, result_event: dict) -> None:
@@ -278,6 +309,19 @@ def record_usage(session_id: str, result_event: dict) -> None:
                 uuid.uuid4().hex, session_id, session_id, input_tokens, output_tokens,
                 cache_read, cache_create, cost, time.time(),
             ),
+        )
+
+
+def record_tool_calls(session_id: str, assistant_event: dict) -> None:
+    content = (assistant_event.get("message") or {}).get("content") or []
+    tool_names = [b.get("name") for b in content if b.get("type") == "tool_use" and b.get("name")]
+    if not tool_names:
+        return
+    now = time.time()
+    with db_connect() as conn:
+        conn.executemany(
+            "INSERT INTO tool_calls (id, session_id, tool_name, ts) VALUES (?, ?, ?, ?)",
+            [(uuid.uuid4().hex, session_id, name, now) for name in tool_names],
         )
 
 
@@ -348,22 +392,24 @@ def load_events(session_id: str) -> List[dict]:
 
 
 def save_events(session_id: str, events: List[dict]) -> None:
-    path = HISTORY_DIR / f"{session_id}.jsonl"
-    if not events:
-        if path.exists():
-            path.unlink()
-        return
-    tmp_path = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex[:8]}")
-    try:
-        with tmp_path.open("w", encoding="utf-8") as f:
-            for event in events:
-                f.write(json.dumps(event, ensure_ascii=False) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
+    lock = _get_event_lock(session_id)
+    with lock:
+        path = HISTORY_DIR / f"{session_id}.jsonl"
+        if not events:
+            if path.exists():
+                path.unlink()
+            return
+        tmp_path = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex[:8]}")
+        try:
+            with tmp_path.open("w", encoding="utf-8") as f:
+                for event in events:
+                    f.write(json.dumps(event, ensure_ascii=False) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
 
 def summarize_text_from_events(events: List[dict]) -> str:
@@ -648,6 +694,8 @@ def session_has_remote_conversation(events: List[dict]) -> bool:
             return True
         if event_type == "result" and not ev.get("is_error"):
             return True
+        if event_type == "user_input" and ev.get("compacted"):
+            return True
     return False
 
 
@@ -730,8 +778,10 @@ async def chat(req: ChatRequest):
     upsert_session(session_id, derive_title(display_text), work_dir)
     set_session_remote_state(session_id, remote_session_id, remote_ready and not is_new)
 
+    remote_became_ready = remote_ready and not is_new
+
     async def generate():
-        remote_became_ready = remote_ready and not is_new
+        nonlocal remote_became_ready
         meta = {
             "type": "meta",
             "session_id": session_id,
@@ -796,6 +846,7 @@ async def chat(req: ChatRequest):
             return
 
         _running_processes[session_id] = process
+        _stopped_sessions.discard(session_id)
         stderr_buffer = bytearray()
         stderr_task: Optional[asyncio.Task] = None
         if process.stderr is not None:
@@ -827,6 +878,8 @@ async def chat(req: ChatRequest):
                     append_event(session_id, obj)
                     if t == "result":
                         record_usage(session_id, obj)
+                    elif t == "assistant":
+                        record_tool_calls(session_id, obj)
                 yield f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
             rc = await process.wait()
@@ -851,10 +904,11 @@ async def chat(req: ChatRequest):
             await _terminate_process(process)
             _running_processes.pop(session_id, None)
             _stopped_sessions.discard(session_id)
+            upsert_session(session_id, derive_title(display_text), work_dir)
+            if remote_became_ready:
+                set_session_remote_state(session_id, remote_session_id, True)
+            _cleanup_event_lock(session_id)
 
-        upsert_session(session_id, derive_title(display_text), work_dir)
-        if remote_became_ready:
-            set_session_remote_state(session_id, remote_session_id, True)
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(
@@ -928,6 +982,8 @@ async def prepare_fork(session_id: str, req: ForkRequest):
 async def prepare_inline_edit(session_id: str, req: ForkRequest):
     if session_id in _running_processes:
         raise HTTPException(status_code=409, detail="session is running")
+    if session_id in _compacting_sessions:
+        raise HTTPException(status_code=409, detail="session is compacting")
 
     events = load_events(session_id)
     user_event_positions = [i for i, e in enumerate(events) if e.get("type") == "user_input"]
@@ -1458,7 +1514,7 @@ async def list_sessions(q: Optional[str] = None, archived: bool = False, tag: Op
     with db_connect() as conn:
         where = "archived = 1" if archived else "archived = 0"
         rows = conn.execute(
-            f"SELECT id, title, cwd, created_at, updated_at, pinned, archived, tags FROM sessions "
+            f"SELECT id, title, cwd, created_at, updated_at, pinned, archived, tags, summary_cache FROM sessions "
             f"WHERE {where} ORDER BY pinned DESC, updated_at DESC LIMIT 500"
         ).fetchall()
 
@@ -1470,8 +1526,13 @@ async def list_sessions(q: Optional[str] = None, archived: bool = False, tag: Op
     if q:
         q_lower = q.lower()
         filtered: List[dict] = []
-        for item in items:
+        cache_updates: List[tuple] = []
+        for item, row in zip(items, rows):
             if q_lower in item["title"].lower() or q_lower in ",".join(item["tags"]).lower():
+                filtered.append(item)
+                continue
+            cache = (row["summary_cache"] or "").lower()
+            if cache and q_lower in cache:
                 filtered.append(item)
                 continue
             try:
@@ -1479,8 +1540,16 @@ async def list_sessions(q: Optional[str] = None, archived: bool = False, tag: Op
                 content = summarize_text_from_events(events).lower()
                 if q_lower in content:
                     filtered.append(item)
+                    if not cache:
+                        cache_updates.append((content[:8000], item["id"]))
             except Exception:
                 continue
+        if cache_updates:
+            with db_connect() as conn:
+                conn.executemany(
+                    "UPDATE sessions SET summary_cache = ? WHERE id = ?",
+                    cache_updates,
+                )
         items = filtered
 
     return items
@@ -1564,12 +1633,14 @@ async def delete_session(session_id: str):
     with db_connect() as conn:
         conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         conn.execute("DELETE FROM session_usage WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM tool_calls WHERE session_id = ?", (session_id,))
         conn.execute("DELETE FROM memories WHERE scope = ?", (f"session:{session_id}",))
     path = HISTORY_DIR / f"{session_id}.jsonl"
     if path.exists():
         path.unlink()
     for backup in HISTORY_DIR.glob(f"{session_id}.before-compact-*.jsonl"):
         backup.unlink(missing_ok=True)
+    _event_locks.pop(session_id, None)
     return {"ok": True}
 
 
@@ -1579,7 +1650,6 @@ async def clear_session(session_id: str):
         raise HTTPException(status_code=409, detail="session is busy")
     save_events(session_id, [])
     with db_connect() as conn:
-        conn.execute("DELETE FROM session_usage WHERE session_id = ?", (session_id,))
         conn.execute("UPDATE sessions SET title = '新会话', manual_title = 0, updated_at = ? WHERE id = ?", (time.time(), session_id))
     set_session_remote_state(session_id, "", False)
     return {"ok": True}
@@ -1641,8 +1711,6 @@ async def compact_session(session_id: str, keep_last: int = Query(default=2, ge=
             }
         ] + new_events
         save_events(session_id, compacted)
-        with db_connect() as conn:
-            conn.execute("DELETE FROM session_usage WHERE session_id = ?", (session_id,))
         set_session_remote_state(session_id, "", False)
         return {"ok": True, "kept_turns": keep_last, "backup": backup_name}
     except FileNotFoundError:
@@ -1674,6 +1742,8 @@ async def suggest_title(session_id: str):
             raise HTTPException(status_code=504, detail="title generation timeout")
     except HTTPException:
         raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="title generation failed")
     title = stdout.decode("utf-8", errors="replace").strip().splitlines()[0].strip(' "\'"""''').strip()[:60]
     if not title:
         raise HTTPException(status_code=500, detail="empty title")
@@ -1873,17 +1943,21 @@ async def update_memory(memory_id: str, req: MemoryRequest):
         raise HTTPException(status_code=400, detail="content required")
     scope = normalize_memory_scope(req.scope)
     with db_connect() as conn:
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE memories SET content = ?, enabled = ?, scope = ?, updated_at = ? WHERE id = ?",
             (content, 1 if req.enabled else 0, scope, time.time(), memory_id),
         )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="memory not found")
     return {"ok": True}
 
 
 @app.delete("/api/memories/{memory_id}")
 async def delete_memory(memory_id: str):
     with db_connect() as conn:
-        conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+        cursor = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="memory not found")
     return {"ok": True}
 
 
@@ -1946,17 +2020,21 @@ async def create_prompt(req: PromptRequest):
 @app.put("/api/prompts/{prompt_id}")
 async def update_prompt(prompt_id: str, req: PromptRequest):
     with db_connect() as conn:
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE prompts SET name = ?, content = ?, slash_trigger = ? WHERE id = ?",
             (req.name, req.content, (req.slash_trigger or "").strip().lstrip("/"), prompt_id),
         )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="prompt not found")
     return {"ok": True}
 
 
 @app.delete("/api/prompts/{prompt_id}")
 async def delete_prompt(prompt_id: str):
     with db_connect() as conn:
-        conn.execute("DELETE FROM prompts WHERE id = ?", (prompt_id,))
+        cursor = conn.execute("DELETE FROM prompts WHERE id = ?", (prompt_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="prompt not found")
     return {"ok": True}
 
 
@@ -2383,44 +2461,47 @@ async def list_tags():
 
 @app.get("/api/stats")
 async def stats():
-    total_cost = 0.0
-    total_duration = 0.0
-    total_turns = 0
-    daily: Dict[str, Dict[str, float]] = defaultdict(lambda: {"cost": 0.0, "turns": 0})
-    tool_counts: Dict[str, int] = defaultdict(int)
     with db_connect() as conn:
-        rows = conn.execute("SELECT id FROM sessions").fetchall()
-    total_sessions = len(rows)
-    for row in rows:
-        events = load_events(row["id"])
-        for ev in events:
-            t = ev.get("type")
-            if t == "result":
-                cost = float(ev.get("total_cost_usd") or 0)
-                dur = float(ev.get("duration_ms") or 0)
-                ts = float(ev.get("ts") or time.time())
-                total_cost += cost
-                total_duration += dur
-                total_turns += 1
-                day = time.strftime("%Y-%m-%d", time.localtime(ts))
-                daily[day]["cost"] += cost
-                daily[day]["turns"] += 1
-            elif t == "assistant":
-                content = (ev.get("message") or {}).get("content") or []
-                for block in content:
-                    if block.get("type") == "tool_use":
-                        tool_counts[block.get("name", "?")] += 1
-    daily_sorted = sorted(daily.items(), key=lambda x: x[0])
+        total_sessions = conn.execute("SELECT COUNT(*) AS c FROM sessions").fetchone()["c"]
+        usage_agg = conn.execute(
+            """
+            SELECT
+                COALESCE(SUM(total_cost_usd), 0) AS total_cost,
+                COUNT(*) AS total_turns
+            FROM session_usage
+            """
+        ).fetchone()
+        daily_rows = conn.execute(
+            """
+            SELECT
+                strftime('%Y-%m-%d', ts, 'unixepoch', 'localtime') AS day,
+                ROUND(SUM(total_cost_usd), 4) AS cost,
+                COUNT(*) AS turns
+            FROM session_usage
+            GROUP BY day
+            ORDER BY day
+            """
+        ).fetchall()
+        tool_rows = conn.execute(
+            """
+            SELECT tool_name AS name, COUNT(*) AS count
+            FROM tool_calls
+            GROUP BY tool_name
+            ORDER BY count DESC
+            LIMIT 10
+            """
+        ).fetchall()
+
+    total_cost = float(usage_agg["total_cost"] or 0)
+    total_turns = int(usage_agg["total_turns"] or 0)
+
     return {
         "total_cost_usd": round(total_cost, 4),
-        "total_duration_ms": total_duration,
+        "total_duration_ms": 0,
         "total_sessions": total_sessions,
         "total_turns": total_turns,
-        "daily": [{"date": d, "cost": round(v["cost"], 4), "turns": v["turns"]} for d, v in daily_sorted],
-        "tools": sorted(
-            [{"name": k, "count": v} for k, v in tool_counts.items()],
-            key=lambda x: -x["count"],
-        )[:10],
+        "daily": [{"date": r["day"], "cost": float(r["cost"] or 0), "turns": int(r["turns"] or 0)} for r in daily_rows],
+        "tools": [{"name": r["name"], "count": r["count"]} for r in tool_rows],
     }
 
 
