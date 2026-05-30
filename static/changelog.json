@@ -2,6 +2,18 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "1.5.4",
+      "date": "2026-05-30",
+      "highlights": [
+        { "type": "fix", "text": "配置中心 settings.json 并发写入加锁 + 原子替换，避免多个浏览器/标签同时保存时丢更新或写出半截 JSON" },
+        { "type": "fix", "text": "project / local 范围保存时正确路由到对应 .claude 目录，不再静默落到当前进程工作目录；前端缺少工作目录时 toast 中止" },
+        { "type": "fix", "text": "Skill 启用/禁用改为重命名 SKILL.md ↔ SKILL.md.disabled（Claude Code 按文件名扫描），原先写入 disabledSkills JSON 字段对 CLI 实际无效" },
+        { "type": "fix", "text": "Skill 名称走严格白名单 + 路径解析校验，杜绝 .. / 绝对路径越权访问 ~/.claude/skills 之外" },
+        { "type": "fix", "text": "配置中心 env 合并不再因前端未回传某个 key 就把已存在的环境变量删掉" },
+        { "type": "fix", "text": "Anthropic /v1/messages 调用只保留 x-api-key 头，默认翻译模型改用带日期的 claude-haiku-4-5-20251001，翻译失败改为 warning 日志" }
+      ]
+    },
+    {
       "version": "1.5.3",
       "date": "2026-05-28",
       "highlights": [

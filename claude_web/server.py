@@ -1,6 +1,7 @@
 import asyncio
 import ipaddress
 import json
+import logging
 import os
 import re
 import shutil
@@ -24,6 +25,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from claude_web import __version__
+
+_log = logging.getLogger("claude_web")
 
 _PKG_DIR = Path(__file__).parent
 _DATA_DIR = Path(os.environ.get("CLAUDE_WEB_DATA_DIR", "")).resolve() if os.environ.get("CLAUDE_WEB_DATA_DIR") else Path.cwd()
@@ -54,6 +57,16 @@ _event_locks_guard = threading.Lock()
 _MAX_EVENT_LOCKS = 1024
 _stats_backfill_lock: Optional[asyncio.Lock] = None
 _stats_backfill_done = False
+_settings_write_locks: Dict[str, asyncio.Lock] = {}
+
+
+def _settings_lock_for(path: Path) -> asyncio.Lock:
+    key = str(path.resolve())
+    lock = _settings_write_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _settings_write_locks[key] = lock
+    return lock
 
 
 class ClaudeCliResolutionError(RuntimeError):
@@ -2370,9 +2383,22 @@ async def suggest_followups(session_id: str = ""):
 # ===== MCP Management =====
 
 _CLAUDE_CONFIG_PATH = Path.home() / ".claude.json"
+_CLAUDE_SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
+_PROJECT_SETTINGS_NAME = "settings.json"
+_PROJECT_SETTINGS_LOCAL_NAME = "settings.local.json"
+_SKILLS_DIR = Path.home() / ".claude" / "skills"
 _PROJECT_MCP_FILENAME = ".mcp.json"
 _DISABLED_MCP_SERVERS_KEY = "claudeWebDisabledMcpServers"
 _MCP_SCOPES = {"local", "user", "project"}
+_SETTINGS_SCOPES = {"user", "project", "local"}
+
+_SECRET_ENV_KEYS = {
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_BASE_URL",
+}
+_MASK_SENTINEL = "***"
 
 
 def _read_json_object(path: Path) -> dict:
@@ -2392,7 +2418,12 @@ def _read_json_object(path: Path) -> dict:
 def _write_json_object(path: Path, data: dict) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        payload = json.dumps(data, indent=2, ensure_ascii=False)
+        # Atomic: write to sibling .tmp then rename. Crash mid-write leaves the
+        # original intact instead of a half-written file.
+        tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex[:6]}")
+        tmp.write_text(payload, encoding="utf-8")
+        os.replace(tmp, path)
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"cannot write {path}: {e}")
 
@@ -2730,6 +2761,386 @@ async def delete_mcp_server(
         target["disabled_servers"].pop(name, None)
         _save_mcp_source(target)
     return {"ok": True}
+
+
+# ===== Config Center: Settings / Hooks / Skills / Permissions =====
+
+
+def _resolve_settings_path(scope: str, cwd: Optional[str]) -> Path:
+    normalized = (scope or "user").strip().lower()
+    if normalized not in _SETTINGS_SCOPES:
+        raise HTTPException(status_code=400, detail="scope must be user, project, or local")
+    if normalized == "user":
+        return _CLAUDE_SETTINGS_PATH
+    raw = (cwd or "").strip()
+    if not raw:
+        raise HTTPException(
+            status_code=400,
+            detail=f"scope='{normalized}' requires cwd (current chat's working directory)",
+        )
+    target = Path(os.path.expanduser(raw)).resolve()
+    if not target.is_dir():
+        raise HTTPException(status_code=400, detail=f"invalid cwd: {raw}")
+    base = target / ".claude"
+    return base / (_PROJECT_SETTINGS_NAME if normalized == "project" else _PROJECT_SETTINGS_LOCAL_NAME)
+
+
+def _backup_once(path: Path) -> Optional[Path]:
+    if not path.exists():
+        return None
+    bak = path.with_suffix(path.suffix + ".bak")
+    if not bak.exists():
+        try:
+            bak.write_bytes(path.read_bytes())
+        except OSError:
+            return None
+    return bak
+
+
+def _mask_secret(value: str) -> str:
+    if not isinstance(value, str) or len(value) < 8:
+        return _MASK_SENTINEL
+    return f"{value[:4]}{_MASK_SENTINEL}{value[-4:]}"
+
+
+def _redact_settings(data: dict) -> dict:
+    out = json.loads(json.dumps(data))
+    env = out.get("env")
+    if isinstance(env, dict):
+        for k, v in list(env.items()):
+            if k in _SECRET_ENV_KEYS and isinstance(v, str) and v:
+                env[k] = _mask_secret(v)
+    return out
+
+
+def _unmask_merge(existing: dict, incoming: dict) -> dict:
+    """Apply incoming on top of existing. Strings containing the *** sentinel are
+    treated as 'keep existing'. For env: never drops keys not in incoming —
+    callers send partial env updates and we must not nuke unrelated secrets."""
+    merged = json.loads(json.dumps(existing))
+    for k, v in incoming.items():
+        if k == "env" and isinstance(v, dict):
+            cur = merged.setdefault("env", {})
+            if not isinstance(cur, dict):
+                cur = {}
+                merged["env"] = cur
+            for ek, ev in v.items():
+                if isinstance(ev, str) and _MASK_SENTINEL in ev and ek in cur:
+                    continue
+                cur[ek] = ev
+        else:
+            merged[k] = v
+    return merged
+
+
+def _parse_skill_frontmatter(md_path: Path, dir_name: str) -> dict:
+    item = {"name": dir_name, "description": None, "path": str(md_path), "error": None}
+    try:
+        text = md_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        item["error"] = f"read failed: {e}"
+        return item
+    if not text.startswith("---"):
+        item["error"] = "missing frontmatter"
+        return item
+    end = text.find("\n---", 3)
+    if end < 0:
+        item["error"] = "unterminated frontmatter"
+        return item
+    block = text[3:end].strip("\n")
+    for line in block.splitlines():
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        if key == "name" and val:
+            item["name"] = val
+        elif key == "description" and val:
+            item["description"] = val
+    return item
+
+
+def _is_skill_disabled(item: dict, disabled_map: dict) -> bool:
+    """Legacy disabledSkills JSON check, kept for backwards-compat reading.
+    Disabling now also renames SKILL.md → SKILL.md.disabled (the authoritative
+    signal); this function is only consulted as a secondary marker."""
+    name = item.get("name")
+    if not isinstance(disabled_map, dict):
+        return False
+    for entries in disabled_map.values():
+        if entries is True:
+            return True
+        if isinstance(entries, list) and name in entries:
+            return True
+    return False
+
+
+def _validate_skill_dir_name(name: str) -> str:
+    safe = (name or "").strip().replace("\\", "/").split("/")[-1]
+    if not safe or safe.startswith(".") or safe in {"", "."}:
+        raise HTTPException(status_code=400, detail="invalid skill name")
+    skill_dir = (_SKILLS_DIR / safe).resolve()
+    if not str(skill_dir).startswith(str(_SKILLS_DIR.resolve()) + os.sep):
+        raise HTTPException(status_code=400, detail="invalid skill name")
+    return safe
+
+
+class SettingsPatchRequest(BaseModel):
+    scope: str = "user"
+    cwd: Optional[str] = None
+    settings: Dict
+
+
+class SkillToggleRequest(BaseModel):
+    enabled: bool
+
+
+class SkillTranslateItem(BaseModel):
+    name: str
+    description: str
+
+
+class SkillTranslateRequest(BaseModel):
+    items: List[SkillTranslateItem]
+
+
+_SKILL_TRANSLATE_CACHE_PATH = Path.home() / ".claude" / ".claude-web-cache" / "skill-zh.json"
+_SKILL_TRANSLATE_BATCH_SIZE = 20
+_SKILL_TRANSLATE_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+
+
+def _skill_translate_cache_key(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha1(text.encode("utf-8", errors="ignore")).hexdigest()[:12]
+
+
+def _skill_translate_load_cache() -> Dict[str, str]:
+    if not _SKILL_TRANSLATE_CACHE_PATH.exists():
+        return {}
+    try:
+        data = json.loads(_SKILL_TRANSLATE_CACHE_PATH.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _skill_translate_save_cache(cache: Dict[str, str]) -> None:
+    try:
+        _SKILL_TRANSLATE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _SKILL_TRANSLATE_CACHE_PATH.write_text(
+            json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+async def _skill_translate_call_anthropic(
+    items: List[SkillTranslateItem], token: str, base_url: str, model: str
+) -> Dict[str, str]:
+    import httpx
+
+    bullet_list = "\n".join(f"- {it.name}: {it.description}" for it in items)
+    system_prompt = (
+        "你是技术文档翻译助手。将下列 Claude Code skill 的英文描述翻译为简体中文，"
+        "保留专业术语（如 hooks、agent、PR），不要解释、不要加引号，"
+        "严格返回 JSON 对象 {name: 中文描述}。"
+    )
+    user_msg = f"翻译下列条目（仅返回 JSON）：\n{bullet_list}"
+    base = base_url.rstrip("/") or "https://api.anthropic.com"
+    url = f"{base}/v1/messages"
+    headers = {
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": token,
+    }
+    body = {
+        "model": model,
+        "max_tokens": 1024,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_msg}],
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(url, headers=headers, json=body)
+        resp.raise_for_status()
+        data = resp.json()
+    text_parts: List[str] = []
+    for block in data.get("content", []) or []:
+        if isinstance(block, dict) and block.get("type") == "text":
+            text_parts.append(block.get("text", ""))
+    raw = "".join(text_parts).strip()
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return {}
+    try:
+        parsed = json.loads(raw[start : end + 1])
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {str(k): str(v) for k, v in parsed.items() if isinstance(v, str) and v.strip()}
+
+
+@app.get("/api/config/settings")
+async def get_config_settings(
+    scope: str = Query(default="user"),
+    cwd: Optional[str] = Query(default=None),
+):
+    path = _resolve_settings_path(scope, cwd)
+    data = _read_json_object(path) if path.exists() else {}
+    return {
+        "scope": scope,
+        "path": str(path),
+        "exists": path.exists(),
+        "settings": _redact_settings(data),
+    }
+
+
+@app.patch("/api/config/settings")
+async def patch_config_settings(payload: SettingsPatchRequest):
+    path = _resolve_settings_path(payload.scope, payload.cwd)
+    async with _settings_lock_for(path):
+        cur = _read_json_object(path) if path.exists() else {}
+        merged = _unmask_merge(cur, payload.settings)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        bak = _backup_once(path)
+        _write_json_object(path, merged)
+    return {
+        "ok": True,
+        "scope": payload.scope,
+        "path": str(path),
+        "backup_path": str(bak) if bak else None,
+        "settings": _redact_settings(merged),
+    }
+
+
+@app.get("/api/config/skills")
+async def list_config_skills():
+    items: List[dict] = []
+    if _SKILLS_DIR.exists() and _SKILLS_DIR.is_dir():
+        for entry in sorted(_SKILLS_DIR.iterdir()):
+            if not entry.is_dir():
+                continue
+            md = entry / "SKILL.md"
+            md_disabled = entry / "SKILL.md.disabled"
+            source = md if md.exists() else (md_disabled if md_disabled.exists() else None)
+            if source is None:
+                continue
+            item = _parse_skill_frontmatter(source, entry.name)
+            item["enabled"] = md.exists()
+            item["marketplace"] = "@local"
+            items.append(item)
+    return {"skills": items, "skills_dir": str(_SKILLS_DIR)}
+
+
+@app.get("/api/config/skills/{name}/source")
+async def get_config_skill_source(name: str):
+    safe = _validate_skill_dir_name(name)
+    md = _SKILLS_DIR / safe / "SKILL.md"
+    md_disabled = _SKILLS_DIR / safe / "SKILL.md.disabled"
+    source = md if md.exists() else md_disabled
+    if not source.exists():
+        raise HTTPException(status_code=404, detail=f"skill '{name}' not found")
+    try:
+        return {"name": safe, "path": str(source), "content": source.read_text(encoding="utf-8", errors="replace")}
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"cannot read {source}: {e}")
+
+
+@app.patch("/api/config/skills/{name}")
+async def toggle_config_skill(name: str, payload: SkillToggleRequest):
+    safe = _validate_skill_dir_name(name)
+    skill_dir = _SKILLS_DIR / safe
+    if not skill_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"skill directory '{safe}' not found")
+    md = skill_dir / "SKILL.md"
+    md_disabled = skill_dir / "SKILL.md.disabled"
+    async with _settings_lock_for(skill_dir):
+        try:
+            if payload.enabled:
+                if md_disabled.exists() and not md.exists():
+                    os.replace(md_disabled, md)
+            else:
+                if md.exists() and not md_disabled.exists():
+                    os.replace(md, md_disabled)
+                elif md.exists() and md_disabled.exists():
+                    # Both exist (manual mess) — drop the active SKILL.md so the
+                    # already-present .disabled becomes the survivor.
+                    md.unlink()
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=f"rename failed: {e}")
+    return {
+        "ok": True,
+        "name": safe,
+        "enabled": md.exists(),
+        "note": "Claude Code 仅识别 SKILL.md；禁用 = 重命名为 SKILL.md.disabled。",
+    }
+
+
+@app.post("/api/config/skills/translate")
+async def translate_config_skills(payload: SkillTranslateRequest):
+    items = [it for it in payload.items if it.name and it.description]
+    if not items:
+        return {"translations": {}}
+
+    cache = _skill_translate_load_cache()
+    translations: Dict[str, str] = {}
+    pending: List[SkillTranslateItem] = []
+    pending_keys: Dict[str, str] = {}
+
+    for it in items:
+        key = _skill_translate_cache_key(it.description)
+        if key in cache:
+            translations[it.name] = cache[key]
+        else:
+            pending.append(it)
+            pending_keys[it.name] = key
+
+    if not pending:
+        return {"translations": translations, "cached": len(translations), "translated": 0}
+
+    settings = _read_json_object(_CLAUDE_SETTINGS_PATH) if _CLAUDE_SETTINGS_PATH.exists() else {}
+    env = settings.get("env") if isinstance(settings.get("env"), dict) else {}
+    token = (env.get("ANTHROPIC_AUTH_TOKEN") or env.get("ANTHROPIC_API_KEY") or "").strip()
+    if not token:
+        token = (os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+    base_url = (env.get("ANTHROPIC_BASE_URL") or os.environ.get("ANTHROPIC_BASE_URL") or "https://api.anthropic.com").strip()
+    model = (env.get("ANTHROPIC_DEFAULT_HAIKU_MODEL") or os.environ.get("ANTHROPIC_DEFAULT_HAIKU_MODEL") or _SKILL_TRANSLATE_DEFAULT_MODEL).strip()
+
+    if not token:
+        return {
+            "translations": translations,
+            "cached": len(translations),
+            "translated": 0,
+            "skipped_reason": "no ANTHROPIC_AUTH_TOKEN configured",
+        }
+
+    translated_count = 0
+    for i in range(0, len(pending), _SKILL_TRANSLATE_BATCH_SIZE):
+        batch = pending[i : i + _SKILL_TRANSLATE_BATCH_SIZE]
+        try:
+            result = await _skill_translate_call_anthropic(batch, token, base_url, model)
+        except Exception as e:
+            _log.warning("skill translate batch failed (%d items): %s", len(batch), e)
+            continue
+        for it in batch:
+            zh = result.get(it.name)
+            if not zh:
+                continue
+            translations[it.name] = zh
+            cache[pending_keys[it.name]] = zh
+            translated_count += 1
+
+    if translated_count:
+        _skill_translate_save_cache(cache)
+
+    return {
+        "translations": translations,
+        "cached": len(translations) - translated_count,
+        "translated": translated_count,
+    }
 
 
 @app.get("/api/cwds")

@@ -2,6 +2,15 @@
 
 所有重要变更按版本记录。应用内的 What's New 和帮助面板使用 `static/changelog.json`，这里是给 GitHub / Git diff 浏览的 Markdown 版本。
 
+## v1.5.4 - 2026-05-30
+
+- **FIX** 配置中心 settings.json 并发写入加锁 + 原子替换，避免多个浏览器/标签同时保存时丢更新或写出半截 JSON
+- **FIX** project / local 范围保存时正确路由到对应 .claude 目录，不再静默落到 `os.getcwd()`；前端缺少工作目录时 toast 中止
+- **FIX** Skill 启用/禁用改为重命名 `SKILL.md ↔ SKILL.md.disabled`（Claude Code 启动时按文件名扫描），原先写入 `disabledSkills` JSON 字段对 CLI 实际无效
+- **FIX** Skill 名称走严格白名单 + 路径解析校验，杜绝 `..` / 绝对路径越权访问 `~/.claude/skills` 之外
+- **FIX** 配置中心 env 合并不再因前端未回传某个 key 就把已存在的环境变量删掉
+- **FIX** Anthropic /v1/messages 调用只保留 `x-api-key` 头（去掉冗余 Bearer），默认翻译模型改用带日期的 `claude-haiku-4-5-20251001`，翻译失败改为 warning 日志而非静默吞掉
+
 ## v1.5.3 - 2026-05-28
 
 - **FIX** Windows 上 claude-code 2.x 的原生 `bin/claude.exe` 启动器不再被错当成 JS 喂给 node，启动横幅显示真实版本而非 "unknown"，聊天 / compact / 智能命名等所有 CLI 调用路径一并修复

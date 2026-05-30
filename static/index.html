@@ -532,6 +532,353 @@
   .todo-item.in_progress { background: var(--accent-soft); border-left-color: var(--accent); font-weight: 500; color: var(--accent-hover); }
   .todo-icon { flex-shrink: 0; }
 
+  /* ===== Subagent panel ===== */
+  .subagent-panel {
+    position: fixed; top: 76px; right: 360px;
+    width: 340px; max-height: 70vh;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: var(--shadow-lg);
+    z-index: 31;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transition: opacity .3s, transform .3s;
+  }
+  .subagent-panel.hidden { display: none; }
+  .subagent-panel-header {
+    padding: 11px 14px;
+    background: linear-gradient(135deg, rgba(139,92,246,.15), rgba(139,92,246,.05));
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 13px; color: #6d28d9;
+  }
+  :root.dark .subagent-panel-header { color: #c4b5fd; }
+  .subagent-panel-list {
+    overflow-y: auto; padding: 8px;
+    flex: 1; display: flex; flex-direction: column; gap: 8px;
+  }
+  .subagent-card {
+    padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface);
+    cursor: pointer; transition: transform .15s, box-shadow .15s;
+  }
+  .subagent-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .subagent-card-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+  .subagent-card-meta { font-size: 11px; color: var(--text-subtle); margin-top: 2px; }
+  .subagent-card-activity {
+    font-size: 12px; color: var(--text); margin-top: 6px; line-height: 1.4;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  .subagent-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+  .subagent-status-dot.running { background: #3b82f6; animation: subagent-pulse 1.5s infinite; }
+  .subagent-status-dot.success { background: #10b981; }
+  .subagent-status-dot.error { background: #ef4444; }
+  .subagent-status-dot.cancelled { background: #f59e0b; }
+  @keyframes subagent-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(59,130,246,.5); }
+    70% { box-shadow: 0 0 0 6px rgba(59,130,246,0); }
+    100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+  }
+
+  /* Subagent Task pill (in main chat timeline) */
+  .task-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px; border-radius: 999px;
+    background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+    color: #6d28d9; border: 1px solid #c4b5fd;
+    font-size: 12px; cursor: pointer; align-self: flex-start;
+    transition: transform .15s;
+  }
+  .task-pill:hover { transform: translateY(-1px); }
+  .task-pill code { background: transparent; padding: 0; color: inherit; font-weight: 600; }
+  .task-pill.done { background: #d1fae5; color: #047857; border-color: #6ee7b7; }
+  .task-pill.error { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+  .task-pill.cancelled { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  :root.dark .task-pill { background: linear-gradient(135deg, rgba(109,40,217,.25), rgba(67,56,202,.25)); color: #c4b5fd; border-color: rgba(139,92,246,.4); }
+  :root.dark .task-pill.done { background: rgba(16,185,129,.18); color: #6ee7b7; border-color: rgba(16,185,129,.4); }
+  :root.dark .task-pill.error { background: rgba(239,68,68,.18); color: #fca5a5; border-color: rgba(239,68,68,.4); }
+  :root.dark .task-pill.cancelled { background: rgba(245,158,11,.18); color: #fcd34d; border-color: rgba(245,158,11,.4); }
+
+  /* Compact tool chip strip — groups consecutive tool calls as a tidy vertical log */
+  .tool-strip-wrap { margin: 6px 0; display: flex; flex-direction: column; gap: 4px; }
+  .tool-strip {
+    display: flex; flex-direction: column; gap: 1px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); overflow: hidden;
+  }
+  .tool-chip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 5px 12px; width: 100%;
+    background: transparent; border: 0; border-top: 1px solid var(--border);
+    font-size: 12px; line-height: 1.4;
+    cursor: pointer; transition: background .12s;
+    color: var(--text); font-family: inherit; text-align: left;
+  }
+  .tool-chip:first-child { border-top: 0; }
+  .tool-chip:hover { background: var(--bg); }
+  .tool-chip.active { background: var(--bg); }
+  .tool-chip.active .tool-chip-name { color: var(--accent); }
+  .tool-chip.error .tool-chip-name { color: #ef4444; }
+  .tool-chip-status {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  }
+  .tool-chip-status.running { background: #3b82f6; animation: subagent-pulse 1.5s infinite; }
+  .tool-chip-status.done { background: #10b981; }
+  .tool-chip-status.error { background: #ef4444; }
+  .tool-chip-status.cancelled { background: #f59e0b; }
+  .tool-chip-icon { width: 16px; text-align: center; flex-shrink: 0; }
+  .tool-chip-name { font-weight: 600; min-width: 64px; flex-shrink: 0; }
+  .tool-chip-arg {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--text-subtle); flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .tool-strip-progress {
+    align-self: flex-end; font-size: 11px; color: var(--text-subtle);
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 4px;
+  }
+  .tool-strip-progress-bar {
+    width: 50px; height: 4px; background: var(--border); border-radius: 999px; overflow: hidden;
+  }
+  .tool-strip-progress-bar-fill {
+    height: 100%; background: var(--accent); transition: width .25s;
+  }
+  /* Collapsible summary header for long tool strips (≥4 chips) */
+  .tool-strip-summary {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; padding: 6px 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    font-family: inherit; font-size: 12px; color: var(--text);
+    cursor: pointer; transition: background .12s;
+  }
+  .tool-strip-summary:hover { background: var(--bg); }
+  .tool-strip-summary-icon { flex-shrink: 0; }
+  .tool-strip-summary-text {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text-subtle);
+  }
+  .tool-strip-summary-text strong { color: var(--text); font-weight: 600; margin-right: 4px; }
+  .tool-strip-summary-count { flex-shrink: 0; font-size: 11px; color: var(--text-subtle); }
+  .tool-strip-summary-chevron { flex-shrink: 0; color: var(--text-subtle); font-size: 10px; }
+  .tool-strip-wrap.collapsed .tool-strip { display: none; }
+  .tool-strip-wrap.collapsed .tool-strip-detail { display: none; }
+  .tool-strip-detail {
+    border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; background: var(--surface);
+  }
+  .tool-strip-detail.hidden { display: none; }
+  .tool-strip-detail-header {
+    padding: 6px 12px; font-size: 12px; font-weight: 600;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .tool-strip-detail-section-label {
+    padding: 4px 12px; font-size: 11px; font-weight: 600; color: var(--text-subtle);
+    background: var(--bg); border-top: 1px solid var(--border);
+  }
+  .tool-strip-detail-section-label:first-of-type { border-top: none; }
+  .tool-strip-detail pre {
+    margin: 0; padding: 8px 12px; font-size: 12px;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+  }
+  :root.dark .tool-chip:hover { background: rgba(255,255,255,.04); }
+  :root.dark .tool-chip.active { background: rgba(255,255,255,.04); }
+
+  /* Subagent transcript modal */
+  .subagent-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 110;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .subagent-modal-backdrop.hidden { display: none; }
+  .subagent-modal {
+    width: min(900px, 92vw); max-height: 86vh;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow-lg);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .subagent-modal-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px; font-weight: 600;
+  }
+  .subagent-modal-body {
+    flex: 1; overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+
+  /* ===== Plan approval card (ExitPlanMode) ===== */
+  .plan-card {
+    margin: 8px 0; border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 8px; background: var(--surface); overflow: hidden;
+  }
+  .plan-card-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600; font-size: 13px;
+  }
+  .plan-card-status-pill {
+    margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    font-weight: 500;
+  }
+  .plan-card-status-pill.pending  { background: rgba(245,158,11,.15); color: #b45309; }
+  .plan-card-status-pill.approved { background: rgba(16,185,129,.15); color: #047857; }
+  :root.dark .plan-card-status-pill.pending  { background: rgba(245,158,11,.2); color: #fbbf24; }
+  :root.dark .plan-card-status-pill.approved { background: rgba(16,185,129,.2); color: #34d399; }
+  .plan-card-body {
+    padding: 12px 16px; overflow: hidden; transition: max-height .25s ease;
+  }
+  .plan-card-body.collapsed {
+    max-height: 800px;
+    -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent);
+            mask-image: linear-gradient(to bottom, #000 78%, transparent);
+  }
+  .plan-card-body .markdown { font-size: 14px; line-height: 1.6; }
+  .plan-card-toggle {
+    display: none; padding: 6px 16px 10px; font-size: 12px;
+    color: var(--accent); cursor: pointer; user-select: none;
+    text-align: center; background: var(--surface);
+  }
+  .plan-card-toggle.visible { display: block; }
+  .plan-card-toggle:hover { text-decoration: underline; }
+  .plan-card-actions {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 10px 14px; border-top: 1px solid var(--border); background: var(--bg);
+  }
+  .plan-card-actions button {
+    padding: 6px 14px; font-size: 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    font-weight: 500; font-family: inherit; transition: background .12s, opacity .12s;
+  }
+  .plan-card-actions button:hover:not(:disabled) { background: var(--bg); }
+  .plan-card-actions button.primary {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+  .plan-card-actions button.primary:hover:not(:disabled) { filter: brightness(0.95); background: var(--accent); }
+  .plan-card-actions button.subtle { color: var(--text-subtle); border-color: transparent; }
+  .plan-card-actions button:disabled { opacity: .5; cursor: not-allowed; }
+  .plan-card-actions .spacer { flex: 1; }
+  .plan-edit-textarea {
+    width: 100%; min-height: 280px; padding: 10px 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px; line-height: 1.5;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); resize: vertical;
+    box-sizing: border-box;
+  }
+  .plan-card-decided-note {
+    padding: 8px 14px; font-size: 12px; color: var(--text-subtle);
+    background: var(--bg); border-top: 1px solid var(--border);
+  }
+
+  /* ===== Config Center (Hooks / Skills / MCP / Permissions) ===== */
+  .cfg-modal { width: min(960px, 94vw); max-width: none; padding: 0; display: flex; flex-direction: column; max-height: 88vh; }
+  .cfg-header-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+  }
+  .cfg-header-row .title { font-weight: 600; }
+  .cfg-header-row .scope-select { margin-left: 8px; padding: 4px 8px; font-size: 12px; }
+  .cfg-header-row .close { margin-left: auto; font-size: 22px; line-height: 1; padding: 0 6px; }
+  .cfg-path-hint {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; color: var(--text-subtle);
+    padding: 6px 16px; background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto; white-space: nowrap;
+  }
+  .cfg-tabs {
+    display: flex; gap: 4px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .cfg-tab {
+    padding: 6px 14px; font-size: 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid transparent; color: var(--text-subtle);
+    background: transparent;
+  }
+  .cfg-tab:hover { background: var(--surface-2); color: var(--text); }
+  .cfg-tab.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .cfg-body { flex: 1; overflow-y: auto; padding: 14px 18px; min-height: 240px; }
+  .cfg-body.hidden { display: none; }
+  .cfg-row {
+    display: grid; grid-template-columns: 170px 1fr 56px 36px; gap: 8px;
+    align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border);
+  }
+  .cfg-row select, .cfg-row input {
+    width: 100%; padding: 4px 8px; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--bg); color: var(--text);
+  }
+  .cfg-row .del-btn {
+    padding: 2px 8px; font-size: 14px; color: #b91c1c;
+    background: transparent; border: 0; cursor: pointer;
+  }
+  .cfg-row .del-btn:hover { background: rgba(185,28,28,.08); border-radius: 4px; }
+  .cfg-empty { padding: 18px 0; text-align: center; color: var(--text-subtle); font-size: 12px; }
+  .cfg-add-btn {
+    margin-top: 10px; padding: 6px 12px; font-size: 12px;
+    border: 1px dashed var(--border); border-radius: 6px;
+    background: transparent; color: var(--text-subtle); cursor: pointer;
+  }
+  .cfg-add-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .cfg-skill-card {
+    display: flex; gap: 12px; padding: 10px 12px; margin-bottom: 8px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); align-items: flex-start;
+  }
+  .cfg-skill-card .meta { flex: 1; min-width: 0; }
+  .cfg-skill-card .name { font-weight: 600; font-size: 13px; color: var(--text); }
+  .cfg-skill-card .desc { color: var(--text-subtle); font-size: 12px; margin-top: 3px; line-height: 1.5; }
+  .cfg-skill-card .mp { font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--text-subtle); margin-top: 4px; }
+  .cfg-skill-card .actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .cfg-toggle {
+    position: relative; display: inline-block; width: 36px; height: 20px;
+    background: var(--border); border-radius: 999px; cursor: pointer;
+    transition: background .15s;
+  }
+  .cfg-toggle.on { background: var(--accent); }
+  .cfg-toggle::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; background: #fff; border-radius: 50%;
+    transition: left .15s;
+  }
+  .cfg-toggle.on::after { left: 18px; }
+  .cfg-link-btn {
+    padding: 3px 10px; font-size: 11px; color: var(--text-subtle);
+    background: transparent; border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer;
+  }
+  .cfg-link-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .cfg-perm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .cfg-perm-grid label { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; display: block; }
+  .cfg-perm-grid textarea {
+    width: 100%; min-height: 240px; padding: 8px 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; line-height: 1.5;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); resize: vertical;
+    box-sizing: border-box;
+  }
+  .cfg-actionbar {
+    display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+    border-top: 1px solid var(--border); background: var(--bg);
+  }
+  .cfg-actionbar .spacer { flex: 1; }
+  .cfg-actionbar button {
+    padding: 6px 14px; font-size: 12px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    cursor: pointer;
+  }
+  .cfg-actionbar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .cfg-actionbar button.primary.dirty { box-shadow: 0 0 0 2px var(--accent-soft); }
+  .cfg-actionbar button:disabled { opacity: .5; cursor: not-allowed; }
+  .cfg-hook-matcher.hidden { display: none; }
+  .cfg-err { padding: 8px 12px; background: rgba(239,68,68,.1); color: #b91c1c; border-radius: 4px; font-size: 12px; margin-bottom: 10px; }
+  .cfg-info { padding: 8px 12px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; font-size: 12px; margin-bottom: 10px; }
+  .cfg-secret-hint { font-size: 10px; color: var(--text-subtle); }
+  :root.dark .cfg-err { background: rgba(239,68,68,.15); color: #fca5a5; }
+
   /* ===== Artifact Preview Panel ===== */
   .artifact-panel {
     flex-shrink: 0; width: 480px; display: flex; flex-direction: column;
@@ -856,6 +1203,7 @@
         <option value="sonnet">Sonnet</option>
         <option value="haiku">Haiku</option>
       </select>
+      <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions">⚙</button>
       <button id="headerMoreBtn" class="sb-icon-btn" title="工作目录 / 权限策略">⋯</button>
       <button id="helpBtn" class="sb-icon-btn relative" title="帮助 / 快捷键 / 更新日志">?<span id="helpBadge" class="hidden absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style="background:#ef4444;"></span></button>
       <button id="exportBtn" class="sb-icon-btn" title="导出 Markdown">📥</button>
@@ -1144,6 +1492,38 @@
   </div>
 </div>
 
+<!-- Config Center modal (Hooks / Skills / MCP / Permissions) -->
+<div id="configCenter" class="modal-backdrop hidden">
+  <div class="modal-box cfg-modal">
+    <div class="cfg-header-row">
+      <span class="title">⚙ 配置中心</span>
+      <select id="configScope" class="scope-select">
+        <option value="user">用户级 (~/.claude/)</option>
+        <option value="project">项目级 (.claude/)</option>
+        <option value="local">本地 (.local)</option>
+      </select>
+      <button data-close class="close" title="关闭">×</button>
+    </div>
+    <div id="configPathHint" class="cfg-path-hint">—</div>
+    <div class="cfg-tabs">
+      <button class="cfg-tab active" data-cfg-tab="hooks">Hooks</button>
+      <button class="cfg-tab" data-cfg-tab="skills">Skills</button>
+      <button class="cfg-tab" data-cfg-tab="mcp">MCP</button>
+      <button class="cfg-tab" data-cfg-tab="perms">Permissions</button>
+    </div>
+    <div id="configBodyHooks" class="cfg-body"></div>
+    <div id="configBodySkills" class="cfg-body hidden"></div>
+    <div id="configBodyMcp" class="cfg-body hidden"></div>
+    <div id="configBodyPerms" class="cfg-body hidden"></div>
+    <div class="cfg-actionbar">
+      <span class="cfg-secret-hint">敏感字段已掩码（含 ***）；回写时保留原值。</span>
+      <span class="spacer"></span>
+      <button id="configReloadBtn">重新加载</button>
+      <button id="configSaveBtn" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- TodoWrite live panel -->
 <div id="todoPanel" class="todo-panel hidden">
   <div class="todo-panel-header">
@@ -1154,6 +1534,29 @@
   </div>
   <div class="todo-progress-track"><div id="todoProgressFill" class="todo-progress-fill" style="width:0%"></div></div>
   <div class="todo-panel-list" id="todoPanelList"></div>
+</div>
+
+<!-- Subagent live panel -->
+<div id="subagentPanel" class="subagent-panel hidden">
+  <div class="subagent-panel-header">
+    <span>🤖 子代理</span>
+    <span id="subagentCount" class="ml-auto text-xs font-normal opacity-75">0</span>
+    <button id="subagentCollapseBtn" title="折叠/展开" class="hover:opacity-70">−</button>
+    <button id="subagentCloseBtn" title="关闭" class="hover:opacity-70 ml-1">×</button>
+  </div>
+  <div class="subagent-panel-list" id="subagentPanelList"></div>
+</div>
+
+<!-- Subagent transcript modal -->
+<div id="subagentModal" class="subagent-modal-backdrop hidden">
+  <div class="subagent-modal">
+    <div class="subagent-modal-header">
+      <span id="subagentModalTitle">🤖 Task</span>
+      <span id="subagentModalMeta" class="ml-2 text-xs font-normal opacity-75"></span>
+      <button id="subagentModalCloseBtn" class="ml-auto hover:opacity-70" title="关闭">×</button>
+    </div>
+    <div id="subagentModalBody" class="subagent-modal-body"></div>
+  </div>
 </div>
 
 <!-- Lightbox -->
@@ -1307,6 +1710,16 @@ const todoProgress = $('todoProgress');
 const todoProgressFill = $('todoProgressFill');
 const todoCollapseBtn = $('todoCollapseBtn');
 const todoCloseBtn = $('todoCloseBtn');
+const subagentPanel = $('subagentPanel');
+const subagentPanelList = $('subagentPanelList');
+const subagentCount = $('subagentCount');
+const subagentCollapseBtn = $('subagentCollapseBtn');
+const subagentCloseBtn = $('subagentCloseBtn');
+const subagentModal = $('subagentModal');
+const subagentModalTitle = $('subagentModalTitle');
+const subagentModalMeta = $('subagentModalMeta');
+const subagentModalCloseBtn = $('subagentModalCloseBtn');
+const subagentModalBody = $('subagentModalBody');
 const artifactPanel = $('artifactPanel');
 const artifactTabs = $('artifactTabs');
 const artifactIframe = $('artifactIframe');
@@ -1817,9 +2230,37 @@ function renderEditDiff(inputData) {
 let toolUseBlocks = new Map();
 let pendingToolUseIds = [];
 
+// ===== Subagent panel state =====
+const subagentCards = new Map(); // tool_use.id -> card
+const MAX_SUBAGENT_CARDS = 5;
+let subagentCollapsed = false;
+let subagentDismissed = false;
+
+// ===== Plan approval state =====
+const planCards = new Map(); // tool_use.id -> { id, plan, editedPlan, status, decision, cardEl }
+function planDecisionsKey(sid) { return `plan-decisions:${sid || ''}`; }
+function loadPlanDecisions(sid) {
+  if (!sid) return {};
+  try { return JSON.parse(localStorage.getItem(planDecisionsKey(sid)) || '{}') || {}; }
+  catch { return {}; }
+}
+function savePlanDecision(sid, toolId, patch) {
+  if (!sid || !toolId) return;
+  try {
+    const all = loadPlanDecisions(sid);
+    all[toolId] = { ...(all[toolId] || {}), ...patch };
+    localStorage.setItem(planDecisionsKey(sid), JSON.stringify(all));
+  } catch {}
+}
+
 function resetToolUseRuntimeState() {
   toolUseBlocks.clear();
   pendingToolUseIds = [];
+  subagentCards.clear();
+  subagentDismissed = false;
+  hideSubagentPanel();
+  closeSubagentModal();
+  planCards.clear();
 }
 
 function toolRunningText(name) {
@@ -1863,10 +2304,59 @@ function renderToolUseBody(name, inputData) {
 function updateToolUseInput(id, inputData) {
   if (!id) return false;
   const info = toolUseBlocks.get(id);
+  const planEntry = planCards.get(id);
+  if (planEntry) {
+    const input = inputData || {};
+    const plan = typeof input.plan === 'string' ? input.plan : '';
+    planEntry.plan = plan;
+    if (planEntry.status !== 'approved' && planEntry.editedPlan == null && planEntry.mdEl) {
+      planEntry.mdEl.innerHTML = plan ? renderMarkdown(plan) : '<em style="color:var(--text-subtle)">（计划为空 · 模型未输出 plan 内容）</em>';
+    }
+    if (!planEntry.runStopped && currentController && planEntry.status !== 'approved') {
+      planEntry.runStopped = true;
+      stopCurrentRunForPlan();
+    }
+    return true;
+  }
   if (!info) return false;
   info.inputData = inputData || {};
-  const body = info.el.querySelector('[data-tool-body]');
-  if (body) body.outerHTML = renderToolUseBody(info.name, info.inputData);
+  if (info.isSubagent) {
+    const card = subagentCards.get(id);
+    if (card) {
+      const input = inputData || {};
+      if (input.subagent_type) card.subagentType = input.subagent_type;
+      if (input.description) card.description = input.description;
+      if (typeof input.prompt === 'string') card.promptPreview = input.prompt.slice(0, 200);
+      if (card.pillEl) {
+        const codeEl = card.pillEl.querySelector('code');
+        if (codeEl) codeEl.textContent = card.subagentType;
+      }
+      renderSubagentPanel();
+    }
+    return true;
+  }
+  if (info.isChip && info.chipEl) {
+    const keyArg = extractToolKeyArg(info.name, info.inputData);
+    let argEl = info.chipEl.querySelector('.tool-chip-arg');
+    if (keyArg) {
+      if (!argEl) {
+        argEl = document.createElement('span');
+        argEl.className = 'tool-chip-arg';
+        info.chipEl.appendChild(argEl);
+      }
+      argEl.textContent = keyArg;
+    } else if (argEl) {
+      argEl.remove();
+    }
+    if (info.chipEl.classList.contains('active') && info.detailEl) {
+      renderToolDetail(info.detailEl, info);
+    }
+    return true;
+  }
+  if (info.el) {
+    const body = info.el.querySelector('[data-tool-body]');
+    if (body) body.outerHTML = renderToolUseBody(info.name, info.inputData);
+  }
   return true;
 }
 
@@ -1877,8 +2367,18 @@ function markToolUseComplete(toolUseId, isError) {
   }
   if (!id) return;
   const info = toolUseBlocks.get(id);
-  if (!info || !info.pending) return;
-  setToolStatus(info.statusEl, isError ? '出错' : '已返回结果', isError ? 'error' : 'done');
+  if (!info) return;
+  // Subagent cards update their final status even on replay (where pending=false),
+  // so historical Task pills don't get stuck showing "running".
+  if (info.isSubagent) {
+    markSubagentComplete(id, !!isError);
+  } else if (info.isChip && info.chipEl) {
+    setToolChipStatus(info.chipEl, isError ? 'error' : 'done');
+    const strip = info.chipEl.parentElement;
+    if (strip) updateStripProgress(strip);
+  } else if (info.pending) {
+    setToolStatus(info.statusEl, isError ? '出错' : '已返回结果', isError ? 'error' : 'done');
+  }
   info.pending = false;
   pendingToolUseIds = pendingToolUseIds.filter(x => x !== id);
 }
@@ -1887,7 +2387,17 @@ function finishPendingToolUses(text = '已结束', kind = 'done') {
   for (const id of [...pendingToolUseIds]) {
     const info = toolUseBlocks.get(id);
     if (!info || !info.pending) continue;
-    setToolStatus(info.statusEl, text, kind);
+    if (info.isSubagent) {
+      const status = kind === 'error' ? 'error' : (kind === 'stopped' ? 'cancelled' : 'success');
+      markSubagentComplete(id, status === 'error', status);
+    } else if (info.isChip && info.chipEl) {
+      const status = kind === 'error' ? 'error' : (kind === 'stopped' ? 'cancelled' : 'done');
+      setToolChipStatus(info.chipEl, status);
+      const strip = info.chipEl.parentElement;
+      if (strip) updateStripProgress(strip);
+    } else {
+      setToolStatus(info.statusEl, text, kind);
+    }
     info.pending = false;
   }
   pendingToolUseIds = [];
@@ -1901,7 +2411,714 @@ function parseStreamToolInput(block) {
   return (block && block.inputData) || {};
 }
 
+// ===== Subagent (Task tool) helpers =====
+function fmtElapsed(ms) {
+  if (ms < 0) ms = 0;
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const m = Math.floor(ms / 60_000);
+  const s = Math.floor((ms % 60_000) / 1000);
+  return `${m}m${s}s`;
+}
+
+function evictSubagentCardsIfNeeded() {
+  if (subagentCards.size <= MAX_SUBAGENT_CARDS) return;
+  const sorted = [...subagentCards.entries()].sort((a, b) => a[1].startedAt - b[1].startedAt);
+  for (const [id, card] of sorted) {
+    if (subagentCards.size <= MAX_SUBAGENT_CARDS) break;
+    if (card.status !== 'running') subagentCards.delete(id);
+  }
+}
+
+function registerSubagentCard(id, inputData, pillEl) {
+  if (!id) return null;
+  const existing = subagentCards.get(id);
+  if (existing) {
+    if (pillEl) existing.pillEl = pillEl;
+    return existing;
+  }
+  const input = inputData || {};
+  const card = {
+    id,
+    subagentType: input.subagent_type || 'agent',
+    description: input.description || '',
+    promptPreview: (input.prompt || '').slice(0, 200),
+    status: 'running',
+    startedAt: Date.now(),
+    endedAt: null,
+    latestActivity: '准备中…',
+    events: [],
+    pillEl: pillEl || null,
+  };
+  subagentCards.set(id, card);
+  // New task arriving — un-dismiss so the panel reappears.
+  subagentDismissed = false;
+  evictSubagentCardsIfNeeded();
+  renderSubagentPanel();
+  return card;
+}
+
+function summarizeEventForActivity(obj) {
+  if (!obj || !obj.type) return null;
+  if (obj.type === 'assistant' && obj.message) {
+    for (const b of (obj.message.content || [])) {
+      if (b.type === 'text' && b.text) {
+        const first = b.text.split(/[\n。.!?]/)[0].trim();
+        if (first) return first.slice(0, 100);
+      }
+      if (b.type === 'tool_use') return `调用 ${b.name}`;
+      if (b.type === 'thinking') return '思考中…';
+    }
+  }
+  if (obj.type === 'user' && obj.message) {
+    for (const b of (obj.message.content || [])) {
+      if (b.type === 'tool_result') return b.is_error ? '工具出错' : '工具完成';
+    }
+  }
+  if (obj.type === 'stream_event' && obj.event) {
+    const ev = obj.event;
+    if (ev.type === 'content_block_start' && ev.content_block) {
+      const cb = ev.content_block;
+      if (cb.type === 'tool_use') return `调用 ${cb.name}`;
+      if (cb.type === 'text') return '输出中…';
+      if (cb.type === 'thinking') return '思考中…';
+    }
+  }
+  return null;
+}
+
+function routeEventToSubagent(parentId, obj) {
+  const card = subagentCards.get(parentId);
+  if (!card) return false;
+  card.events.push(obj);
+  const summary = summarizeEventForActivity(obj);
+  if (summary) card.latestActivity = summary;
+  renderSubagentPanel();
+  return true;
+}
+
+function statusDotKind(status) {
+  if (status === 'success' || status === 'error' || status === 'cancelled') return status;
+  return 'running';
+}
+
+function renderSubagentPanel() {
+  if (subagentCards.size === 0) {
+    hideSubagentPanel();
+    return;
+  }
+  if (subagentDismissed) {
+    // Keep the Map alive so events still route silently, but stay hidden
+    // until a new task starts.
+    subagentPanel.classList.add('hidden');
+    return;
+  }
+  subagentPanel.classList.remove('hidden');
+  subagentCount.textContent = String(subagentCards.size);
+  const cards = [...subagentCards.values()].sort((a, b) => a.startedAt - b.startedAt);
+  subagentPanelList.innerHTML = cards.map(c => {
+    const elapsed = (c.endedAt || Date.now()) - c.startedAt;
+    return `
+      <div class="subagent-card" data-subagent-id="${escapeHtml(c.id)}" title="点击查看完整子代理执行">
+        <div class="subagent-card-title">
+          <span class="subagent-status-dot ${statusDotKind(c.status)}"></span>
+          <span>${escapeHtml(c.subagentType)}</span>
+          <span class="ml-auto subagent-card-meta">${fmtElapsed(elapsed)}</span>
+        </div>
+        ${c.description ? `<div class="subagent-card-meta">${escapeHtml(c.description)}</div>` : ''}
+        <div class="subagent-card-activity">${escapeHtml(c.latestActivity || '')}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function hideSubagentPanel() {
+  subagentPanel.classList.add('hidden');
+  subagentPanelList.innerHTML = '';
+  subagentCount.textContent = '0';
+}
+
+function updateTaskPillStatus(pillEl, status) {
+  if (!pillEl) return;
+  pillEl.classList.remove('done', 'error', 'cancelled');
+  let label = 'running';
+  if (status === 'success') { pillEl.classList.add('done'); label = 'done'; }
+  else if (status === 'error') { pillEl.classList.add('error'); label = 'failed'; }
+  else if (status === 'cancelled') { pillEl.classList.add('cancelled'); label = 'cancelled'; }
+  const labelEl = pillEl.querySelector('[data-pill-status]');
+  if (labelEl) labelEl.textContent = label;
+}
+
+function markSubagentComplete(toolUseId, isError, explicitStatus) {
+  const card = subagentCards.get(toolUseId);
+  if (!card) return false;
+  card.status = explicitStatus || (isError ? 'error' : 'success');
+  card.endedAt = Date.now();
+  updateTaskPillStatus(card.pillEl, card.status);
+  renderSubagentPanel();
+  evictSubagentCardsIfNeeded();
+  return true;
+}
+
+function openSubagentModal(card) {
+  if (!card) return;
+  subagentModalTitle.textContent = `🤖 ${card.subagentType}`;
+  const elapsed = (card.endedAt || Date.now()) - card.startedAt;
+  subagentModalMeta.textContent = `${card.status} · ${fmtElapsed(elapsed)} · ${card.events.length} 条事件`;
+  subagentModalBody.innerHTML = '';
+  if (card.description) {
+    const descEl = document.createElement('div');
+    descEl.className = 'p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-xs';
+    descEl.innerHTML = `<div class="text-gray-500 mb-1">任务</div><div class="font-medium text-sm">${escapeHtml(card.description)}</div>`;
+    subagentModalBody.appendChild(descEl);
+  }
+  if (card.promptPreview) {
+    const promptEl = document.createElement('div');
+    promptEl.className = 'p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-xs whitespace-pre-wrap';
+    promptEl.innerHTML = `<div class="text-gray-500 mb-1">prompt（节选）</div>${escapeHtml(card.promptPreview)}${card.promptPreview.length >= 200 ? '…' : ''}`;
+    subagentModalBody.appendChild(promptEl);
+  }
+  if (card.events.length === 0) {
+    const emptyEl = document.createElement('div');
+    emptyEl.className = 'text-sm text-gray-500 italic';
+    emptyEl.textContent = '该子代理暂无可显示的内部事件';
+    subagentModalBody.appendChild(emptyEl);
+  } else {
+    let bubble = null;
+    for (const obj of card.events) {
+      if (obj.type === 'assistant' || obj.type === 'user') {
+        if (!bubble) {
+          bubble = document.createElement('div');
+          bubble.className = 'bubble-asst p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950';
+          subagentModalBody.appendChild(bubble);
+        }
+        handleEvent(obj, bubble, { replay: true, skipSubagentRouting: true });
+      } else {
+        handleEvent(obj, bubble, { replay: true, skipSubagentRouting: true });
+      }
+    }
+  }
+  subagentModal.classList.remove('hidden');
+}
+
+function closeSubagentModal() {
+  subagentModal.classList.add('hidden');
+  subagentModalBody.innerHTML = '';
+}
+
+function addTaskPill(container, inputData, options = {}) {
+  const id = options.id || '';
+  const input = inputData || {};
+  const subagentType = input.subagent_type || 'agent';
+  const pill = document.createElement('div');
+  pill.className = 'task-pill';
+  pill.innerHTML = `🤖 <code>${escapeHtml(subagentType)}</code> · <span data-pill-status>running</span>`;
+  pill.title = '点击查看子代理详细执行';
+  container.appendChild(pill);
+  if (!id) return pill;
+  let card = subagentCards.get(id);
+  if (!card) {
+    card = registerSubagentCard(id, input, pill);
+  } else {
+    card.pillEl = pill;
+    updateTaskPillStatus(pill, card.status);
+  }
+  pill.addEventListener('click', () => openSubagentModal(card));
+  if (!toolUseBlocks.has(id)) {
+    toolUseBlocks.set(id, {
+      el: pill,
+      statusEl: pill.querySelector('[data-pill-status]'),
+      name: 'Task',
+      inputData: input,
+      pending: options.pending !== false,
+      isSubagent: true,
+    });
+    if (options.pending !== false && !pendingToolUseIds.includes(id)) pendingToolUseIds.push(id);
+  } else {
+    const info = toolUseBlocks.get(id);
+    info.el = pill;
+    info.statusEl = pill.querySelector('[data-pill-status]');
+    info.isSubagent = true;
+  }
+  return pill;
+}
+
+// ===== Tool chip strip helpers =====
+const TOOL_ICON_MAP = {
+  Bash: '⚡', Read: '📖', Write: '✏️', Edit: '✂️', MultiEdit: '✂️',
+  Grep: '🔍', Glob: '📁', WebFetch: '🌐', WebSearch: '🔎',
+  NotebookEdit: '📓', TodoWrite: '📋', Task: '🤖',
+};
+
+function toolIcon(name) { return TOOL_ICON_MAP[name] || '🔧'; }
+
+function basenameOf(p) {
+  if (!p || typeof p !== 'string') return '';
+  const parts = p.split('/').filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : p;
+}
+
+function firstLine(s) {
+  if (!s) return '';
+  const i = String(s).indexOf('\n');
+  return i >= 0 ? String(s).slice(0, i) : String(s);
+}
+
+function truncateMid(s, n) {
+  if (!s) return '';
+  s = String(s);
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
+function extractToolKeyArg(name, input) {
+  if (!input || typeof input !== 'object') return '';
+  switch (name) {
+    case 'Read': case 'Write': case 'Edit': case 'MultiEdit': case 'NotebookEdit':
+      return basenameOf(input.file_path || input.notebook_path || '');
+    case 'Bash':
+      return truncateMid(firstLine(input.command || ''), 48);
+    case 'Glob':
+    case 'Grep':
+      return truncateMid(input.pattern || '', 48);
+    case 'WebFetch':
+      try { return new URL(input.url).hostname; } catch (_) { return truncateMid(input.url || '', 48); }
+    case 'WebSearch':
+      return truncateMid(input.query || '', 48);
+    default: {
+      for (const k of ['file_path', 'path', 'query', 'pattern', 'url', 'command', 'description', 'name']) {
+        if (typeof input[k] === 'string' && input[k]) return truncateMid(input[k], 48);
+      }
+      return '';
+    }
+  }
+}
+
+function getOrCreateToolStrip(container) {
+  const last = container.lastElementChild;
+  if (last && last.dataset && last.dataset.kind === 'tool-strip-wrap') {
+    return {
+      wrap: last,
+      strip: last.querySelector('.tool-strip'),
+      detail: last.querySelector('.tool-strip-detail'),
+    };
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'tool-strip-wrap';
+  wrap.dataset.kind = 'tool-strip-wrap';
+  const strip = document.createElement('div');
+  strip.className = 'tool-strip';
+  const detail = document.createElement('div');
+  detail.className = 'tool-strip-detail hidden';
+  wrap.appendChild(strip);
+  wrap.appendChild(detail);
+  container.appendChild(wrap);
+  return { wrap, strip, detail };
+}
+
+function updateStripProgress(strip) {
+  if (!strip) return;
+  const wrap = strip.parentElement;
+  if (!wrap) return;
+  const chips = [...strip.querySelectorAll('.tool-chip')];
+  const total = chips.length;
+  const done = chips.filter(c => !c.classList.contains('pending')).length;
+  const pct = total ? (done / total) * 100 : 0;
+
+  const COLLAPSE_THRESHOLD = 4;
+  let progress = wrap.querySelector(':scope > .tool-strip-progress');
+  let summary = wrap.querySelector(':scope > .tool-strip-summary');
+
+  if (total <= 1) {
+    if (progress) progress.remove();
+    if (summary) summary.remove();
+    wrap.classList.remove('collapsed');
+    return;
+  }
+
+  if (total < COLLAPSE_THRESHOLD) {
+    if (summary) summary.remove();
+    wrap.classList.remove('collapsed');
+    if (!progress) {
+      progress = document.createElement('div');
+      progress.className = 'tool-strip-progress';
+      progress.innerHTML = `
+        <span class="tool-strip-progress-text"></span>
+        <span class="tool-strip-progress-bar"><span class="tool-strip-progress-bar-fill"></span></span>
+      `;
+      wrap.insertBefore(progress, strip);
+    }
+    const fill = progress.querySelector('.tool-strip-progress-bar-fill');
+    if (fill) fill.style.width = `${pct}%`;
+    const txt = progress.querySelector('.tool-strip-progress-text');
+    if (txt) txt.textContent = `${done}/${total}`;
+    return;
+  }
+
+  // total >= COLLAPSE_THRESHOLD → render summary header, drop tiny progress
+  if (progress) progress.remove();
+  if (!summary) {
+    summary = document.createElement('button');
+    summary.type = 'button';
+    summary.className = 'tool-strip-summary';
+    summary.innerHTML = `
+      <span class="tool-strip-summary-icon">🔧</span>
+      <span class="tool-strip-summary-text"></span>
+      <span class="tool-strip-progress-bar"><span class="tool-strip-progress-bar-fill"></span></span>
+      <span class="tool-strip-summary-count"></span>
+      <span class="tool-strip-summary-chevron"></span>
+    `;
+    summary.addEventListener('click', () => {
+      const nowCollapsed = wrap.classList.toggle('collapsed');
+      wrap.dataset.userOpen = nowCollapsed ? '0' : '1';
+      const chev = summary.querySelector('.tool-strip-summary-chevron');
+      if (chev) chev.textContent = nowCollapsed ? '▾' : '▴';
+    });
+    wrap.insertBefore(summary, strip);
+    // First time crossing threshold: auto-collapse unless user already opened it
+    if (wrap.dataset.userOpen !== '1') wrap.classList.add('collapsed');
+  }
+
+  // Breakdown: count by tool name, sort desc, keep top 4 + "+N 更多"
+  const counts = {};
+  for (const chip of chips) {
+    const nameEl = chip.querySelector('.tool-chip-name');
+    const n = nameEl ? nameEl.textContent : '?';
+    counts[n] = (counts[n] || 0) + 1;
+  }
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const top = entries.slice(0, 4).map(([n, c]) => `${n}×${c}`).join(' · ');
+  const extra = entries.length > 4 ? ` · +${entries.length - 4} 类` : '';
+  const textEl = summary.querySelector('.tool-strip-summary-text');
+  if (textEl) textEl.innerHTML = `<strong>${total} 步操作</strong>${escapeHtml(top + extra)}`;
+  const countEl = summary.querySelector('.tool-strip-summary-count');
+  if (countEl) countEl.textContent = `${done}/${total}`;
+  const fill = summary.querySelector('.tool-strip-progress-bar-fill');
+  if (fill) fill.style.width = `${pct}%`;
+  const chev = summary.querySelector('.tool-strip-summary-chevron');
+  if (chev) chev.textContent = wrap.classList.contains('collapsed') ? '▾' : '▴';
+}
+
+function setToolChipStatus(chip, status) {
+  if (!chip) return;
+  chip.classList.toggle('pending', status === 'running');
+  chip.classList.toggle('error', status === 'error');
+  const dot = chip.querySelector('.tool-chip-status');
+  if (dot) dot.className = `tool-chip-status ${status}`;
+}
+
+function renderToolDetail(detailEl, info) {
+  if (!detailEl || !info) return;
+  const name = info.name;
+  const inputData = info.inputData || {};
+  const result = info.resultData; // { content, isError } | undefined
+  const bodyHtml = renderToolUseBody(name, inputData);
+  let resultHtml = '';
+  if (result) {
+    let text = typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+    if (Array.isArray(result.content)) {
+      text = result.content.map(c => (typeof c === 'string' ? c : (c.text || JSON.stringify(c)))).join('\n');
+    }
+    const len = (text || '').length;
+    const truncated = len > 4000 ? text.slice(0, 4000) + `\n... (共 ${len} 字)` : (text || '');
+    const cls = result.isError
+      ? 'bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200'
+      : 'bg-gray-50 dark:bg-slate-800';
+    resultHtml = `
+      <div class="tool-strip-detail-section-label">${result.isError ? '❌ 错误结果' : '📋 结果'} (${len} 字)</div>
+      <pre class="${cls}">${escapeHtml(truncated)}</pre>
+    `;
+  }
+  detailEl.innerHTML = `
+    <div class="tool-strip-detail-header">
+      ${toolIcon(name)} <code>${escapeHtml(name)}</code>
+    </div>
+    <div class="tool-strip-detail-section-label">输入</div>
+    ${bodyHtml}
+    ${resultHtml}
+  `;
+}
+
+function toggleChipDetail(chip, info, detailEl) {
+  if (!chip || !info || !detailEl) return;
+  const strip = chip.parentElement;
+  const isActive = chip.classList.contains('active');
+  // Clear other active chips in the same strip
+  if (strip) strip.querySelectorAll('.tool-chip.active').forEach(c => c.classList.remove('active'));
+  if (isActive) {
+    detailEl.classList.add('hidden');
+    detailEl.innerHTML = '';
+    return;
+  }
+  chip.classList.add('active');
+  renderToolDetail(detailEl, info);
+  detailEl.classList.remove('hidden');
+}
+
+function attachToolResult(toolUseId, content, isError) {
+  if (!toolUseId) return false;
+  const info = toolUseBlocks.get(toolUseId);
+  if (!info || !info.chipEl) return false;
+  info.resultData = { content, isError: !!isError };
+  // If currently active, repaint the detail panel with the new result
+  if (info.chipEl.classList.contains('active') && info.detailEl) {
+    renderToolDetail(info.detailEl, info);
+  }
+  return true;
+}
+
+function addToolChip(container, name, inputData, options = {}) {
+  const id = options.id || '';
+  const input = inputData || {};
+  const { strip, detail } = getOrCreateToolStrip(container);
+  const isPending = options.pending !== false;
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'tool-chip' + (isPending ? ' pending' : '');
+  if (id) chip.dataset.toolId = id;
+  const keyArg = extractToolKeyArg(name, input);
+  chip.innerHTML = `
+    <span class="tool-chip-status ${isPending ? 'running' : 'done'}"></span>
+    <span class="tool-chip-icon">${toolIcon(name)}</span>
+    <span class="tool-chip-name">${escapeHtml(name)}</span>
+    ${keyArg ? `<span class="tool-chip-arg">${escapeHtml(keyArg)}</span>` : ''}
+  `;
+  // Append chip (progress badge now lives in the wrap, not the strip)
+  strip.appendChild(chip);
+
+  if (id) {
+    if (toolUseBlocks.has(id)) {
+      // Re-registration via streaming: just refresh metadata
+      const info = toolUseBlocks.get(id);
+      info.chipEl = chip;
+      info.detailEl = detail;
+      info.inputData = input;
+      info.name = name;
+      info.isChip = true;
+    } else {
+      toolUseBlocks.set(id, {
+        chipEl: chip,
+        detailEl: detail,
+        name,
+        inputData: input,
+        pending: isPending,
+        isChip: true,
+        resultData: null,
+      });
+      if (isPending && !pendingToolUseIds.includes(id)) pendingToolUseIds.push(id);
+    }
+    const info = toolUseBlocks.get(id);
+    chip.addEventListener('click', () => toggleChipDetail(chip, info, detail));
+  }
+  updateStripProgress(strip);
+  return chip;
+}
+
+function renderPlanCard(container, inputData, options = {}) {
+  const toolId = (options && (options.id || options.toolUseId)) || ('plan-' + Math.random().toString(36).slice(2, 10));
+  const plan = (inputData && typeof inputData.plan === 'string') ? inputData.plan : '';
+  const sid = sessionId;
+  const prior = (sid ? loadPlanDecisions(sid)[toolId] : null) || null;
+  const isStreaming = options && options.pending === true;
+  const emptyPlaceholder = isStreaming
+    ? '<em style="color:var(--text-subtle)">（计划生成中…）</em>'
+    : '<em style="color:var(--text-subtle)">（计划为空 · 模型未输出 plan 内容）</em>';
+
+  const existing = planCards.get(toolId);
+  if (existing && existing.cardEl && existing.cardEl.isConnected) {
+    existing.plan = plan;
+    if (existing.status !== 'approved' && existing.editedPlan == null && existing.mdEl) {
+      existing.mdEl.innerHTML = plan ? renderMarkdown(plan) : emptyPlaceholder;
+    }
+    return existing.cardEl;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'plan-card';
+  card.dataset.toolUseId = toolId;
+
+  const header = document.createElement('div');
+  header.className = 'plan-card-header';
+  header.innerHTML = '<span>📋 计划审批</span>';
+  const pill = document.createElement('span');
+  pill.className = 'plan-card-status-pill ' + (prior && prior.status === 'approved' ? 'approved' : 'pending');
+  pill.textContent = prior && prior.status === 'approved' ? '已批准' : '待审批';
+  header.appendChild(pill);
+  card.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'plan-card-body';
+  const md = document.createElement('div');
+  md.className = 'markdown';
+  const displayPlan = (prior && prior.editedPlan) ? prior.editedPlan : plan;
+  md.innerHTML = displayPlan ? renderMarkdown(displayPlan) : emptyPlaceholder;
+  body.appendChild(md);
+  card.appendChild(body);
+
+  const toggle = document.createElement('div');
+  toggle.className = 'plan-card-toggle';
+  toggle.textContent = '展开全部 ▾';
+  card.appendChild(toggle);
+
+  const actions = document.createElement('div');
+  actions.className = 'plan-card-actions';
+  card.appendChild(actions);
+
+  const entry = { id: toolId, plan, editedPlan: (prior && prior.editedPlan) || null, status: (prior && prior.status) || 'pending', decision: (prior && prior.decision) || null, cardEl: card, bodyEl: body, mdEl: md, actionsEl: actions, pillEl: pill, toggleEl: toggle };
+  planCards.set(toolId, entry);
+  if (toolId && !toolUseBlocks.has(toolId)) {
+    toolUseBlocks.set(toolId, { name: 'ExitPlanMode', inputData: inputData || {}, isPlan: true });
+  }
+
+  renderPlanActions(entry);
+  container.appendChild(card);
+
+  requestAnimationFrame(() => {
+    try {
+      if (body.scrollHeight > 800) {
+        body.classList.add('collapsed');
+        toggle.classList.add('visible');
+        toggle.onclick = () => {
+          const collapsed = body.classList.toggle('collapsed');
+          toggle.textContent = collapsed ? '展开全部 ▾' : '收起 ▴';
+        };
+      }
+    } catch {}
+  });
+
+  return card;
+}
+
+function renderPlanActions(entry) {
+  const actions = entry.actionsEl;
+  actions.innerHTML = '';
+  if (entry.status === 'approved') {
+    const note = document.createElement('div');
+    note.className = 'plan-card-decided-note';
+    const label = entry.decision === 'execute_with_edits' ? '已批准（含修改）' : '已批准';
+    note.textContent = `✅ ${label} · 已切换到「允许编辑」模式`;
+    entry.cardEl.replaceChild(note, actions);
+    entry.actionsEl = note;
+    return;
+  }
+
+  const approveBtn = document.createElement('button');
+  approveBtn.className = 'primary';
+  approveBtn.textContent = '✓ 批准并执行';
+  approveBtn.onclick = () => applyPlanDecision(entry.id, 'execute');
+
+  const editBtn = document.createElement('button');
+  editBtn.textContent = '✎ 编辑后批准';
+  editBtn.onclick = () => enterPlanEditMode(entry.id);
+
+  const refineBtn = document.createElement('button');
+  refineBtn.className = 'subtle';
+  refineBtn.textContent = '↻ 继续完善';
+  refineBtn.onclick = () => {
+    try {
+      permSelect.value = 'plan';
+      permSelect.dispatchEvent(new Event('change'));
+    } catch {}
+    try { input.focus(); } catch {}
+    toast('请在输入框补充/修改计划方向，发送后将继续在计划模式下迭代');
+  };
+
+  actions.appendChild(approveBtn);
+  actions.appendChild(editBtn);
+  const spacer = document.createElement('div');
+  spacer.className = 'spacer';
+  actions.appendChild(spacer);
+  actions.appendChild(refineBtn);
+}
+
+function enterPlanEditMode(toolId) {
+  const entry = planCards.get(toolId);
+  if (!entry) return;
+  const initial = (entry.editedPlan != null ? entry.editedPlan : entry.plan) || '';
+  entry.bodyEl.innerHTML = '';
+  const ta = document.createElement('textarea');
+  ta.className = 'plan-edit-textarea';
+  ta.value = initial;
+  entry.bodyEl.appendChild(ta);
+  entry.toggleEl.classList.remove('visible');
+  entry.bodyEl.classList.remove('collapsed');
+
+  const actions = entry.actionsEl;
+  actions.innerHTML = '';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'subtle';
+  cancelBtn.textContent = '取消';
+  cancelBtn.onclick = () => {
+    entry.bodyEl.innerHTML = '';
+    entry.mdEl = document.createElement('div');
+    entry.mdEl.className = 'markdown';
+    const txt = initial;
+    entry.mdEl.innerHTML = txt ? renderMarkdown(txt) : '<em style="color:var(--text-subtle)">（计划为空）</em>';
+    entry.bodyEl.appendChild(entry.mdEl);
+    renderPlanActions(entry);
+    requestAnimationFrame(() => {
+      if (entry.bodyEl.scrollHeight > 800) {
+        entry.bodyEl.classList.add('collapsed');
+        entry.toggleEl.classList.add('visible');
+      }
+    });
+  };
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'primary';
+  confirmBtn.textContent = '✓ 用编辑后的方案执行';
+  confirmBtn.onclick = () => {
+    const edited = ta.value || '';
+    applyPlanDecision(toolId, 'execute_with_edits', edited);
+  };
+  actions.appendChild(cancelBtn);
+  const sp = document.createElement('div');
+  sp.className = 'spacer';
+  actions.appendChild(sp);
+  actions.appendChild(confirmBtn);
+}
+
+function applyPlanDecision(toolId, decision, editedPlan) {
+  const entry = planCards.get(toolId);
+  if (!entry) return;
+  if (entry.status === 'approved') return;
+
+  try {
+    permSelect.value = 'acceptEdits';
+    permSelect.dispatchEvent(new Event('change'));
+  } catch {}
+
+  entry.status = 'approved';
+  entry.decision = decision;
+  if (decision === 'execute_with_edits' && editedPlan != null) {
+    entry.editedPlan = editedPlan;
+  }
+  savePlanDecision(sessionId, toolId, { status: 'approved', decision, editedPlan: entry.editedPlan || null });
+
+  if (decision === 'execute_with_edits') {
+    entry.bodyEl.innerHTML = '';
+    entry.mdEl = document.createElement('div');
+    entry.mdEl.className = 'markdown';
+    entry.mdEl.innerHTML = renderMarkdown(entry.editedPlan || '');
+    entry.bodyEl.appendChild(entry.mdEl);
+  }
+
+  entry.pillEl.classList.remove('pending');
+  entry.pillEl.classList.add('approved');
+  entry.pillEl.textContent = '已批准';
+  renderPlanActions(entry);
+
+  const msg = decision === 'execute_with_edits'
+    ? `已批准计划（含修改），请按以下修订后的方案执行：\n\n${entry.editedPlan || ''}\n`
+    : '已批准计划，请按计划继续执行。';
+  setTimeout(() => { try { send(msg); } catch (e) { console.error('send approval failed', e); } }, 0);
+}
+
 function addToolUseBlock(container, name, inputData, options = {}) {
+  if (name === 'Task') {
+    return addTaskPill(container, inputData, options);
+  }
+  if (name === 'ExitPlanMode') {
+    return renderPlanCard(container, inputData, options);
+  }
   if (name === 'TodoWrite' && inputData && Array.isArray(inputData.todos)) {
     updateTodoPanel(inputData.todos);
     const total = inputData.todos.length;
@@ -1919,39 +3136,11 @@ function addToolUseBlock(container, name, inputData, options = {}) {
     return;
   }
   const id = options.id || '';
-  if (id && toolUseBlocks.has(id)) {
+  if (id && toolUseBlocks.has(id) && toolUseBlocks.get(id).isChip) {
     updateToolUseInput(id, inputData);
-    return toolUseBlocks.get(id).el;
+    return toolUseBlocks.get(id).chipEl;
   }
-  const block = document.createElement('details');
-  if (settings.toolUseOpen) block.open = true;
-  block.className = 'bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg overflow-hidden';
-  const iconMap = { Bash:'⚡', Read:'📖', Write:'✏️', Edit:'✂️', Grep:'🔍', Glob:'📁', WebFetch:'🌐', WebSearch:'🔎', TodoWrite:'✅', Task:'🤖', MultiEdit:'✂️' };
-  const icon = iconMap[name] || '🔧';
-  const statusHtml = options.pending
-    ? `<span class="tool-status ml-2 text-xs font-normal ${toolStatusClass('running')}">${toolRunningText(name)}</span>`
-    : '';
-  const body = renderToolUseBody(name, inputData);
-  if (id) block.dataset.toolUseId = id;
-  block.innerHTML = `
-    <summary class="px-3 py-2 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/50">
-      ${icon} <code>${escapeHtml(name)}</code>${statusHtml}
-    </summary>
-    ${body}
-  `;
-  container.appendChild(block);
-  if (id) {
-    const info = {
-      el: block,
-      statusEl: block.querySelector('.tool-status'),
-      name,
-      inputData: inputData || {},
-      pending: !!options.pending,
-    };
-    toolUseBlocks.set(id, info);
-    if (options.pending && !pendingToolUseIds.includes(id)) pendingToolUseIds.push(id);
-  }
-  return block;
+  return addToolChip(container, name, inputData, options);
 }
 
 function addToolResultBlock(container, content, isError) {
@@ -2259,6 +3448,35 @@ function hideTodoPanel() {
 
 todoCloseBtn.addEventListener('click', hideTodoPanel);
 todoCollapseBtn.addEventListener('click', () => toggleTodoCollapse());
+
+// Subagent panel handlers
+subagentCloseBtn.addEventListener('click', () => {
+  // Hide the panel but keep cards so in-flight subagent events still route here
+  // instead of leaking into the main timeline. Panel reappears when a new
+  // Task starts (registerSubagentCard resets subagentDismissed).
+  subagentDismissed = true;
+  subagentPanel.classList.add('hidden');
+});
+subagentCollapseBtn.addEventListener('click', () => {
+  subagentCollapsed = !subagentCollapsed;
+  subagentPanelList.style.display = subagentCollapsed ? 'none' : '';
+  subagentCollapseBtn.textContent = subagentCollapsed ? '+' : '−';
+});
+subagentPanelList.addEventListener('click', (e) => {
+  const cardEl = e.target.closest('[data-subagent-id]');
+  if (!cardEl) return;
+  const card = subagentCards.get(cardEl.dataset.subagentId);
+  if (card) openSubagentModal(card);
+});
+subagentModalCloseBtn.addEventListener('click', closeSubagentModal);
+subagentModal.addEventListener('click', (e) => {
+  if (e.target === subagentModal) closeSubagentModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !subagentModal.classList.contains('hidden')) {
+    closeSubagentModal();
+  }
+});
 
 // ===== Artifact Preview Panel =====
 const artifacts = [];
@@ -2628,6 +3846,12 @@ function hideThinking(container) {
 
 function handleEvent(obj, container, options = {}) {
   const replay = !!options.replay;
+  // Route subagent inner events to the subagent panel; don't render them in the main timeline.
+  // Skipped when re-rendering inside the subagent modal (would recurse infinitely).
+  if (!options.skipSubagentRouting && obj && obj.parent_tool_use_id && subagentCards.has(obj.parent_tool_use_id)) {
+    routeEventToSubagent(obj.parent_tool_use_id, obj);
+    return container;
+  }
   if (obj.type === 'meta') {
     sessionId = obj.session_id;
     sessionLabelText.textContent = '会话 ' + sessionId.slice(0, 8);
@@ -2674,8 +3898,18 @@ function handleEvent(obj, container, options = {}) {
     if (!container) container = newAssistantBubble();
     for (const block of content) {
       if (block.type === 'tool_result') {
-        if (!replay) markToolUseComplete(block.tool_use_id, block.is_error);
-        addToolResultBlock(container, block.content, block.is_error);
+        // Always run markToolUseComplete (replay too) so chip status updates after reload.
+        markToolUseComplete(block.tool_use_id, block.is_error);
+        // ExitPlanMode results are owned by the plan card — never show as orphan
+        if (block.tool_use_id && planCards.has(block.tool_use_id)) {
+          continue;
+        }
+        // Prefer attaching to the chip's detail panel; fall back to a standalone block
+        // only for orphan results (no matching tool_use chip in the DOM).
+        const attached = attachToolResult(block.tool_use_id, block.content, block.is_error);
+        if (!attached) {
+          addToolResultBlock(container, block.content, block.is_error);
+        }
       }
     }
     // tool result shown; Claude may still be reasoning about next step — bring indicator back
@@ -2831,7 +4065,7 @@ function handleStreamEvent(ev, container) {
     } else if (block.type === 'tool_use') {
       if (block.name === 'TodoWrite') return container;
       const inputData = parseStreamToolInput(block);
-      if (block.id && block.el) {
+      if (block.id && (block.el || block.name === 'ExitPlanMode')) {
         updateToolUseInput(block.id, inputData);
       } else {
         addToolUseBlock(state.container, block.name, inputData, { id: block.id, pending: true });
@@ -3663,6 +4897,17 @@ stopBtn.addEventListener('click', async () => {
   if (currentController) currentController.abort();
 });
 
+// Auto-stop the running stream when a plan card is filled in.
+// In headless mode there's no CLI approval prompt — without this the agent
+// would receive an error tool_result and re-call ExitPlanMode in a loop.
+function stopCurrentRunForPlan() {
+  if (!currentController) return;
+  const sid = sessionId;
+  if (sid) { fetch('/api/chat/stop/' + sid, { method: 'POST' }).catch(() => {}); }
+  try { currentController.abort(); } catch {}
+  try { toast('计划已就绪 · 已暂停运行，等待你审批'); } catch {}
+}
+
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   hidePicker();
@@ -3813,9 +5058,23 @@ async function refreshSessions() {
     sessionList.querySelectorAll('button[data-del]').forEach(b => {
       b.addEventListener('click', async (e) => {
         e.stopPropagation();
+        const targetId = b.dataset.del;
         if (!confirm('删除此会话？')) return;
-        await fetch('/api/sessions/' + b.dataset.del, { method:'DELETE' });
-        if (b.dataset.del === sessionId) startNewSession();
+        let r = await fetch('/api/sessions/' + targetId, { method:'DELETE' });
+        if (r.status === 409 && targetId === sessionId) {
+          if (!confirm('当前会话正在生成回复。要先停止生成并删除吗？')) return;
+          try {
+            await fetch('/api/chat/stop/' + targetId, { method:'POST' });
+            if (currentController) currentController.abort();
+          } catch {}
+          r = await fetch('/api/sessions/' + targetId, { method:'DELETE' });
+        }
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}));
+          alert('删除失败: ' + (data.detail || r.status));
+          return;
+        }
+        if (targetId === sessionId) startNewSession();
         refreshSessions(); refreshStats(); refreshTags();
       });
     });
@@ -4925,6 +6184,520 @@ mcpAddBtn.addEventListener('click', async () => {
   $('mcpNewArgs').value = '';
   $('mcpNewEnv').value = '';
   refreshMcpServers();
+});
+
+// ===== Config Center (Hooks / Skills / MCP / Permissions) =====
+const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'UserPromptSubmit', 'SubagentStop', 'Notification'];
+
+const configCenter = $('configCenter');
+const configCenterBtn = $('configCenterBtn');
+const configScopeSel = $('configScope');
+const configPathHint = $('configPathHint');
+const configBodyHooks = $('configBodyHooks');
+const configBodySkills = $('configBodySkills');
+const configBodyMcp = $('configBodyMcp');
+const configBodyPerms = $('configBodyPerms');
+const configReloadBtn = $('configReloadBtn');
+const configSaveBtn = $('configSaveBtn');
+
+const configState = {
+  scope: 'user',
+  path: '',
+  exists: false,
+  settings: {},
+  hooksDraft: [],
+  permsDraft: { allow: '', deny: '' },
+  activeTab: 'hooks',
+  loading: false,
+  error: null,
+  dirty: false,
+};
+
+function cfgHookMatcherVisible(event) {
+  return event === 'PreToolUse' || event === 'PostToolUse';
+}
+
+function cfgUpdateDirtyIndicator() {
+  if (!configSaveBtn) return;
+  if (configState.dirty) {
+    configSaveBtn.textContent = '保存 *';
+    configSaveBtn.classList.add('dirty');
+  } else {
+    configSaveBtn.textContent = '保存';
+    configSaveBtn.classList.remove('dirty');
+  }
+}
+
+function cfgMarkDirty() {
+  if (configState.dirty) return;
+  configState.dirty = true;
+  cfgUpdateDirtyIndicator();
+}
+
+function cfgClearDirty() {
+  configState.dirty = false;
+  cfgUpdateDirtyIndicator();
+}
+
+function cfgConfirmDiscard() {
+  if (!configState.dirty) return true;
+  return window.confirm('有未保存的修改，确定关闭？修改将丢失。');
+}
+
+function cfgEscape(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function cfgErrorBanner(msg) {
+  return `<div class="cfg-err">${cfgEscape(msg)}</div>`;
+}
+
+function cfgCurrentCwd() {
+  return (cwdInput && cwdInput.value || '').trim();
+}
+
+function cfgRequireCwd() {
+  if (configState.scope === 'user') return '';
+  const cwd = cfgCurrentCwd();
+  if (!cwd) {
+    toast('项目级 / 本地范围需要先在主界面填写"工作目录"');
+    return null;
+  }
+  return cwd;
+}
+
+async function cfgFetchSettings() {
+  configState.loading = true;
+  configState.error = null;
+  try {
+    const cwd = cfgRequireCwd();
+    if (cwd === null) {
+      configState.error = '缺少工作目录';
+      configPathHint.textContent = '缺少工作目录';
+      return;
+    }
+    const params = new URLSearchParams({ scope: configState.scope });
+    if (cwd) params.set('cwd', cwd);
+    const res = await fetch(`/api/config/settings?${params.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    configState.path = data.path || '';
+    configState.exists = !!data.exists;
+    configState.settings = data.settings || {};
+    configPathHint.textContent = `${configState.path}${configState.exists ? '' : '  (not yet created)'}`;
+    cfgFlattenHooksFromSettings();
+    cfgFlattenPermsFromSettings();
+    cfgClearDirty();
+  } catch (e) {
+    configState.error = String(e && e.message || e);
+    configPathHint.textContent = '加载失败';
+  } finally {
+    configState.loading = false;
+  }
+}
+
+function cfgFlattenHooksFromSettings() {
+  const hooks = (configState.settings && configState.settings.hooks) || {};
+  const rows = [];
+  for (const event of Object.keys(hooks)) {
+    const arr = hooks[event];
+    if (!Array.isArray(arr)) continue;
+    for (const group of arr) {
+      const matcher = (group && group.matcher) || '';
+      const inner = (group && Array.isArray(group.hooks)) ? group.hooks : [];
+      for (const h of inner) {
+        rows.push({
+          event,
+          matcher,
+          type: h && h.type || 'command',
+          command: h && h.command || '',
+          enabled: h && h.enabled !== false,
+        });
+      }
+    }
+  }
+  configState.hooksDraft = rows;
+}
+
+function cfgUnflattenHooksToObject() {
+  const out = {};
+  for (const row of configState.hooksDraft) {
+    if (!row.event || !row.command) continue;
+    const event = row.event;
+    // Matcher only meaningful for tool-name events; drop it for everything else.
+    const matcher = cfgHookMatcherVisible(event) ? (row.matcher || '') : '';
+    if (!out[event]) out[event] = [];
+    let group = out[event].find(g => (g.matcher || '') === matcher);
+    if (!group) {
+      group = { matcher, hooks: [] };
+      out[event].push(group);
+    }
+    const item = { type: row.type || 'command', command: row.command };
+    if (row.enabled === false) item.enabled = false;
+    group.hooks.push(item);
+  }
+  return out;
+}
+
+function cfgFlattenPermsFromSettings() {
+  const perms = (configState.settings && configState.settings.permissions) || {};
+  const allow = Array.isArray(perms.allow) ? perms.allow : [];
+  const deny = Array.isArray(perms.deny) ? perms.deny : [];
+  configState.permsDraft = { allow: allow.join('\n'), deny: deny.join('\n') };
+}
+
+function cfgPermsToObject() {
+  const parse = (s) => s.split('\n').map(x => x.trim()).filter(Boolean);
+  return { allow: parse(configState.permsDraft.allow), deny: parse(configState.permsDraft.deny) };
+}
+
+// ----- Hooks tab -----
+function renderHooksTab() {
+  if (configState.loading) { configBodyHooks.innerHTML = '<div class="cfg-empty">加载中…</div>'; return; }
+  const err = configState.error ? cfgErrorBanner(`加载失败：${configState.error}`) : '';
+  const rows = configState.hooksDraft;
+  let html = err;
+  html += `<div class="cfg-info">PreToolUse / PostToolUse 可填 <code>matcher</code>（工具名正则），其他事件留空即可。命令将由 CLI 启动子进程时调用。</div>`;
+  html += `<div class="cfg-row" style="font-weight:600;font-size:11px;color:var(--text-subtle);border-bottom:1px solid var(--border);">
+    <div>事件 / Matcher</div><div>Shell 命令</div><div style="text-align:center;">启用</div><div></div>
+  </div>`;
+  if (!rows.length) {
+    html += '<div class="cfg-empty">尚未配置 hook。点击下方按钮添加。</div>';
+  } else {
+    rows.forEach((row, idx) => {
+      const showMatcher = cfgHookMatcherVisible(row.event);
+      html += `<div class="cfg-row">
+        <div>
+          <select class="cfg-hook-event" data-idx="${idx}">
+            ${HOOK_EVENTS.map(e => `<option value="${e}" ${e===row.event?'selected':''}>${e}</option>`).join('')}
+          </select>
+          <input type="text" class="cfg-hook-matcher${showMatcher ? '' : ' hidden'}" data-idx="${idx}" placeholder="matcher (regex)" value="${cfgEscape(row.matcher)}" style="margin-top:4px;">
+        </div>
+        <div><input type="text" class="cfg-hook-cmd" data-idx="${idx}" placeholder="bash command" value="${cfgEscape(row.command)}"></div>
+        <div style="text-align:center;"><input type="checkbox" class="cfg-hook-enabled" data-idx="${idx}" ${row.enabled?'checked':''}></div>
+        <div><button class="del-btn cfg-hook-del" data-idx="${idx}" title="删除">✕</button></div>
+      </div>`;
+    });
+  }
+  html += `<button class="cfg-add-btn" id="cfgHookAddBtn">+ 新增 hook</button>`;
+  configBodyHooks.innerHTML = html;
+
+  configBodyHooks.querySelectorAll('.cfg-hook-event').forEach(el => {
+    el.addEventListener('change', (e) => {
+      const i = +e.target.dataset.idx;
+      configState.hooksDraft[i].event = e.target.value;
+      // Toggle matcher visibility in place — don't full re-render (would lose focus).
+      const row = e.target.closest('.cfg-row');
+      const matcherInput = row && row.querySelector('.cfg-hook-matcher');
+      if (matcherInput) matcherInput.classList.toggle('hidden', !cfgHookMatcherVisible(e.target.value));
+      cfgMarkDirty();
+    });
+  });
+  configBodyHooks.querySelectorAll('.cfg-hook-matcher').forEach(el => {
+    el.addEventListener('input', (e) => { const i = +e.target.dataset.idx; configState.hooksDraft[i].matcher = e.target.value; cfgMarkDirty(); });
+  });
+  configBodyHooks.querySelectorAll('.cfg-hook-cmd').forEach(el => {
+    el.addEventListener('input', (e) => { const i = +e.target.dataset.idx; configState.hooksDraft[i].command = e.target.value; cfgMarkDirty(); });
+  });
+  configBodyHooks.querySelectorAll('.cfg-hook-enabled').forEach(el => {
+    el.addEventListener('change', (e) => { const i = +e.target.dataset.idx; configState.hooksDraft[i].enabled = e.target.checked; cfgMarkDirty(); });
+  });
+  configBodyHooks.querySelectorAll('.cfg-hook-del').forEach(el => {
+    el.addEventListener('click', (e) => { const i = +e.target.dataset.idx; configState.hooksDraft.splice(i, 1); cfgMarkDirty(); renderHooksTab(); });
+  });
+  const addBtn = $('cfgHookAddBtn');
+  if (addBtn) addBtn.addEventListener('click', () => {
+    configState.hooksDraft.push({ event: 'PreToolUse', matcher: '', type: 'command', command: '', enabled: true });
+    cfgMarkDirty();
+    renderHooksTab();
+  });
+}
+
+// ----- Skills tab -----
+async function renderSkillsTab() {
+  configBodySkills.innerHTML = '<div class="cfg-empty">加载中…</div>';
+  try {
+    const res = await fetch('/api/config/skills');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = data.skills || [];
+    let html = `<div class="cfg-info">扫描自 <code>${cfgEscape(data.skills_dir || '~/.claude/skills')}</code>。禁用 = 把 <code>SKILL.md</code> 重命名为 <code>SKILL.md.disabled</code>，Claude Code 启动时会跳过该 skill。</div>`;
+    if (!items.length) {
+      html += '<div class="cfg-empty">未发现 skill。</div>';
+    } else {
+      for (const it of items) {
+        const name = cfgEscape(it.name);
+        const desc = cfgEscape(it.description || (it.error ? `解析错误：${it.error}` : ''));
+        const mp = cfgEscape(it.marketplace || '@local');
+        html += `<div class="cfg-skill-card" data-skill-name="${name}">
+          <div class="meta">
+            <div class="name">${name}</div>
+            <div class="desc" data-original="${desc}">${desc || '<em>无描述</em>'}</div>
+            <div class="mp">来源: ${mp}</div>
+          </div>
+          <div class="actions">
+            <div class="cfg-toggle${it.enabled ? ' on' : ''}" data-skill="${name}" title="${it.enabled ? '已启用' : '已禁用'}"></div>
+            <button class="cfg-link-btn cfg-skill-view" data-skill="${name}">查看</button>
+          </div>
+        </div>`;
+      }
+    }
+    configBodySkills.innerHTML = html;
+
+    configBodySkills.querySelectorAll('.cfg-toggle').forEach(el => {
+      el.addEventListener('click', async () => {
+        const name = el.dataset.skill;
+        const enabled = !el.classList.contains('on');
+        try {
+          const r = await fetch(`/api/config/skills/${encodeURIComponent(name)}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled }),
+          });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          el.classList.toggle('on', enabled);
+          el.title = enabled ? '已启用' : '已禁用';
+          toast(enabled ? `已启用 ${name}` : `已禁用 ${name}`);
+        } catch (e) {
+          toast(`切换失败：${e.message || e}`);
+        }
+      });
+    });
+    configBodySkills.querySelectorAll('.cfg-skill-view').forEach(el => {
+      el.addEventListener('click', async () => {
+        const name = el.dataset.skill;
+        try {
+          const r = await fetch(`/api/config/skills/${encodeURIComponent(name)}/source`);
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const d = await r.json();
+          cfgShowSkillSource(name, d.content || '');
+        } catch (e) {
+          toast(`加载失败：${e.message || e}`);
+        }
+      });
+    });
+
+    cfgTranslateSkills(items);
+  } catch (e) {
+    configBodySkills.innerHTML = cfgErrorBanner(`加载失败：${e.message || e}`);
+  }
+}
+
+async function cfgTranslateSkills(items) {
+  const payload = items
+    .filter(it => it.description && !it.error)
+    .map(it => ({ name: it.name, description: it.description }));
+  if (!payload.length) return;
+  const needIndicator = configBodySkills.querySelector('.cfg-skill-card .desc');
+  if (needIndicator) {
+    const tip = document.createElement('div');
+    tip.id = 'cfgSkillTranslateTip';
+    tip.className = 'cfg-info';
+    tip.style.marginTop = '6px';
+    tip.textContent = '正在用 Claude 翻译描述为中文…';
+    configBodySkills.insertBefore(tip, configBodySkills.querySelector('.cfg-skill-card'));
+  }
+  try {
+    const r = await fetch('/api/config/skills/translate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: payload }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const map = data.translations || {};
+    configBodySkills.querySelectorAll('.cfg-skill-card').forEach(card => {
+      const n = card.dataset.skillName;
+      const zh = map[n];
+      if (!zh) return;
+      const descEl = card.querySelector('.desc');
+      if (!descEl) return;
+      descEl.textContent = zh;
+      descEl.title = descEl.dataset.original || '';
+    });
+    const tip = $('cfgSkillTranslateTip');
+    if (tip) tip.remove();
+  } catch (e) {
+    const tip = $('cfgSkillTranslateTip');
+    if (tip) {
+      tip.textContent = `翻译失败（保留英文）：${e.message || e}`;
+      setTimeout(() => { tip.remove(); }, 4000);
+    }
+  }
+}
+
+function cfgShowSkillSource(name, source) {
+  let modal = $('cfgSkillSourceModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'cfgSkillSourceModal';
+    modal.className = 'modal-backdrop hidden';
+    modal.innerHTML = `<div class="modal-box lg" style="max-width:760px;padding:16px;">
+      <div class="flex items-center justify-between mb-3">
+        <div class="text-lg font-semibold" id="cfgSkillSourceTitle">SKILL.md</div>
+        <button data-close class="text-xl">×</button>
+      </div>
+      <div id="cfgSkillSourceBody" style="max-height:70vh;overflow-y:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px;white-space:pre-wrap;background:var(--bg);padding:12px;border-radius:6px;border:1px solid var(--border);"></div>
+    </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('[data-close]').addEventListener('click', () => closeModal(modal));
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(modal); });
+  }
+  $('cfgSkillSourceTitle').textContent = `SKILL.md · ${name}`;
+  $('cfgSkillSourceBody').textContent = source;
+  openModal(modal);
+}
+
+// ----- MCP tab (delegate to existing #mcpModal) -----
+function renderMcpTab() {
+  configBodyMcp.innerHTML = `<div class="cfg-info">MCP Server 配置在独立面板维护（含状态灯 / 添加 / 删除）。点击下方按钮打开。</div>
+    <button class="cfg-add-btn" id="cfgOpenMcpBtn" style="border-style:solid;color:var(--accent);border-color:var(--accent);">🔌 打开 MCP Servers 面板</button>`;
+  const b = $('cfgOpenMcpBtn');
+  if (b) b.addEventListener('click', () => { closeModal(configCenter); openModal(mcpModal); refreshMcpServers(); });
+}
+
+// ----- Permissions tab -----
+function renderPermsTab() {
+  if (configState.loading) { configBodyPerms.innerHTML = '<div class="cfg-empty">加载中…</div>'; return; }
+  const err = configState.error ? cfgErrorBanner(`加载失败：${configState.error}`) : '';
+  configBodyPerms.innerHTML = `${err}
+    <div class="cfg-info">每行一条规则。示例：<code>Bash(rm:*)</code>、<code>Read(/etc/**)</code>、<code>WebFetch(domain:example.com)</code>。<a href="https://docs.claude.com/en/docs/claude-code/iam#tool-specific-permission-rules" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">规则语法参考</a></div>
+    <div class="cfg-perm-grid">
+      <div>
+        <label>✅ Allow（白名单）</label>
+        <textarea id="cfgPermAllow" placeholder="一行一条规则">${cfgEscape(configState.permsDraft.allow)}</textarea>
+      </div>
+      <div>
+        <label>⛔ Deny（黑名单）</label>
+        <textarea id="cfgPermDeny" placeholder="一行一条规则">${cfgEscape(configState.permsDraft.deny)}</textarea>
+      </div>
+    </div>`;
+  $('cfgPermAllow').addEventListener('input', (e) => { configState.permsDraft.allow = e.target.value; cfgMarkDirty(); });
+  $('cfgPermDeny').addEventListener('input', (e) => { configState.permsDraft.deny = e.target.value; cfgMarkDirty(); });
+}
+
+// ----- Tab switching -----
+function cfgSwitchTab(tab) {
+  configState.activeTab = tab;
+  document.querySelectorAll('.cfg-tab').forEach(b => b.classList.toggle('active', b.dataset.cfgTab === tab));
+  configBodyHooks.classList.toggle('hidden', tab !== 'hooks');
+  configBodySkills.classList.toggle('hidden', tab !== 'skills');
+  configBodyMcp.classList.toggle('hidden', tab !== 'mcp');
+  configBodyPerms.classList.toggle('hidden', tab !== 'perms');
+  // Save button only relevant for Hooks + Perms (Skills/MCP write inline)
+  const writesSettings = (tab === 'hooks' || tab === 'perms');
+  configSaveBtn.style.display = writesSettings ? '' : 'none';
+  if (tab === 'hooks') renderHooksTab();
+  if (tab === 'skills') renderSkillsTab();
+  if (tab === 'mcp') renderMcpTab();
+  if (tab === 'perms') renderPermsTab();
+}
+
+document.querySelectorAll('.cfg-tab').forEach(b => {
+  b.addEventListener('click', () => cfgSwitchTab(b.dataset.cfgTab));
+});
+
+// ----- Reload + save -----
+async function cfgReloadAll() {
+  await cfgFetchSettings();
+  cfgSwitchTab(configState.activeTab);
+}
+
+async function cfgSave() {
+  if (configState.activeTab !== 'hooks' && configState.activeTab !== 'perms') return;
+  if (configState.loading) { toast('正在加载，稍后再保存'); return; }
+  if (configState.error) { toast('加载失败状态下不能保存，否则会覆盖文件'); return; }
+  const cwd = cfgRequireCwd();
+  if (cwd === null) return;
+  // Always send both hooks and perms — covers the case where the user edited
+  // one tab, switched, edited the other, then clicked save.
+  const patch = {
+    hooks: cfgUnflattenHooksToObject(),
+    permissions: cfgPermsToObject(),
+  };
+  const body = { scope: configState.scope, settings: patch };
+  if (cwd) body.cwd = cwd;
+  configSaveBtn.disabled = true;
+  configSaveBtn.textContent = '保存中…';
+  try {
+    const r = await fetch('/api/config/settings', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const errTxt = await r.text();
+      throw new Error(errTxt || `HTTP ${r.status}`);
+    }
+    const data = await r.json();
+    configState.settings = data.settings || {};
+    configState.exists = true;
+    // Deliberately do NOT re-flatten from server response — that would discard
+    // in-progress rows the user is still typing (e.g. an empty command). The
+    // user can hit "重新加载" if they want to resync from disk.
+    cfgClearDirty();
+    toast(data.backup_path ? `已保存 · 已备份到 ${data.backup_path.split('/').pop()}` : '已保存');
+  } catch (e) {
+    toast(`保存失败：${e.message || e}`);
+  } finally {
+    configSaveBtn.disabled = false;
+    cfgUpdateDirtyIndicator();
+  }
+}
+
+configReloadBtn.addEventListener('click', () => {
+  if (!cfgConfirmDiscard()) return;
+  cfgReloadAll();
+});
+configSaveBtn.addEventListener('click', () => cfgSave());
+configScopeSel.addEventListener('change', () => {
+  const nextScope = configScopeSel.value;
+  if (nextScope === configState.scope) return;
+  if (!cfgConfirmDiscard()) {
+    configScopeSel.value = configState.scope;
+    return;
+  }
+  configState.scope = nextScope;
+  cfgReloadAll();
+});
+
+// Intercept close (× button, backdrop click, Escape) when there are unsaved
+// changes. Capture phase + stopImmediatePropagation prevents the global
+// closeModal handlers on lines 5257/5258/5500 from firing.
+const configCenterCloseBtn = configCenter.querySelector('[data-close]');
+if (configCenterCloseBtn) {
+  configCenterCloseBtn.addEventListener('click', (e) => {
+    if (configCenter.classList.contains('hidden')) return;
+    if (!cfgConfirmDiscard()) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    }
+  }, true);
+}
+configCenter.addEventListener('click', (e) => {
+  if (e.target !== configCenter) return;
+  if (!cfgConfirmDiscard()) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }
+}, true);
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (configCenter.classList.contains('hidden')) return;
+  if (!cfgConfirmDiscard()) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }
+}, true);
+
+window.addEventListener('beforeunload', (e) => {
+  if (configState.dirty && !configCenter.classList.contains('hidden')) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+configCenterBtn.addEventListener('click', async () => {
+  configState.scope = configScopeSel.value || 'user';
+  openModal(configCenter);
+  await cfgReloadAll();
 });
 
 // ===== init =====
