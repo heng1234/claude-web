@@ -70,6 +70,10 @@ class _WarmEntry:
 
 
 _warm_processes: Dict[str, _WarmEntry] = {}   # session_id → idle warm process
+# Maps session_id → the write_lock held by the currently executing turn, so
+# stop_chat can acquire it before sending a control_request interrupt and avoid
+# interleaving the interrupt bytes with a concurrent stdin write in generate().
+_running_write_locks: Dict[str, asyncio.Lock] = {}
 _event_locks: Dict[str, threading.Lock] = {}
 _event_lock_refs: Dict[str, int] = {}
 _event_lock_access: Dict[str, float] = {}
@@ -266,10 +270,15 @@ def _prune_old_uploads(retention_seconds: int = _UPLOAD_RETENTION_SECONDS) -> in
 async def _lifespan(app: FastAPI):
     # Prune stale uploads in a background thread so startup isn't blocked on disk IO.
     asyncio.get_event_loop().run_in_executor(None, _prune_old_uploads)
-    asyncio.create_task(_warm_reaper())
+    reaper_task = asyncio.create_task(_warm_reaper())
     try:
         yield
     finally:
+        reaper_task.cancel()
+        try:
+            await reaper_task
+        except asyncio.CancelledError:
+            pass
         await _shutdown_terminate_running_processes()
 
 
@@ -1278,6 +1287,7 @@ async def chat(req: ChatRequest):
                     pass
 
         _running_processes[session_id] = process
+        _running_write_locks[session_id] = write_lock
         stderr_buffer = bytearray()
         stderr_task: Optional[asyncio.Task] = None
         if process.stderr is not None:
@@ -1369,7 +1379,13 @@ async def chat(req: ChatRequest):
 
             if _running_processes.get(session_id) is process:
                 _running_processes.pop(session_id, None)
-                _stopped_sessions.discard(session_id)
+            # Always discard regardless of identity check: either this turn added
+            # the stop marker (and we must clear it), or a newer turn already
+            # cleared it (discard is a no-op).  Keeping it inside the identity
+            # guard would permanently poison the session on concurrent requests.
+            _stopped_sessions.discard(session_id)
+            if _running_write_locks.get(session_id) is write_lock:
+                _running_write_locks.pop(session_id, None)
             _terminated_processes.discard(process)
 
             upsert_session(session_id, derive_title(display_text), work_dir)
@@ -1394,7 +1410,14 @@ async def stop_chat(session_id: str):
     # SSE generator's finally block can decide whether to park it.  Fall back to
     # SIGTERM when stdin is already closed (e.g. a process spawned without --replay).
     if process.stdin and not process.stdin.is_closing():
-        await _interrupt_warm(process)
+        # Acquire the active write_lock so the interrupt bytes don't interleave
+        # with any ongoing stdin write in generate() (e.g. large image payload).
+        lock = _running_write_locks.get(session_id)
+        if lock is not None:
+            async with lock:
+                await _interrupt_warm(process)
+        else:
+            await _interrupt_warm(process)
         # Don't add to _terminated_processes here; the SSE finally block will
         # see session_id in _stopped_sessions and skip warm-parking instead.
     else:
