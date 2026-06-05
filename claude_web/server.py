@@ -49,6 +49,11 @@ KNOWN_TOOL_NAMES = {
 
 _running_processes: Dict[str, asyncio.subprocess.Process] = {}
 _stopped_sessions: Set[str] = set()
+# Processes we terminated on purpose (duplicate-request replacement or stop).
+# Keyed by the process object itself, not session_id, so that a session whose
+# old process is being replaced can't have its "intentionally killed" marker
+# clobbered by the incoming request that shares the same session_id.
+_terminated_processes: "Set[asyncio.subprocess.Process]" = set()
 _compacting_sessions: Set[str] = set()
 _event_locks: Dict[str, threading.Lock] = {}
 _event_lock_refs: Dict[str, int] = {}
@@ -1103,6 +1108,7 @@ async def chat(req: ChatRequest):
         # and producing stray events.
         existing = _running_processes.pop(session_id, None)
         if existing is not None:
+            _terminated_processes.add(existing)
             await _terminate_process(existing)
         _stopped_sessions.discard(session_id)
 
@@ -1199,7 +1205,9 @@ async def chat(req: ChatRequest):
                     await asyncio.wait_for(asyncio.shield(stderr_task), timeout=1.0)
                 except asyncio.TimeoutError:
                     pass
-            stopped_by_user = session_id in _stopped_sessions
+            stopped_by_user = (
+                session_id in _stopped_sessions or process in _terminated_processes
+            )
             if rc != 0 and not stopped_by_user:
                 err_text = bytes(stderr_buffer).decode("utf-8", errors="replace")
                 err_event = classify_claude_error(err_text or f"claude exited with code {rc}")
@@ -1213,8 +1221,10 @@ async def chat(req: ChatRequest):
                 except (asyncio.CancelledError, Exception):
                     pass
             await _terminate_process(process)
-            _running_processes.pop(session_id, None)
-            _stopped_sessions.discard(session_id)
+            if _running_processes.get(session_id) is process:
+                _running_processes.pop(session_id, None)
+                _stopped_sessions.discard(session_id)
+            _terminated_processes.discard(process)
 
             upsert_session(session_id, derive_title(display_text), work_dir)
             if remote_became_ready:
@@ -1234,6 +1244,7 @@ async def stop_chat(session_id: str):
     if process is None:
         raise HTTPException(status_code=404, detail="no running process for this session")
     _stopped_sessions.add(session_id)
+    _terminated_processes.add(process)
     await _terminate_process(process)
     stop_event = {"type": "error", "message": "用户中止", "ts": time.time()}
     append_event(session_id, stop_event)
