@@ -6,6 +6,7 @@ import re
 import shutil
 import socket
 import sqlite3
+import subprocess
 import threading
 import time
 import urllib.error
@@ -376,6 +377,15 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_name ON tool_calls(tool_name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_summary_cache ON sessions(summary_cache)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cwd_history (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                created_at REAL NOT NULL
+            )
+            """
+        )
 
 
 init_db()
@@ -3149,6 +3159,984 @@ async def fetch_url(req: FetchUrlRequest):
         "truncated": len(result["content"]) > limit,
         "length": len(result["content"]),
     }
+
+
+# ===== Enhanced Git Status Detail =====
+
+
+def _parse_git_status_porcelain(lines: List[str]) -> List[dict]:
+    """Parse git status --porcelain -z output into structured file list.
+
+    In -z format, entries are separated by null bytes.
+    Each entry: STATUS<SPACE>PATH1[<NULL>PATH2]
+    STATUS is typically 2 chars (e.g. ' M', '??', 'MM') or 4 for renames (e.g. 'R100').
+    PATH2 is only present for renames/copies.
+    """
+    result: List[dict] = []
+    for line in lines:
+        if not line:
+            continue
+        # Find the null byte first (in -z format it separates entries)
+        null_idx = line.find('\0')
+        if null_idx >= 0:
+            entry = line[:null_idx]
+            remaining = line[null_idx:]
+        else:
+            entry = line
+            remaining = ''
+
+        # Status is 4 chars for renames/copies (e.g. 'R100', 'C099'),
+        # otherwise 2 chars (e.g. ' M', '??', 'MM').
+        # After status there's always a space, then the path.
+        if len(entry) >= 5 and entry[4] == ' ':
+            # 4-char status (rename/copy with score)
+            raw_status = entry[:4]
+            rest = entry[5:]
+            status = raw_status[0] + ' '
+        elif len(entry) >= 3 and entry[2] == ' ':
+            # 2-char status
+            raw_status = entry[:2]
+            rest = entry[3:]
+            status = raw_status
+        else:
+            continue
+
+        # For renames/copies, extract the second path from remaining
+        renames = None
+        if remaining.startswith('\0'):
+            rename_path = remaining[1:].strip()
+            if rename_path:
+                renames = rename_path
+
+        result.append({
+            'status': status,
+            'secondary': None,
+            'filename': rest,
+            'renames': renames,
+        })
+    return result
+
+
+def _file_status_category(status: str) -> str:
+    """Map git status code to category group."""
+    first = status[0] if len(status) >= 1 else '?'
+    second = status[1] if len(status) >= 2 else ' '
+    if first == '?':
+        return 'untracked'  # 未跟踪
+    if first == 'D':
+        return 'deleted'  # 已删除
+    if first == 'R':
+        return 'renamed'  # 已重命名
+    if first == 'C':
+        return 'copied'  # 已复制
+    if first == 'A':
+        return 'added'  # 已添加(新文件)
+    if first == 'M' or first == 'T' or first == 'U':
+        return 'modified'  # 已修改
+    if first == ' ':
+        if second == 'D':
+            return 'deleted_staged'
+        if second == 'M':
+            return 'staged_modified'
+        if second == 'A':
+            return 'staged_added'
+        if second == 'R':
+            return 'staged_renamed'
+        if second == 'C':
+            return 'staged_copied'
+        if second == '?':
+            return 'staged_untracked'
+        return 'staged_modified'
+    return 'other'
+
+
+_STATUS_GROUPS = {
+    'staged_modified': {'label': '已暂存的修改', 'icon': '📝', 'color': '#3b82f6', 'key': 'staged_modified'},
+    'staged_added': {'label': '已暂存的新文件', 'icon': '📄', 'color': '#3b82f6', 'key': 'staged_added'},
+    'staged_renamed': {'label': '已暂存的 renaming', 'icon': '🏷️', 'color': '#3b82f6', 'key': 'staged_renamed'},
+    'staged_copied': {'label': '已暂存的复制', 'icon': '📋', 'color': '#3b82f6', 'key': 'staged_copied'},
+    'staged_untracked': {'label': '已暂存的未跟踪文件', 'icon': '📌', 'color': '#6366f1', 'key': 'staged_untracked'},
+    'modified': {'label': '已修改', 'icon': '✏️', 'color': '#f59e0b', 'key': 'modified'},
+    'deleted': {'label': '已删除', 'icon': '🗑️', 'color': '#ef4444', 'key': 'deleted'},
+    'deleted_staged': {'label': '已暂存的删除', 'icon': '🗑️', 'color': '#ef4444', 'key': 'deleted_staged'},
+    'added': {'label': '新文件', 'icon': '✨', 'color': '#10b981', 'key': 'added'},
+    'renamed': {'label': '已重命名', 'icon': '🏷️', 'color': '#8b5cf6', 'key': 'renamed'},
+    'copied': {'label': '已复制', 'icon': '📋', 'color': '#06b6d4', 'key': 'copied'},
+    'untracked': {'label': '未跟踪', 'icon': '❓', 'color': '#6b7280', 'key': 'untracked'},
+    'other': {'label': '其他', 'icon': '⚠️', 'color': '#6b7280', 'key': 'other'},
+}
+
+
+@app.get("/api/git/status-detail")
+async def git_status_detail(cwd: str = Query(default="")):
+    """Get detailed git status grouped by change type, with staged files info."""
+    git_cwd = os.path.expanduser(cwd) if cwd else "."
+    if not os.path.isdir(git_cwd):
+        return {"branch": "", "dirty": 0, "available": False}
+
+    # Get branch
+    branch_proc = await asyncio.create_subprocess_exec(
+        "git", "-C", git_cwd, "rev-parse", "--abbrev-ref", "HEAD",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        branch_out, _ = await asyncio.wait_for(branch_proc.communicate(), timeout=5)
+    except asyncio.TimeoutError:
+        branch_proc.kill()
+        return {"branch": "", "dirty": 0, "available": False}
+    branch = branch_out.decode("utf-8", errors="replace").strip() if branch_proc.returncode == 0 else ""
+
+    # Get staged files
+    staged_proc = await asyncio.create_subprocess_exec(
+        "git", "-C", git_cwd, "diff", "--cached", "--name-only",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        staged_out, _ = await asyncio.wait_for(staged_proc.communicate(), timeout=5)
+    except asyncio.TimeoutError:
+        staged_proc.kill()
+        return {"branch": branch, "dirty": 0, "available": True, "files": [], "staged": []}
+    staged_files = []
+    if staged_proc.returncode == 0 and staged_out.strip():
+        staged_files = [f.strip() for f in staged_out.decode("utf-8", errors="replace").splitlines() if f.strip()]
+
+    # Get detailed porcelain status
+    porcelain_proc = await asyncio.create_subprocess_exec(
+        "git", "-C", git_cwd, "status", "--porcelain", "-z",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        porcelain_out, _ = await asyncio.wait_for(porcelain_proc.communicate(), timeout=5)
+    except asyncio.TimeoutError:
+        porcelain_proc.kill()
+        return {"branch": branch, "dirty": 0, "available": True, "files": [], "staged": staged_files}
+    if porcelain_proc.returncode != 0:
+        return {"branch": branch, "dirty": 0, "available": True, "files": [], "staged": staged_files}
+
+    raw = porcelain_out.decode("utf-8", errors="replace")
+    # Split by null byte
+    entries = raw.split('\0') if '\0' in raw else raw.splitlines()
+    lines = [e for e in entries if e.strip()]
+    files = _parse_git_status_porcelain(lines)
+
+    # Group by category
+    groups: Dict[str, List[dict]] = {}
+    for f in files:
+        cat = _file_status_category(f['status'])
+        groups.setdefault(cat, []).append(f)
+
+    # Build ordered result
+    ordered_files = []
+    for cat_key, info in _STATUS_GROUPS.items():
+        group_files = groups.get(cat_key, [])
+        if not group_files:
+            continue
+        ordered_files.append({
+            'category': info['label'],
+            'icon': info['icon'],
+            'color': info['color'],
+            'key': cat_key,
+            'files': group_files,
+        })
+
+    # Count dirty
+    dirty = len(files)
+
+    # Get remote info
+    remote_proc = await asyncio.create_subprocess_exec(
+        "git", "-C", git_cwd, "remote", "get-url", "origin",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        remote_out, _ = await asyncio.wait_for(remote_proc.communicate(), timeout=3)
+    except asyncio.TimeoutError:
+        remote_out = b""
+    remote_url = remote_out.decode("utf-8", errors="replace").strip() if remote_proc.returncode == 0 else ""
+
+    return {
+        "branch": branch,
+        "dirty": dirty,
+        "available": True,
+        "files": ordered_files,
+        "staged": staged_files,
+        "remote_url": remote_url,
+    }
+
+
+# ===== File Explorer & Git Operations =====
+
+
+class DirPickerRequest(BaseModel):
+    cwd: str
+
+
+class FileContentRequest(BaseModel):
+    path: str
+    max_lines: Optional[int] = 10000
+
+
+class FileSaveRequest(BaseModel):
+    path: str
+    content: str
+
+
+class GitRunRequest(BaseModel):
+    cwd: str
+    command: str
+    args: Optional[List[str]] = None
+
+
+class GitDiffRequest(BaseModel):
+    path: str
+    cwd: str
+    cached: Optional[bool] = False
+
+
+class GitLogRequest(BaseModel):
+    cwd: str
+    limit: Optional[int] = 50
+
+
+# Whitelisted git command patterns: (main_cmd, allowed_subcmds)
+_GIT_CMD_WHITELIST = {
+    "init": [],
+    "clone": [],
+    "status": [],
+    "add": [],
+    "commit": [],
+    "push": [],
+    "pull": [],
+    "fetch": [],
+    "branch": [],
+    "checkout": [],
+    "switch": [],
+    "merge": [],
+    "rebase": [],
+    "log": [],
+    "diff": [],
+    "stash": [],
+    "reset": [],
+    "revert": [],
+    "tag": [],
+    "remote": [],
+    "rm": [],
+    "mv": [],
+}
+
+
+def _sanitize_path(p: str) -> Path:
+    resolved = Path(os.path.expanduser(p)).resolve()
+    return resolved
+
+
+def _validate_path_in_dir(target: Path, parent: Path) -> bool:
+    try:
+        target.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _safe_git_run(cwd: str, *args: str) -> Optional[dict]:
+    """Run a git command safely. Returns dict with stdout/stderr/rc or None on error."""
+    try:
+        proc = asyncio.get_event_loop().run_in_executor(
+            None,
+            _git_run_sync,
+            os.path.expanduser(cwd),
+            args,
+        )
+        return asyncio.get_event_loop().run_until_complete(proc)
+    except Exception:
+        return None
+
+
+def _git_run_sync(cwd: str, args: tuple) -> dict:
+    try:
+        proc = subprocess.run(
+            ["git", "-C", cwd] + list(args),
+            capture_output=True,
+            timeout=15,
+        )
+        return {
+            "stdout": proc.stdout.decode("utf-8", errors="replace"),
+            "stderr": proc.stderr.decode("utf-8", errors="replace"),
+            "returncode": proc.returncode,
+        }
+    except subprocess.TimeoutExpired:
+        return {"stdout": "", "stderr": "timeout", "returncode": -1}
+    except FileNotFoundError:
+        return {"stdout": "", "stderr": "git not found", "returncode": -1}
+    except Exception as e:
+        return {"stdout": "", "stderr": str(e), "returncode": -1}
+
+
+@app.post("/api/dir-picker")
+async def dir_picker(req: DirPickerRequest):
+    """Return subdirectories of the given cwd for the folder picker."""
+    base = _sanitize_path(req.cwd)
+    if not base.is_dir():
+        return {"dirs": []}
+    dirs = []
+    try:
+        for entry in sorted(base.iterdir()):
+            if entry.is_dir() and entry.name not in IGNORED_DIRS and not entry.name.startswith("."):
+                dirs.append({"name": entry.name, "path": str(entry)})
+    except OSError:
+        pass
+    return {"cwd": str(base), "dirs": dirs}
+
+
+@app.post("/api/tree")
+async def get_tree(req: FileContentRequest):
+    """Get immediate children of a directory (lazy-loading tree)."""
+    base = _sanitize_path(req.path)
+    if not base.is_dir():
+        return {"path": str(base), "children": []}
+    children = []
+    try:
+        for entry in sorted(base.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower())):
+            if entry.name.startswith(".") and entry.name not in (".github", ".vscode", ".idea"):
+                continue
+            if entry.name in IGNORED_DIRS:
+                continue
+            info: dict = {"name": entry.name, "type": "dir" if entry.is_dir() else "file"}
+            if entry.is_file():
+                try:
+                    stat = entry.stat()
+                    info["size"] = stat.st_size
+                    info["modified"] = stat.st_mtime
+                except OSError:
+                    pass
+            children.append(info)
+    except OSError:
+        pass
+    return {"path": str(base), "children": children}
+
+
+@app.get("/api/file-content")
+async def get_file_content(path: str = Query(...), max_lines: int = Query(default=10000)):
+    """Read a file's content with line numbers."""
+    target = _sanitize_path(path)
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="file not found")
+    try:
+        raw = target.read_bytes()
+    except OSError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="file too large (max 5MB)")
+    text = _decode_text_upload(raw) if b"\x00" in raw[:8192] else raw.decode("utf-8", errors="replace")
+    all_lines = text.split("\n")
+    total = len(all_lines)
+    display_lines = all_lines[:max_lines]
+    if len(all_lines) > max_lines:
+        display_lines.append(f"... ({total - max_lines} more lines truncated ...)")
+    lang = _detect_language(str(target))
+    return {
+        "path": str(target),
+        "content": text,
+        "lines": [{"num": i + 1, "text": l} for i, l in enumerate(display_lines)],
+        "lines_total": total,
+        "language": lang,
+        "size": len(raw),
+    }
+
+
+def _detect_language(filename: str) -> str:
+    ext = Path(filename).suffix.lower().lstrip(".")
+    EXT_LANG_MAP = {
+        "py": "python", "js": "javascript", "ts": "typescript", "tsx": "typescript", "jsx": "javascript",
+        "go": "go", "rs": "rust", "rb": "ruby", "java": "java", "c": "c", "cpp": "cpp", "h": "c",
+        "cs": "csharp", "php": "php", "swift": "swift", "kt": "kotlin", "scala": "scala",
+        "sh": "bash", "bash": "bash", "zsh": "bash", "ps1": "powershell", "psm1": "powershell",
+        "html": "html", "css": "css", "scss": "scss", "less": "less",
+        "json": "json", "yaml": "yaml", "yml": "yaml", "toml": "toml", "xml": "xml",
+        "md": "markdown", "sql": "sql", "dockerfile": "dockerfile",
+        "lua": "lua", "r": "r", "m": "matlab", "pl": "perl",
+        "proto": "protobuf", "graphql": "graphql",
+    }
+    return EXT_LANG_MAP.get(ext, "")
+
+
+@app.post("/api/file-save")
+async def save_file(req: FileSaveRequest):
+    """Save content to a file."""
+    target = _sanitize_path(req.path)
+    if not target.parent.is_dir():
+        raise HTTPException(status_code=400, detail="parent directory not found")
+    if len(req.content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="content too large")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(req.content, encoding="utf-8")
+    except OSError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "path": str(target)}
+
+
+@app.post("/api/git/discard")
+async def git_discard(req: GitRunRequest):
+    """Discard changes for selected files (checkout for tracked, clean for untracked)."""
+    cwd = os.path.expanduser(req.cwd)
+    if not os.path.isdir(cwd):
+        raise HTTPException(status_code=400, detail="cwd not found")
+    filename = req.command.strip()  # the filename to discard
+    # Sanitize path
+    try:
+        target = Path(filename).resolve()
+        target.relative_to(Path(cwd).resolve())
+    except (ValueError, OSError):
+        raise HTTPException(status_code=400, detail="invalid filename")
+    # First try git checkout for tracked files
+    proc = await asyncio.create_subprocess_exec(
+        "git", "-C", cwd, "checkout", "--", filename,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    _, _ = await proc.communicate()
+    if proc.returncode == 0:
+        return {"ok": True, "stdout": "", "stderr": ""}
+    # If checkout failed (untracked), try git clean
+    proc = await asyncio.create_subprocess_exec(
+        "git", "-C", cwd, "clean", "-f", "--", filename,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    _, _ = await proc.communicate()
+    if proc.returncode == 0:
+        return {"ok": True, "stdout": "", "stderr": ""}
+    # Last resort: rm -f via subprocess
+    try:
+        rm_proc = await asyncio.create_subprocess_exec(
+            "rm", "-f", filename,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        _, _ = await rm_proc.communicate()
+        if rm_proc.returncode == 0:
+            return {"ok": True, "stdout": "", "stderr": ""}
+    except Exception:
+        pass
+    raise HTTPException(status_code=400, detail="discard failed: file may not exist or is not cleanable")
+
+
+@app.post("/api/git/run")
+async def git_run(req: GitRunRequest):
+    """Execute a git command from the whitelist."""
+    cwd = os.path.expanduser(req.cwd)
+    if not os.path.isdir(cwd):
+        raise HTTPException(status_code=400, detail="cwd not found")
+    parts = req.command.strip().split()
+    if not parts:
+        raise HTTPException(status_code=400, detail="empty command")
+    main_cmd = parts[0].lower()
+    if main_cmd != "git":
+        raise HTTPException(status_code=403, detail=f"command not allowed: {main_cmd}")
+    sub_parts = parts[1:]
+    if not sub_parts:
+        raise HTTPException(status_code=400, detail="missing subcommand")
+    subcmd = sub_parts[0].lower()
+    if subcmd not in _GIT_CMD_WHITELIST:
+        raise HTTPException(status_code=403, detail=f"git subcommand not allowed: {subcmd}")
+    # Block dangerous operations on remote
+    if subcmd in ("push",) and "--force" in " ".join(parts[2:]):
+        raise HTTPException(status_code=403, detail="force push is not allowed via UI")
+    git_args = parts[1:]
+    result = await asyncio.to_thread(_git_run_sync, cwd, tuple(git_args))
+    return result
+
+
+@app.get("/api/git/diff")
+async def git_diff(path: str = Query(...), cwd: str = Query(default=""), cached: bool = Query(default=False)):
+    """Get git diff for a specific file."""
+    git_cwd = os.path.expanduser(cwd) if cwd else "."
+    if not os.path.isdir(git_cwd):
+        return {"file": "", "diff_lines": []}
+    try:
+        target = _sanitize_path(path)
+        rel_path = str(target.relative_to(_sanitize_path(git_cwd))) if _sanitize_path(git_cwd) in target.parents or _sanitize_path(git_cwd) == target else target.name
+    except (ValueError, OSError):
+        rel_path = Path(path).name
+    if cached:
+        proc = await asyncio.create_subprocess_exec(
+            "git", "-C", git_cwd, "diff", "--cached", "-U0", "--", rel_path,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+    else:
+        proc = await asyncio.create_subprocess_exec(
+            "git", "-C", git_cwd, "diff", "-U0", "--", rel_path,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return {"file": rel_path, "diff_lines": []}
+    if proc.returncode != 0:
+        return {"file": rel_path, "diff_lines": []}
+    output = stdout.decode("utf-8", errors="replace").strip()
+    diff_lines = _parse_git_diff_lines(output)
+    return {"file": rel_path, "diff_lines": diff_lines}
+
+
+def _parse_git_diff_lines(output: str) -> List[dict]:
+    """Parse unified diff output into line-by-line entries with line numbers."""
+    if not output:
+        return []
+    lines = output.split("\n")
+    result: List[dict] = []
+    old_line = 0
+    new_line = 0
+    for line in lines:
+        if line.startswith("diff ") or line.startswith("index ") or line.startswith("--- ") or line.startswith("+++ "):
+            continue
+        if line.startswith("@@ "):
+            # Parse @@ -old_start,old_count +new_start,new_count @@
+            import re
+            m = re.search(r"-(\d+)(?:,\d+)?\+(\d+)(?:,\d+)?", line)
+            if m:
+                old_line = int(m.group(1))
+                new_line = int(m.group(2))
+            continue
+        if not line:
+            continue
+        if line[0] == "+":
+            result.append({"line_old": None, "line_new": new_line, "content": "+ " + line[1:], "type": "add"})
+            new_line += 1
+        elif line[0] == "-":
+            result.append({"line_old": old_line, "line_new": None, "content": "- " + line[1:], "type": "remove"})
+            old_line += 1
+        elif line[0] == " ":
+            result.append({"line_old": old_line, "line_new": new_line, "content": "  " + line[1:], "type": "context"})
+            old_line += 1
+            new_line += 1
+        else:
+            # Binary or other
+            result.append({"line_old": None, "line_new": None, "content": line, "type": "other"})
+    return result
+
+
+@app.get("/api/git/log")
+async def git_log(cwd: str = Query(default=""), limit: int = Query(default=50)):
+    """Get recent git log with graph."""
+    git_cwd = os.path.expanduser(cwd) if cwd else "."
+    if not os.path.isdir(git_cwd):
+        return {"commits": [], "graph": ""}
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git", "-C", git_cwd, "log", "--graph", f"--max-count={limit}",
+            "--oneline", "--format=%h %s %cd", "--date=relative",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return {"commits": [], "graph": ""}
+        if proc.returncode != 0:
+            return {"commits": [], "graph": ""}
+    except Exception:
+        return {"commits": [], "graph": ""}
+    raw = stdout.decode("utf-8", errors="replace")
+    commits = []
+    graph_lines = []
+    for line in raw.splitlines():
+        # Parse: graph_hash hash message relative_date
+        # Example: * a1b2c3d feat: add new feature (2 hours ago)
+        stripped = line.strip()
+        if not stripped:
+            continue
+        graph_lines.append(line)
+        # Try to extract hash and message
+        # Remove leading graph chars
+        cleaned = re.sub(r'^[\s\|\-\+\*\/\n]+', '', stripped)
+        parts = cleaned.split(" ", 1)
+        if len(parts) >= 2:
+            hash_val = parts[0]
+            message = parts[1]
+            # Try to extract time from end
+            time_match = re.search(r'\(([^)]+)\)$', message)
+            time_str = ""
+            msg_clean = message
+            if time_match:
+                time_str = time_match.group(1)
+                msg_clean = message[:time_match.start()].rstrip()
+            commits.append({"hash": hash_val, "message": msg_clean, "time": time_str, "graph": stripped})
+        elif len(parts) == 1:
+            graph = parts[0]
+            if commits:
+                commits[-1]["graph"] = (commits[-1].get("graph", "") + "\n" + graph).strip()
+    return {"commits": commits, "graph": "\n".join(graph_lines[:10])}
+
+
+# ===== CWD History =====
+
+@app.get("/api/cwd-history")
+async def list_cwd_history():
+    with db_connect() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cwd_history (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                created_at REAL NOT NULL
+            )
+            """
+        )
+        rows = conn.execute(
+            "SELECT path, created_at FROM cwd_history ORDER BY created_at DESC LIMIT 50"
+        ).fetchall()
+    return [{"path": r["path"], "created_at": r["created_at"]} for r in rows]
+
+
+@app.post("/api/cwd-history")
+async def upsert_cwd_history(path: str = Query(...)):
+    path = path.strip()
+    if not path:
+        return {"ok": True}
+    now = time.time()
+    with db_connect() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cwd_history (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                created_at REAL NOT NULL
+            )
+            """
+        )
+        existing = conn.execute(
+            "SELECT id FROM cwd_history WHERE path = ?", (path,)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE cwd_history SET created_at = ? WHERE path = ?", (now, path)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO cwd_history (id, path, created_at) VALUES (?, ?, ?)",
+                (uuid.uuid4().hex, path, now),
+            )
+    return {"ok": True}
+
+
+@app.delete("/api/cwd-history/{path:path}")
+async def delete_cwd_history(path: str):
+    decoded = urllib.request.unquote(path)
+    with db_connect() as conn:
+        conn.execute("DELETE FROM cwd_history WHERE path = ?", (decoded,))
+    return {"ok": True}
+
+
+@app.post("/api/cwd-history/clear")
+async def clear_cwd_history():
+    with db_connect() as conn:
+        conn.execute("DELETE FROM cwd_history")
+    return {"ok": True}
+
+
+# ===== Config (settings / hooks / permissions / skills) =====
+
+_CLAUDE_USER_DIR = Path.home() / ".claude"
+_CLAUDE_SETTINGS_FILE = _CLAUDE_USER_DIR / "settings.json"
+_SKILLS_DIR = _CLAUDE_USER_DIR / "skills"
+
+
+def _read_json_file(path: Path, default: Optional[dict] = None) -> dict:
+    if not path.exists():
+        return default or {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default or {}
+
+
+def _write_json_file(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _resolve_config_scope(scope: str, cwd: Optional[str]) -> Path:
+    normalized = (scope or "local").strip().lower()
+    if normalized == "user":
+        return _CLAUDE_SETTINGS_FILE
+    # "local" or "project" → .claude/settings.json in project
+    project_dir = Path(os.path.expanduser(cwd)).resolve() if cwd else Path.cwd()
+    return project_dir / ".claude" / "settings.json"
+
+
+def _unflatten_hooks(settings: dict) -> List[dict]:
+    hooks_config = settings.get("hooks", {}) or {}
+    rows: List[dict] = []
+    for event_name, event_groups in (hooks_config or {}).items():
+        if not isinstance(event_groups, list):
+            continue
+        for group in event_groups:
+            if not isinstance(group, dict):
+                continue
+            matcher = group.get("matcher", "")
+            inner_hooks = group.get("hooks", []) or []
+            for h in inner_hooks:
+                if not isinstance(h, dict):
+                    continue
+                rows.append({
+                    "event": event_name,
+                    "matcher": matcher,
+                    "type": h.get("type", "command"),
+                    "command": h.get("command", ""),
+                    "enabled": h.get("enabled", True),
+                })
+    return rows
+
+
+def _flatten_hooks(rows: List[dict]) -> dict:
+    grouped: Dict[str, List[dict]] = {}
+    for row in rows:
+        event = row.get("event", "PreToolUse")
+        hook = {
+            "matcher": row.get("matcher", ""),
+            "type": row.get("type", "command"),
+            "command": row.get("command", ""),
+            "enabled": row.get("enabled", True),
+        }
+        grouped.setdefault(event, []).append(hook)
+    return {"hooks": grouped}
+
+
+def _flatten_permissions(settings: dict) -> dict:
+    return settings.get("permissions", {}) or {}
+
+
+# Skill definitions for SKILL.md frontmatter parsing
+_SKILL_FM_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
+
+
+def _parse_skill_frontmatter(md: str) -> tuple[Optional[dict], str]:
+    m = _SKILL_FM_RE.match(md)
+    fm = {}
+    body = md
+    if m:
+        try:
+            fm = json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
+        body = md[m.end():].lstrip("\n")
+    return fm, body
+
+
+def _scan_skills_dir(skills_dir: Path) -> List[dict]:
+    if not skills_dir.is_dir():
+        return []
+    items: List[dict] = []
+    for entry in sorted(skills_dir.iterdir()):
+        if not entry.is_dir():
+            continue
+        skill_md = entry / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        name = entry.name
+        try:
+            raw = skill_md.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        fm, body = _parse_skill_frontmatter(raw)
+        # Check disabled via SKILL.md.disabled pattern: if parent dir has no SKILL.md
+        # but was scanned — disabled skills are .disabled dirs or have SKILL.md.disabled
+        desc = (fm.get("description", "") or body.split("\n")[0][:200]).strip()
+        enabled = True
+        items.append({
+            "name": name,
+            "description": desc,
+            "enabled": enabled,
+            "marketplace": "@local",
+            "error": None,
+        })
+    return items
+
+
+class ConfigSettingsRequest(BaseModel):
+    scope: str = "local"
+    settings: dict
+
+
+class SkillToggleRequest(BaseModel):
+    enabled: bool
+
+
+class SkillTranslateItem(BaseModel):
+    name: str
+    description: str
+
+
+class SkillTranslateRequest(BaseModel):
+    items: List[SkillTranslateItem]
+
+
+@app.get("/api/config/settings")
+async def get_config_settings(scope: str = Query(default="local"), cwd: Optional[str] = Query(default=None)):
+    target = _resolve_config_scope(scope, cwd)
+    settings = _read_json_file(target, {})
+    return {
+        "path": str(target),
+        "exists": target.exists(),
+        "settings": settings,
+        "scope": scope,
+    }
+
+
+@app.post("/api/config/settings")
+async def save_config_settings(req: ConfigSettingsRequest):
+    target = _resolve_config_scope(req.scope, None)
+    existing = _read_json_file(target, {})
+    # Merge: update hooks and permissions only
+    if "hooks" in req.settings:
+        existing["hooks"] = req.settings["hooks"]
+    if "permissions" in req.settings:
+        existing["permissions"] = req.settings["permissions"]
+    _write_json_file(target, existing)
+    return {
+        "settings": existing,
+        "path": str(target),
+        "exists": True,
+    }
+
+
+@app.get("/api/config/skills")
+async def list_config_skills(cwd: Optional[str] = Query(default=None)):
+    skills_dir = _SKILLS_DIR
+    # Also check project-level .claude/skills
+    project_skills = None
+    if cwd:
+        project_dir = Path(os.path.expanduser(cwd)).resolve()
+        project_skills = project_dir / ".claude" / "skills"
+
+    items = _scan_skills_dir(skills_dir)
+    skills_dir_str = str(_SKILLS_DIR)
+
+    if project_skills and project_skills.is_dir():
+        project_items = _scan_skills_dir(project_skills)
+        # Prefix project skills with project name
+        proj_name = project_dir.name
+        for it in project_items:
+            it["name"] = f"{proj_name}/{it['name']}"
+            it["marketplace"] = f"@project({proj_name})"
+        items.extend(project_items)
+        skills_dir_str = f"{skills_dir_str} + {project_skills}"
+
+    return {
+        "skills": items,
+        "skills_dir": skills_dir_str,
+    }
+
+
+def _resolve_skill_path(skill_name: str) -> Path | None:
+    """Find the directory containing a skill's SKILL.md by name.
+    Returns the skill directory path, or None if not found."""
+    # Strip project prefix if present (e.g. "myproject/my-skill" → "my-skill")
+    parts = skill_name.split("/", 1)
+    short = parts[-1]
+
+    # Check user skills dir first
+    user_skill = _SKILLS_DIR / short
+    if user_skill.is_dir():
+        return user_skill
+
+    # Check project-level .claude/skills dirs (scan from cwd or common projects)
+    for candidate in _SKILLS_DIR.parent.glob("*"):
+        if not candidate.is_dir():
+            continue
+        proj_skill = candidate / ".claude" / "skills" / short
+        if proj_skill.is_dir():
+            return proj_skill
+
+    # Fallback: return user dir path anyway (for error messages)
+    return _SKILLS_DIR / short
+
+
+def _toggle_skill_file(skill_dir: Path, enabled: bool) -> bool:
+    """Rename SKILL.md ↔ SKILL.md.disabled. Returns True if a file was changed."""
+    skill_file = skill_dir / "SKILL.md"
+    disabled_file = skill_dir / "SKILL.md.disabled"
+    if enabled and disabled_file.exists():
+        disabled_file.rename(skill_file)
+        return True
+    elif not enabled and skill_file.exists():
+        skill_file.rename(disabled_file)
+        return True
+    return False
+
+
+@app.patch("/api/config/skills/{skill_name}")
+async def toggle_skill(skill_name: str, req: SkillToggleRequest):
+    """Toggle a skill by renaming SKILL.md ↔ SKILL.md.disabled in its directory."""
+    skill_dir = _resolve_skill_path(skill_name)
+    if skill_dir is None or not skill_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"skill '{skill_name}' not found")
+    _toggle_skill_file(skill_dir, req.enabled)
+    return {"ok": True}
+
+
+@app.get("/api/config/skills/{skill_name}/source")
+async def get_skill_source(skill_name: str):
+    skill_dir = _resolve_skill_path(skill_name)
+    if skill_dir is None or not skill_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"skill file not found for {skill_name}")
+    skill_file = skill_dir / "SKILL.md"
+    disabled_file = skill_dir / "SKILL.md.disabled"
+
+    target = skill_file if skill_file.exists() else disabled_file
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"no SKILL.md found for skill '{skill_name}'")
+
+    content = target.read_text(encoding="utf-8", errors="replace")
+    return {"name": skill_name, "content": content}
+
+
+@app.post("/api/config/skills/translate")
+async def translate_skills(req: SkillTranslateRequest):
+    """Translate skill descriptions to Chinese via Claude CLI."""
+    if not req.items:
+        return {"translations": {}}
+
+    # Build prompt for each skill
+    items_list = [f"- {item.name}: {item.description}" for item in req.items]
+    prompt = (
+        "请将以下 skill 描述翻译为中文（每个一行，格式为 \"name: 翻译结果\"），"
+        "不要添加额外内容。如果没有描述或不是英文则原样返回原文。\n\n"
+        + "\n".join(items_list)
+    )
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *claude_cli_argv("-p", prompt, "--output-format", "text", "--model", "haiku"),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return {"translations": {}}
+    except Exception:
+        return {"translations": {}}
+
+    text = stdout.decode("utf-8", errors="replace").strip()
+    translations: Dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or ": " not in line:
+            continue
+        name_part, _, desc_part = line.partition(": ")
+        name_part = name_part.strip()
+        # Match against the original item names
+        for item in req.items:
+            skill_name = item.name.split("/", 1)[-1] if "/" in item.name else item.name
+            if name_part == item.name or name_part == skill_name:
+                translations[item.name] = desc_part.strip()
+                break
+
+    return {"translations": translations}
 
 
 @app.get("/api/version")

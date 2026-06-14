@@ -1127,6 +1127,274 @@
     border-left: 2px solid transparent;
   }
   .session-item:hover { background: var(--border); }
+
+  /* ===== File Tree Modal ===== */
+  .file-tree-modal { max-width: 900px; }
+  .file-tree-pane { width: 280px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; }
+  .file-tree-content { padding: 8px 0; }
+  .file-tree-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 12px 3px calc(12px + var(--depth, 0) * 20px);
+    cursor: pointer; font-size: 13px; font-family: 'JetBrains Mono', ui-monospace, monospace;
+    transition: background .1s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    user-select: none;
+  }
+  .file-tree-item:hover { background: var(--surface-2); }
+  .file-tree-item.active { background: var(--accent-soft); }
+  .file-tree-item .chevron {
+    width: 16px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--text-subtle); transition: transform .15s;
+  }
+  .file-tree-item .chevron.open { transform: rotate(90deg); }
+  .file-tree-item .chevron.hidden { visibility: hidden; }
+  .file-tree-item .icon { font-size: 14px; flex-shrink: 0; }
+  .file-tree-item .fname { overflow: hidden; text-overflow: ellipsis; }
+  .file-tree-item.folder .fname { font-weight: 500; }
+  .file-tree-pane-header {
+    padding: 10px 12px 6px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-subtle);
+  }
+  .file-viewer-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .file-viewer-tabs {
+    display: flex; align-items: center; gap: 2px; padding: 6px 8px 0;
+    border-bottom: 1px solid var(--border); overflow-x: auto;
+  }
+  .file-viewer-tab {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; font-size: 12px; font-family: 'JetBrains Mono', monospace;
+    border-radius: 6px 6px 0 0; cursor: pointer;
+    background: var(--surface-2); color: var(--text-muted);
+    border: 1px solid var(--border); border-bottom: none;
+  }
+  .file-viewer-tab.active { background: var(--surface); color: var(--text); font-weight: 500; }
+  .file-viewer-tab .close-tab {
+    width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; border-radius: 3px; opacity: 0.5;
+  }
+  .file-viewer-tab .close-tab:hover { opacity: 1; background: var(--border); }
+  .file-viewer-body { flex: 1; overflow: auto; position: relative; }
+  .file-viewer-editor {
+    display: flex; width: 100%; min-height: 100%; font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 13px; line-height: 1.6; tab-size: 4;
+  }
+  .editor-gutter {
+    flex-shrink: 0; width: 50px; text-align: right; padding: 8px 8px 8px 0;
+    color: var(--text-subtle); user-select: none; border-right: 1px solid var(--border);
+    background: var(--surface-2); font-size: 12px;
+  }
+  .editor-gutter .gutter-line { height: 20.8px; display: flex; align-items: center; justify-content: flex-end; }
+  .editor-content {
+    flex: 1; padding: 8px 12px; margin: 0; white-space: pre; overflow-x: auto;
+    min-width: 0; color: var(--text);
+  }
+  .editor-content textarea.editor-textarea {
+    width: 100%; min-height: 200px; border: none; outline: none; resize: vertical;
+    background: transparent; color: var(--text); font-family: inherit; font-size: inherit;
+    line-height: inherit; tab-size: inherit; white-space: pre;
+  }
+  .editor-content textarea.editor-textarea::selection { background: var(--accent-soft); }
+  .file-viewer-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 12px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--text-subtle);
+  }
+  .file-viewer-footer .lang-badge {
+    padding: 2px 8px; border-radius: 4px; background: var(--surface-2);
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  }
+
+  /* ===== Git Panel Modal ===== */
+  .git-modal { max-width: 860px; }
+  .git-status-bar {
+    display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    background: var(--surface-2); border-bottom: 1px solid var(--border);
+    font-size: 13px; font-family: 'JetBrains Mono', monospace;
+  }
+  .git-status-bar .branch { color: #10b981; font-weight: 600; }
+  .git-status-bar .dirty { color: #f59e0b; }
+  .git-toolbar {
+    display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .git-toolbar select {
+    flex: 1; min-width: 200px; padding: 5px 10px; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .git-toolbar select:focus { outline: none; border-color: var(--accent); }
+  .git-toolbar .git-arg-input {
+    flex: 2; min-width: 120px; padding: 5px 10px; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .git-toolbar .git-arg-input:focus { outline: none; border-color: var(--accent); }
+  .git-commit-textarea {
+    display: block; width: 100%; padding: 6px 10px; min-height: 50px;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    resize: vertical;
+  }
+  .git-commit-textarea:focus { outline: none; border-color: var(--accent); }
+  .git-output {
+    flex: 1; overflow: auto; padding: 12px; margin: 0;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px; line-height: 1.6; white-space: pre-wrap;
+    background: var(--surface-2); color: var(--text);
+    border: none; min-height: 200px; max-height: 400px;
+  }
+  .git-output.error { color: #ef4444; }
+  .git-output.success { color: #10b981; }
+  .git-diff-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .git-diff-table td {
+    padding: 1px 8px; font-family: 'JetBrains Mono', monospace; line-height: 20.8px;
+    vertical-align: top; white-space: pre;
+  }
+  .git-diff-table td.line-num {
+    width: 40px; text-align: right; color: var(--text-subtle); user-select: none;
+    padding-right: 12px; flex-shrink: 0;
+  }
+  .git-diff-table td.sign {
+    width: 20px; text-align: center; font-weight: 700; user-select: none; flex-shrink: 0;
+  }
+  .git-diff-table tr.remove td { background: rgba(239,68,68,.1); }
+  .git-diff-table tr.remove td.sign { color: #ef4444; }
+  .git-diff-table tr.add td { background: rgba(16,185,129,.1); }
+  .git-diff-table tr.add td.sign { color: #10b981; }
+  .git-diff-table tr.context td { color: var(--text); }
+  .git-commits-list { flex: 1; overflow: auto; }
+  .git-commit-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 16px; border-bottom: 1px solid var(--border);
+    font-size: 13px; cursor: pointer; transition: background .1s;
+  }
+  .git-commit-item:hover { background: var(--surface-2); }
+  .git-commit-graph {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--text-subtle); white-space: pre; line-height: 1.5;
+    flex-shrink: 0; min-width: 40px;
+  }
+  .git-commit-msg { color: var(--text); font-weight: 500; }
+  .git-commit-hash { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .git-commit-time { color: var(--text-subtle); font-size: 11px; }
+  /* Git tabs */
+  .git-tab:hover { color: var(--text); }
+  .git-tab.active { border-bottom-color: var(--accent); color: var(--text); }
+  /* Ensure hidden class works for git panels */
+  .git-files-panel.hidden,
+  .git-commits-list.hidden,
+  #gitDiffView.hidden { display: none !important; }
+  /* Git file panel */
+  .git-file-toolbar {
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .git-file-toolbar button {
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .git-file-toolbar button:hover { opacity: 0.85; }
+  /* Git file list */
+  .git-file-group { margin: 0; }
+  .git-file-group-header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; font-size: 12px; font-weight: 700;
+    cursor: pointer; user-select: none;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-3);
+    position: sticky; top: 0; z-index: 1;
+  }
+  .git-file-group-header .arrow {
+    display: inline-block; width: 14px; transition: transform .15s;
+    font-size: 10px; color: var(--text-subtle);
+  }
+  .git-file-group-header .arrow.collapsed { transform: rotate(-90deg); }
+  .git-file-group-header .count {
+    font-size: 10px; background: var(--surface); padding: 1px 6px;
+    border-radius: 10px; color: var(--text-subtle);
+  }
+  .git-file-group-header .cat-color {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .git-file-group-header .group-select-all {
+    margin-left: auto; flex-shrink: 0;
+  }
+  .git-file-group-body { transition: max-height .2s ease; overflow: hidden; }
+  .git-file-group-body.collapsed { max-height: 0 !important; }
+  /* Git file row */
+  .git-file-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 2px 12px 2px 20px; font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background .1s;
+  }
+  .git-file-row:hover { background: var(--surface-2); }
+  .git-file-row input[type="checkbox"] {
+    margin: 0; cursor: pointer; flex-shrink: 0;
+  }
+  .git-file-row .fname {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    cursor: pointer;
+  }
+  .git-file-row .fstatus {
+    font-size: 10px; font-weight: 700; padding: 1px 5px;
+    border-radius: 3px; flex-shrink: 0;
+  }
+  .git-file-row .frenames {
+    font-size: 10px; color: var(--text-subtle); flex-shrink: 0;
+  }
+  .git-file-row .factions {
+    display: flex; gap: 2px; flex-shrink: 0;
+  }
+  .git-file-row .factions button {
+    background: none; border: none; cursor: pointer;
+    font-size: 13px; padding: 2px; border-radius: 3px; opacity: 0.5;
+  }
+  .git-file-row .factions button:hover { opacity: 1; background: var(--surface); }
+  /* Staged files row (slightly different bg) */
+  .git-file-row.staged { background: rgba(59,130,246,0.04); }
+  .git-file-row.staged:hover { background: rgba(59,130,246,0.08); }
+  /* Quick action buttons in toolbar */
+  .git-qb {
+    padding: 3px 10px; font-size: 11px; border-radius: 4px;
+    cursor: pointer; border: 1px solid transparent;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .git-qb:hover { opacity: 0.85; }
+  /* Empty state */
+  .git-empty-state {
+    padding: 32px 16px; text-align: center; color: var(--text-subtle);
+    font-size: 13px;
+  }
+  .git-empty-state .icon { font-size: 28px; margin-bottom: 8px; display: block; }
+
+  /* ===== CWD History Modal ===== */
+  .cwd-history-modal { max-width: 480px; }
+  .cwd-history-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 6px; cursor: pointer;
+    transition: background .1s; font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .cwd-history-item:hover { background: var(--surface-2); }
+  .cwd-history-item .path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cwd-history-item .del-btn {
+    width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+    border-radius: 4px; font-size: 14px; color: var(--text-subtle); opacity: 0;
+    transition: opacity .1s, background .1s;
+  }
+  .cwd-history-item:hover .del-btn { opacity: 1; }
+  .cwd-history-item .del-btn:hover { background: #fee2e2; color: #ef4444; }
+  .dark .cwd-history-item .del-btn:hover { background: rgba(239,68,68,.15); }
+  .cwd-clear-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; font-size: 11px; border-radius: 6px;
+    background: transparent; color: var(--text-subtle);
+    border: 1px solid var(--border); cursor: pointer;
+    transition: background .1s, color .1s;
+  }
+  .cwd-clear-btn:hover { background: #fee2e2; color: #ef4444; border-color: #fecaca; }
+  .dark .cwd-clear-btn:hover { background: rgba(239,68,68,.15); }
   .session-item.active { background: var(--accent-soft-2); border-left-color: var(--accent); }
   .dark .session-item.active { background: var(--accent-soft); }
 </style>
@@ -1215,9 +1483,15 @@
   <!-- Advanced toolbar (toggled by headerMoreBtn) -->
   <div id="advancedBar" class="hidden px-4 py-2 flex items-center gap-2 flex-wrap" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
     <div class="relative flex-1 min-w-[240px]">
-      <input id="cwdInput" list="cwdList" placeholder="工作目录（留空默认 ~）" class="text-xs px-2.5 py-1.5 w-full" />
+      <input id="cwdInput" list="cwdList" placeholder="工作目录（留空默认 ~）" class="text-xs px-2.5 py-1.5 w-full pr-20" />
       <datalist id="cwdList"></datalist>
+      <div style="position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;gap:2px;">
+        <button id="openFolderBtn" class="sb-icon-btn" title="浏览文件夹" style="width:22px;height:22px;font-size:11px;">📂</button>
+        <button id="openCwdHistoryBtn" class="sb-icon-btn" title="工作目录历史 (Ctrl+H)" style="width:22px;height:22px;font-size:11px;">📋</button>
+      </div>
     </div>
+    <button id="openFileTreeBtn" class="sb-icon-btn" title="项目文件树" style="font-size:13px;">🌳</button>
+    <button id="openGitModalBtn" class="sb-icon-btn" title="Git 操作" style="font-size:13px;">⎇</button>
     <select id="permSelect" class="text-xs px-2.5 py-1.5" title="工具权限策略">
       <option value="free">🔓 CLI 默认</option>
       <option value="acceptEdits">✏️ 允许编辑</option>
@@ -6995,6 +7269,1277 @@ $('helpReplayTour').addEventListener('click', () => {
     }
   }
 })();
+
+function homeDir() { return '/home'; }
+
+// ===== File Picker Modal =====
+const filePickerModal = $('filePickerModal');
+const filePickerContent = $('filePickerContent');
+const filePickerBreadcrumb = $('filePickerBreadcrumb');
+
+let filePickerCurrentPath = '';
+
+async function openFilePicker() {
+  filePickerCurrentPath = cwdInput.value.trim() || homeDir();
+  await loadFilePickerPath(filePickerCurrentPath);
+  const m = $('filePickerModal');
+  if (m) {
+    openModal(m);
+    m.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', (e) => closeModal(e.target.closest('.modal-backdrop')), {once: true}));
+    m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }, {once: true});
+  }
+}
+
+async function loadFilePickerPath(path) {
+  try {
+    const r = await fetch('/api/tree', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path}),
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    filePickerCurrentPath = data.path;
+    $('filePickerBreadcrumb').textContent = path;
+    renderFilePickerContent(data.children || [], path);
+  } catch {}
+}
+
+function renderFilePickerContent(children, basePath) {
+  const dirs = children.filter(c => c.type === 'dir').sort((a, b) => a.name.localeCompare(b.name));
+  const files = children.filter(c => c.type === 'file').sort((a, b) => a.name.localeCompare(b.name));
+
+  let html = '<div style="padding:4px 0;">';
+
+  // Up button
+  if (basePath !== '/') {
+    const parent = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+    const parentPath = parent.substring(0, parent.lastIndexOf('/')) || '/';
+    html += `<div class="item" onclick="navigateFilePicker('${escapeHtml(parentPath)}')" style="color:var(--accent);padding:6px 12px;cursor:pointer;">⬆ 父目录</div>`;
+  }
+
+  // Directories first
+  dirs.forEach(d => {
+    html += `<div class="item" ondblclick="navigateFilePicker('${escapeHtml(basePath.endsWith('/') ? basePath : basePath + '/')}${escapeHtml(d.name)}')" onclick="navigateFilePicker('${escapeHtml(basePath.endsWith('/') ? basePath : basePath + '/')}${escapeHtml(d.name)}')" style="color:var(--accent);padding:6px 12px;cursor:pointer;">📁 ${escapeHtml(d.name)}</div>`;
+  });
+
+  // Files (disabled for selection)
+  files.forEach(f => {
+    html += `<div class="item disabled" style="padding:6px 12px;">📄 ${escapeHtml(f.name)}</div>`;
+  });
+
+  if (!dirs.length && !files.length) {
+    html += '<div style="padding:8px 12px;color:var(--text-subtle);font-size:12px;">空目录</div>';
+  }
+
+  html += '</div>';
+  $('filePickerContent').innerHTML = html;
+}
+
+function navigateFilePicker(path) {
+  loadFilePickerPath(path);
+}
+
+async function confirmFilePickerSelection() {
+  if (filePickerCurrentPath) {
+    cwdInput.value = filePickerCurrentPath;
+    cwdInput.dispatchEvent(new Event('change'));
+    const pm = $('filePickerModal');
+    if (pm) closeModal(pm);
+    await upsertCwdHistory(filePickerCurrentPath);
+    refreshCwds();
+    refreshGitStatus();
+  }
+}
+
+// ===== File Tree Modal =====
+// DOM elements are queried lazily at call time
+let openFileTabs = []; // {path, name, content, language}
+let currentEditingTab = null;
+
+function openFileTree() {
+  const cwd = cwdInput.value.trim() || homeDir();
+  $('fileTreeCwdLabel').textContent = cwd;
+  openFileTabs = [];
+  renderFileViewerTabs();
+  $('fileViewerBody').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-subtle);font-size:13px;">双击文件查看内容</div>';
+  $('fileViewerFooter').style.display = 'none';
+  const ft = $('fileTreeModal');
+  if (ft) {
+    openModal(ft);
+    // Bind close handlers for dynamically added buttons
+    ft.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', (e) => closeModal(e.target.closest('.modal-backdrop')), {once: true}));
+    ft.addEventListener('click', (e) => { if (e.target === ft) closeModal(ft); }, {once: true});
+  }
+  loadFileTree(cwd);
+}
+
+async function loadFileTree(path) {
+  try {
+    const r = await fetch('/api/tree', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path}),
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    $('fileTreeCwdLabel').textContent = data.path;
+    $('fileTreeContent').innerHTML = renderFileTreeData(data.children || [], 0, data.path);
+  } catch (e) {
+    console.error('Failed to load file tree:', e);
+  }
+}
+
+function renderFileTreeData(children, depth, basePath) {
+  let html = '';
+  children.forEach(child => {
+    const fullPath = (basePath.endsWith('/') ? basePath : basePath + '/') + child.name;
+    const isDir = child.type === 'dir';
+    const indent = depth * 20;
+    html += `<div class="file-tree-item ${isDir ? 'folder' : ''}" data-name="${escapeHtml(child.name)}" data-type="${child.type}" data-path="${escapeHtml(fullPath)}" style="--depth:${depth};" onclick="handleFileTreeClick(this)">`;
+
+    if (isDir) {
+      html += `<span class="chevron hidden">▶</span>`;
+      html += `<span class="icon">📁</span>`;
+    } else {
+      html += `<span class="chevron hidden">▶</span>`;
+      html += `<span class="icon">📄</span>`;
+    }
+
+    html += `<span class="fname">${escapeHtml(child.name)}</span>`;
+    html += '</div>';
+  });
+  return html;
+}
+
+async function handleFileTreeClick(el) {
+  const name = el.dataset.name;
+  const type = el.dataset.type;
+  const path = el.dataset.path;
+  const chevron = el.querySelector('.chevron');
+  const icon = el.querySelector('.icon');
+
+  if (type === 'dir') {
+    // Toggle expand/collapse
+    const isExpanded = chevron.classList.contains('open');
+
+    if (isExpanded) {
+      chevron.classList.remove('open');
+      icon.textContent = '📁';
+      // Remove child nodes (children appended after this element)
+      let next = el.nextElementSibling;
+      while (next && next.dataset.parent === name) {
+        const toRemove = next;
+        next = next.nextElementSibling;
+        toRemove.remove();
+      }
+    } else {
+      chevron.classList.add('open');
+      icon.textContent = '📂';
+      // Load children
+      try {
+        const r = await fetch('/api/tree', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({path}),
+        });
+        if (r.ok) {
+          const data = await r.json();
+          const depth = parseInt(el.style.getPropertyValue('--depth')) + 1;
+          const childrenHtml = renderFileTreeData(
+            data.children || [],
+            depth,
+            data.path
+          );
+          const wrapper = document.createElement('div');
+          wrapper.dataset.parent = name;
+          wrapper.innerHTML = childrenHtml;
+          while (wrapper.firstChild) {
+            el.after(wrapper.firstChild);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load directory:', e);
+        chevron.classList.remove('open');
+        icon.textContent = '📁';
+      }
+    }
+  } else {
+    // Open file in viewer
+    openFileInViewer(path, name);
+  }
+}
+
+async function openFileInViewer(path, name) {
+  // Check if already open
+  const existingTab = openFileTabs.find(t => t.path === path);
+  if (existingTab) {
+    switchToFileTab(existingTab);
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/file-content?path=' + encodeURIComponent(path) + '&max_lines=10000');
+    if (!r.ok) {
+      alert('无法读取文件');
+      return;
+    }
+    const data = await r.json();
+
+    // Add to tabs
+    openFileTabs.push({path, name, content: data.content, language: data.language, linesTotal: data.lines_total});
+    renderFileViewerTabs();
+    switchToFileTab(openFileTabs[openFileTabs.length - 1]);
+  } catch (e) {
+    console.error('Failed to load file:', e);
+    alert('读取文件失败');
+  }
+}
+
+function renderFileViewerTabs() {
+  $('fileViewerTabs').innerHTML = openFileTabs.map((tab, i) =>
+    `<div class="file-viewer-tab ${i === 0 ? 'active' : ''}" onclick="switchToFileTab(openFileTabs[${i}])">
+      ${escapeHtml(tab.name)}
+      <span class="close-tab" onclick="event.stopPropagation();closeFileTab(${i})">×</span>
+    </div>`
+  ).join('');
+}
+
+function switchToFileTab(tab) {
+  Array.from($('fileViewerTabs').children).forEach((el, i) => {
+    el.classList.toggle('active', openFileTabs[i] === tab);
+  });
+
+  $('fileViewerPath').textContent = tab.path;
+  $('fileViewerLang').textContent = tab.language || 'text';
+  $('fileViewerFooter').style.display = 'flex';
+
+  // Render content with line numbers
+  const allLines = tab.content.split('\n');
+  let gutterHtml = '';
+  let contentHtml = '';
+  for (let i = 0; i < allLines.length; i++) {
+    const num = i + 1;
+    const line = escapeHtml(allLines[i]);
+    gutterHtml += `<div class="gutter-line">${num}</div>`;
+    contentHtml += line + '\n';
+  }
+
+  $('fileViewerBody').innerHTML = `
+    <div class="file-viewer-editor">
+      <div class="editor-gutter">${gutterHtml}</div>
+      <div class="editor-content" id="fileEditorContent">${contentHtml}</div>
+    </div>
+  `;
+
+  // Setup edit/save buttons
+  const editBtn = $('toggleEditBtn');
+  const saveBtn = $('saveFileBtn');
+  if (editBtn) {
+    editBtn.style.display = '';
+    editBtn.textContent = '✏️ 编辑';
+    const currentTab = tab; // closure
+    editBtn.onclick = () => {
+      if (currentEditingTab) {
+        // Exit edit mode
+        editBtn.textContent = '✏️ 编辑';
+        if (saveBtn) saveBtn.style.display = 'none';
+        currentEditingTab = null;
+        const activeIdx = Array.from($('fileViewerTabs').children).findIndex(el => el.classList.contains('active'));
+        if (activeIdx >= 0 && openFileTabs[activeIdx]) {
+          switchToFileTab(openFileTabs[activeIdx]);
+        }
+      } else {
+        // Enter edit mode
+        const idx = openFileTabs.indexOf(currentTab);
+        const activeIdx = Array.from($('fileViewerTabs').children).findIndex(el => el.classList.contains('active'));
+        const activeTab = openFileTabs[activeIdx] || openFileTabs[idx >= 0 ? idx : 0];
+        if (!activeTab) return;
+        currentEditingTab = activeTab;
+        const content = activeTab.content;
+        const allLines = content.split('\n');
+        let gutterHtml = '';
+        for (let i = 0; i < allLines.length; i++) {
+          gutterHtml += `<div class="gutter-line">${i + 1}</div>`;
+        }
+        $('fileViewerBody').innerHTML = `
+          <div class="file-viewer-editor" style="min-height:400px;">
+            <div class="editor-gutter">${gutterHtml}</div>
+            <div class="editor-content" style="min-height:400px;">
+              <textarea class="editor-textarea" id="fileTextarea" style="min-height:400px;width:100%;">${escapeHtml(content)}</textarea>
+            </div>
+          </div>`;
+        editBtn.textContent = '👁️ 查看';
+        if (saveBtn) saveBtn.style.display = '';
+      }
+    };
+  }
+  if (saveBtn) {
+    saveBtn.style.display = 'none';
+    saveBtn.onclick = async () => {
+      const ta = $('fileTextarea');
+      if (!ta || !currentEditingTab) return;
+      const content = ta.value;
+      const t = currentEditingTab;
+      try {
+        const r = await fetch('/api/file-save', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({path: t.path, content}),
+        });
+        if (r.ok) {
+          t.content = content;
+          t.language = '';
+          alert('保存成功！');
+          switchToFileTab(t);
+          loadFileTree($('fileTreeCwdLabel').textContent);
+        } else {
+          const d = await r.json().catch(() => ({}));
+          alert('保存失败: ' + (d.detail || r.statusText));
+        }
+      } catch (e) {
+        alert('保存失败: ' + e.message);
+      }
+    };
+  }
+}
+
+function closeFileTab(idx) {
+  openFileTabs.splice(idx, 1);
+  renderFileViewerTabs();
+  if (openFileTabs.length === 0) {
+    $('fileViewerBody').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-subtle);font-size:13px;">双击文件查看内容</div>';
+    $('fileViewerFooter').style.display = 'none';
+  } else {
+    const newIndex = Math.min(idx, openFileTabs.length - 1);
+    switchToFileTab(openFileTabs[newIndex]);
+  }
+}
+
+// file tree refresh
+const fileTreeRefreshBtn = $('fileTreeRefreshBtn');
+if (fileTreeRefreshBtn) {
+  fileTreeRefreshBtn.addEventListener('click', () => {
+    loadFileTree($('fileTreeCwdLabel').textContent);
+  });
+}
+
+// ===== Git Modal =====
+// Modal HTML is after the main script block, so DOM refs must be resolved at runtime
+const _ge = (id) => document.getElementById(id);
+function _g(id) { return _ge('git' + id); }
+
+// Current git state for the modal
+let _gitStatusData = null;
+
+function openGitModal() {
+  const cwd = cwdInput.value.trim();
+  if (!cwd) {
+    alert('请先设置工作目录');
+    return;
+  }
+  const gm = $('gitModal');
+  if (gm) {
+    openModal(gm);
+    gm.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', (e) => closeModal(e.target.closest('.modal-backdrop')), {once: true}));
+    gm.addEventListener('click', (e) => { if (e.target === gm) closeModal(gm); }, {once: true});
+  }
+  _loadGitStatusDetail(cwd);
+  _switchGitTab('files');
+  _clearGitOutput();
+}
+
+async function _loadGitStatusDetail(cwd) {
+  try {
+    const r = await fetch('/api/git/status-detail?cwd=' + encodeURIComponent(cwd));
+    if (!r.ok) {
+      $('gitModalBranch').textContent = '—';
+      $('gitModalStatus').textContent = '获取状态失败';
+      return;
+    }
+    const data = await r.json();
+    _gitStatusData = data;
+    if (!data.available) {
+      $('gitModalBranch').textContent = '—';
+      $('gitModalStatus').textContent = '非 Git 仓库';
+      _ge('gitFileList').innerHTML = '<div class="git-empty-state"><span class="icon">📂</span>当前目录不是 Git 仓库</div>';
+      return;
+    }
+    $('gitModalBranch').textContent = data.branch;
+    $('gitModalRemote').textContent = data.remote_url ? (data.remote_url.split('/').pop() || '') : '';
+    if (data.files && data.files.length > 0) {
+      const total = data.files.reduce((s, g) => s + g.files.length, 0);
+      $('gitModalDirty').textContent = ' ±' + total;
+      $('gitModalStatus').textContent = '(有未提交的修改)';
+      _renderGitFileList(data);
+    } else {
+      $('gitModalDirty').textContent = '';
+      $('gitModalStatus').textContent = '(工作区干净)';
+      _ge('gitFileList').innerHTML = '<div class="git-empty-state"><span class="icon">✅</span>工作区干净</div>';
+    }
+  } catch (e) {
+    $('gitModalBranch').textContent = '—';
+    $('gitModalStatus').textContent = '获取状态失败';
+  }
+}
+
+// ===== Tab switching =====
+function _switchGitTab(tabName) {
+  // Update tab buttons
+  document.querySelectorAll('.git-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+    if (btn.dataset.tab === tabName) {
+      btn.style.borderBottomColor = 'var(--accent)';
+      btn.style.color = 'var(--text)';
+    } else {
+      btn.style.borderBottomColor = 'transparent';
+      btn.style.color = 'var(--text-subtle)';
+    }
+  });
+
+  // Show/hide panels
+  if (_ge('gitFilesPanel')) _ge('gitFilesPanel').classList.toggle('hidden', tabName !== 'files');
+  if (_ge('gitLogPanel')) _ge('gitLogPanel').classList.toggle('hidden', tabName !== 'log');
+
+  // Hide diff view on tab switch
+  if (_ge('gitDiffView')) _ge('gitDiffView').classList.add('hidden');
+
+  // Load log data when switching to log tab
+  if (tabName === 'log') {
+    _doLoadLog(cwdInput.value.trim());
+  }
+}
+
+// ===== Render file list grouped by category =====
+function _renderGitFileList(data) {
+  if (!data.files || data.files.length === 0) {
+    _ge('gitFileList').innerHTML = '<div class="git-empty-state"><span class="icon">✅</span>工作区干净</div>';
+    return;
+  }
+
+  let html = '';
+  data.files.forEach((group, gi) => {
+    const id = 'gitGroup' + gi;
+    html += '<div class="git-file-group" data-group="' + group.key + '">';
+    html += '<div class="git-file-group-header" onclick="window._toggleGroup(\'' + id + '\', this)">';
+    html += '<span class="arrow">▼</span>';
+    html += '<span class="cat-color" style="background:' + group.color + '"></span>';
+    html += '<span style="color:' + group.color + '">' + group.icon + ' ' + group.category + '</span>';
+    html += '<span class="count">' + group.files.length + '</span>';
+    html += '<span style="margin-left:auto;"><input type="checkbox" class="group-select-all" data-group="gitGroup' + gi + '" title="全选本组" onclick="event.stopPropagation(); window._selectAllGroup(\'gitGroup' + gi + '\', this.checked)" /></span>';
+    html += '</div>';
+    html += '<div class="git-file-group-body" id="' + id + '" style="max-height:' + (group.files.length * 32 + 4) + 'px;">';
+    group.files.forEach(f => {
+      const statusLabel = _getStatusLabel(f.status, f.secondary);
+      const stagedClass = ['staged_modified','staged_added','staged_renamed','staged_copied','staged_untracked','deleted_staged'].includes(group.key) ? 'staged' : '';
+      html += '<div class="git-file-row ' + stagedClass + '" data-filename="' + escapeHtml(f.filename) + '" data-status="' + escapeHtml(f.status) + '">';
+      // Checkbox
+      html += '<input type="checkbox" title="选择此文件" />';
+      // File name (clickable for diff)
+      html += '<span class="fname" title="' + escapeHtml(f.filename) + '" onclick="window._showFileDiff(\'' + escapeHtml(f.filename).replace(/'/g, "\\'") + '\')">' + escapeHtml(f.filename) + '</span>';
+      // Status badge
+      html += '<span class="fstatus" style="background:' + group.color + '20;color:' + group.color + ';">' + escapeHtml(statusLabel) + '</span>';
+      // Rename info
+      if (f.renames) {
+        html += '<span class="frenames" title="' + escapeHtml(f.renames) + '">→ ' + escapeHtml(f.renames) + '</span>';
+      }
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  _ge('gitFileList').innerHTML = html;
+
+  // Select all checkbox behavior: clicking a row toggles its checkbox
+  _ge('gitFileList').querySelectorAll('.git-file-row').forEach(row => {
+    row.addEventListener('click', function(e) {
+      if (e.target.tagName === 'INPUT') return;
+      var cb = row.querySelector('input[type="checkbox"]');
+      if (cb) cb.checked = !cb.checked;
+    });
+  });
+}
+
+function _getStatusLabel(status, secondary) {
+  var labels = {
+    'M': '修改', 'A': '新增', 'D': '删除', 'R': '重命名', 'C': '复制',
+    '?: ': '未跟踪', ' M': '已修改', ' A': '已暂存', ' D': '已删除',
+    'MM': '修改', 'AM': '修改', 'AA': '冲突', 'UU': '冲突',
+    'RD': '删除', 'RM': '重命名', 'RC': '复制',
+  };
+  var key = (status || '') + (secondary || '');
+  return labels[key] || status + (secondary || '');
+}
+
+// ===== Toggle group collapse =====
+window._toggleGroup = function(id, headerEl) {
+  var body = document.getElementById(id);
+  var arrow = headerEl.querySelector('.arrow');
+  if (body.classList.contains('collapsed')) {
+    body.classList.remove('collapsed');
+    arrow.classList.remove('collapsed');
+    body.style.maxHeight = body.scrollHeight + 'px';
+  } else {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    body.offsetHeight;
+    body.classList.add('collapsed');
+    arrow.classList.add('collapsed');
+  }
+}
+
+// ===== File diff view =====
+function _hideGitDiffView() {
+  if (_ge('gitDiffView')) _ge('gitDiffView').classList.add('hidden');
+}
+
+function _showFileDiff(filename) {
+  var cwd = cwdInput.value.trim();
+  if (!cwd) return;
+
+  var diffView = _ge('gitDiffView');
+  if (!diffView) return;
+  diffView.classList.remove('hidden');
+  if (_ge('gitDiffTitle')) _ge('gitDiffTitle').textContent = '📄 ' + filename;
+
+  // Close existing diff view when clicking "close"
+  if (_ge('gitDiffCloseBtn') && !_ge('gitDiffCloseBtn').dataset.bound) {
+    _ge('gitDiffCloseBtn').dataset.bound = '1';
+    _ge('gitDiffCloseBtn').addEventListener('click', _hideGitDiffView);
+  }
+
+  if (_ge('gitDiffFileList')) _ge('gitDiffFileList').innerHTML = '<div style="padding:8px;color:var(--text-subtle);">加载中…</div>';
+
+  // Scroll diff into view
+  diffView.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+
+  _doShowFileDiff(cwd, filename);
+}
+
+async function _doShowFileDiff(cwd, filename) {
+  try {
+    // Get both working tree diff and cached diff
+    var [workR, cacheR] = await Promise.all([
+      fetch('/api/git/diff?path=' + encodeURIComponent(filename) + '&cwd=' + encodeURIComponent(cwd) + '&cached=false'),
+      fetch('/api/git/diff?path=' + encodeURIComponent(filename) + '&cwd=' + encodeURIComponent(cwd) + '&cached=true'),
+    ]);
+
+    var workData = workR.ok ? await workR.json() : null;
+    var cacheData = cacheR.ok ? await cacheR.json() : null;
+
+    // Prefer cached diff if the file is staged, otherwise use working tree diff
+    var data = (cacheData && cacheData.diff_lines && cacheData.diff_lines.length > 0) ? cacheData : workData;
+
+    if (!data || !data.diff_lines || data.diff_lines.length === 0) {
+      if (_ge('gitDiffFileList')) _ge('gitDiffFileList').innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-subtle);">该文件没有可显示的差异</div>';
+      return;
+    }
+
+    var html = '<table class="git-diff-table">';
+    html += '<tr style="color:var(--text-subtle);font-size:11px;"><td class="line-num">旧</td><td class="line-num">新</td><td class="sign"></td><td>内容</td></tr>';
+    data.diff_lines.forEach(function(line) {
+      var rowClass = line.type === 'add' ? 'add' : line.type === 'remove' ? 'remove' : 'context';
+      var sign = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' ';
+      html += '<tr class="' + rowClass + '">';
+      html += '<td class="line-num">' + (line.line_old !== null ? line.line_old : '') + '</td>';
+      html += '<td class="line-num">' + (line.line_new !== null ? line.line_new : '') + '</td>';
+      html += '<td class="sign">' + escapeHtml(sign) + '</td>';
+      html += '<td>' + escapeHtml(line.content) + '</td>';
+      html += '</tr>';
+    });
+    html += '</table>';
+    if (_ge('gitDiffFileList')) _ge('gitDiffFileList').innerHTML = html;
+  } catch (e) {
+    if (_ge('gitDiffFileList')) _ge('gitDiffFileList').innerHTML = '<div style="padding:8px;color:#ef4444;">获取差异失败: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// ===== Staging & unstaging =====
+
+function _selectAllGroup(groupId, checked) {
+  var body = _ge(groupId);
+  if (!body) return;
+  body.querySelectorAll('.git-file-row input[type="checkbox"]').forEach(function(cb) {
+    cb.checked = checked;
+  });
+}
+
+function _getSelectedFiles() {
+  var rows = _ge('gitFileList').querySelectorAll('.git-file-row input[type="checkbox"]:checked');
+  return Array.from(rows).map(function(cb) {
+    var row = cb.closest('.git-file-row');
+    return {
+      filename: row.dataset.filename,
+      status: row.dataset.status,
+    };
+  });
+}
+
+async function _stageSelected() {
+  var files = _getSelectedFiles();
+  if (files.length === 0) { alert('请先勾选要暂存的文件'); return; }
+  var cwd = cwdInput.value.trim();
+
+  var promises = files.map(function(f) {
+    return fetch('/api/git/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cwd: cwd, command: 'git add "' + f.filename.replace(/"/g, '') + '"'}),
+    });
+  });
+  var results = await Promise.allSettled(promises);
+  var okCount = results.filter(function(r) { return r.status === 'fulfilled' && r.value.ok; }).length;
+
+  if (okCount > 0) {
+    files.forEach(function(f) {
+      var row = _ge('gitFileList').querySelector('[data-filename="' + CSS.escape(f.filename) + '"]');
+      if (row) { var cb = row.querySelector('input[type="checkbox"]'); if (cb) cb.checked = false; }
+    });
+    await _loadGitStatusDetail(cwd);
+    refreshGitStatus();
+  } else {
+    alert('暂存失败');
+  }
+}
+
+async function _unstageSelected() {
+  var files = _getSelectedFiles();
+  if (files.length === 0) { alert('请先勾选要取消暂存的文件'); return; }
+  var cwd = cwdInput.value.trim();
+
+  var promises = files.map(function(f) {
+    return fetch('/api/git/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cwd: cwd, command: 'git reset HEAD "' + f.filename.replace(/"/g, '') + '"'}),
+    });
+  });
+  var results = await Promise.allSettled(promises);
+  var okCount = results.filter(function(r) { return r.status === 'fulfilled' && r.value.ok; }).length;
+
+  if (okCount > 0) {
+    files.forEach(function(f) {
+      var row = _ge('gitFileList').querySelector('[data-filename="' + CSS.escape(f.filename) + '"]');
+      if (row) { var cb = row.querySelector('input[type="checkbox"]'); if (cb) cb.checked = false; }
+    });
+    await _loadGitStatusDetail(cwd);
+    refreshGitStatus();
+  } else {
+    alert('取消暂存失败');
+  }
+}
+
+async function _discardSelected() {
+  var files = _getSelectedFiles();
+  if (files.length === 0) { alert('请先勾选要丢弃的文件'); return; }
+  var cwd = cwdInput.value.trim();
+  if (!confirm('确定要丢弃 ' + files.length + ' 个文件的修改吗？此操作不可撤销。')) return;
+
+  var promises = files.map(function(f) {
+    return fetch('/api/git/discard', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cwd: cwd, command: f.filename}),
+    });
+  });
+  var results = await Promise.allSettled(promises);
+  var okCount = results.filter(function(r) { return r.status === 'fulfilled' && r.value.ok; }).length;
+
+  if (okCount > 0) {
+    await _loadGitStatusDetail(cwd);
+    refreshGitStatus();
+  }
+}
+
+// ===== Commit =====
+function _showCommitBar() {
+  if (_ge('gitCommitBar')) _ge('gitCommitBar').classList.remove('hidden');
+  if (_ge('gitCommitMsgInput')) _ge('gitCommitMsgInput').focus();
+}
+
+function _hideCommitBar() {
+  if (_ge('gitCommitBar')) _ge('gitCommitBar').classList.add('hidden');
+  if (_ge('gitCommitMsgInput')) _ge('gitCommitMsgInput').value = '';
+}
+
+async function _doCommit(msg) {
+  var cwd = cwdInput.value.trim();
+  if (!msg) { alert('请输入提交信息'); return; }
+
+  if (_ge('gitCommitRunBtn')) {
+    _ge('gitCommitRunBtn').textContent = '提交中…';
+    _ge('gitCommitRunBtn').disabled = true;
+  }
+
+  try {
+    var r = await fetch('/api/git/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cwd: cwd, command: 'git commit -m "' + msg.replace(/"/g, '') + '"'}),
+    });
+    var data = await r.json();
+    if (!r.ok) {
+      alert('提交失败: ' + (data.detail || r.statusText));
+    } else {
+      alert('✅ 提交成功');
+      _hideCommitBar();
+      _hideGitDiffView();
+      await _loadGitStatusDetail(cwd);
+      refreshGitStatus();
+    }
+  } catch (e) {
+    alert('提交失败: ' + e.message);
+  } finally {
+    if (_ge('gitCommitRunBtn')) {
+      _ge('gitCommitRunBtn').textContent = '确认提交';
+      _ge('gitCommitRunBtn').disabled = false;
+    }
+  }
+}
+
+// ===== Push / Pull =====
+async function _doPush() {
+  var cwd = cwdInput.value.trim();
+  if (!confirm('确定要推送到远程吗？')) return;
+
+  if (_ge('gitOutput')) { _ge('gitOutput').textContent = '推送中…'; _ge('gitOutput').className = 'git-output'; }
+
+  try {
+    var r = await fetch('/api/git/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cwd: cwd, command: 'git push'}),
+    });
+    var data = await r.json();
+    if (!r.ok) {
+      if (_ge('gitOutput')) _ge('gitOutput').className = 'git-output error';
+      if (_ge('gitOutput')) _ge('gitOutput').textContent = '❌ ' + (data.detail || r.statusText);
+    } else {
+      if (_ge('gitOutput')) _ge('gitOutput').className = 'git-output success';
+      if (_ge('gitOutput')) _ge('gitOutput').textContent = '✅ 推送成功';
+      await _loadGitStatusDetail(cwd);
+      refreshGitStatus();
+    }
+  } catch (e) {
+    if (_ge('gitOutput')) { _ge('gitOutput').className = 'git-output error'; _ge('gitOutput').textContent = '❌ 推送失败: ' + e.message; }
+  }
+}
+
+async function _doPull() {
+  var cwd = cwdInput.value.trim();
+  if (!confirm('确定要从远程拉取吗？')) return;
+
+  if (_ge('gitOutput')) { _ge('gitOutput').textContent = '拉取中…'; _ge('gitOutput').className = 'git-output'; }
+
+  try {
+    var r = await fetch('/api/git/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cwd: cwd, command: 'git pull'}),
+    });
+    var data = await r.json();
+    if (!r.ok) {
+      if (_ge('gitOutput')) _ge('gitOutput').className = 'git-output error';
+      if (_ge('gitOutput')) _ge('gitOutput').textContent = '❌ ' + (data.detail || r.statusText);
+    } else {
+      if (_ge('gitOutput')) _ge('gitOutput').className = 'git-output success';
+      if (_ge('gitOutput')) _ge('gitOutput').textContent = '✅ 拉取成功';
+      await _loadGitStatusDetail(cwd);
+      refreshGitStatus();
+    }
+  } catch (e) {
+    if (_ge('gitOutput')) { _ge('gitOutput').className = 'git-output error'; _ge('gitOutput').textContent = '❌ 拉取失败: ' + e.message; }
+  }
+}
+
+// ===== Commit history =====
+async function _loadGitLog() {
+  var cwd = (cwdInput.value.trim()) || '.';
+  _doLoadLog(cwd);
+}
+
+async function _doLoadLog(cwd) {
+  var content = $('gitLogContent');
+  if (!content) return;
+  content.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-subtle);">加载中…</div>';
+
+  try {
+    var r = await fetch('/api/git/log?cwd=' + encodeURIComponent(cwd) + '&limit=100');
+    if (!r.ok) {
+      content.innerHTML = '<div style="padding:12px;text-align:center;color:#ef4444;">获取提交历史失败</div>';
+      return;
+    }
+    var data = await r.json();
+    if (!data.commits || data.commits.length === 0) {
+      content.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-subtle);">暂无提交历史（可能是一个新仓库）</div>';
+      return;
+    }
+
+    var html = '';
+    // Render graph first
+    if (data.graph) {
+      html += '<div style="padding:8px 12px;font-family:JetBrains Mono,monospace;font-size:12px;white-space:pre;color:var(--text-subtle);line-height:1.5;">' + escapeHtml(data.graph) + '</div>';
+    }
+
+    // Render commits
+    data.commits.forEach(function(c) {
+      html += '<div class="git-commit-item" style="display:flex;align-items:center;gap:8px;padding:4px 12px;font-size:12px;font-family:JetBrains Mono,monospace;cursor:default;">';
+      html += '<span class="git-commit-graph" style="white-space:pre;">' + escapeHtml(c.graph || '') + '</span>';
+      html += '<span class="git-commit-hash">' + escapeHtml(c.hash) + '</span>';
+      html += '<span class="git-commit-msg">' + escapeHtml(c.message) + '</span>';
+      html += '<span class="git-commit-time">' + escapeHtml(c.time) + '</span>';
+      html += '</div>';
+    });
+
+    content.innerHTML = html;
+  } catch (e) {
+    content.innerHTML = '<div style="padding:12px;text-align:center;color:#ef4444;">获取提交历史失败: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// ===== Command panel helpers =====
+function _clearGitOutput() {
+  if (_ge('gitOutput')) { _ge('gitOutput').textContent = ''; _ge('gitOutput').className = 'git-output'; }
+}
+
+async function runGitCommand() {
+  var cwd = cwdInput.value.trim();
+  var cmd = _ge('gitCmdSelect').value;
+  var arg = _ge('gitArgInput').value.trim();
+
+  if (!cmd) {
+    alert('请选择一个 Git 命令');
+    return;
+  }
+
+  var fullCmd = cmd;
+  if (arg) {
+    fullCmd = cmd + (cmd.endsWith(' ') ? '' : ' ') + arg;
+  }
+
+  // Handle some commands that need extra args
+  if (cmd === 'git add' && arg) {
+    fullCmd = 'git add "' + arg.replace(/"/g, '') + '"';
+  } else if (cmd === 'git commit -m' && arg) {
+    fullCmd = 'git commit -m "' + arg.replace(/"/g, '') + '"';
+  } else if (cmd === 'git checkout -b' && arg) {
+    fullCmd = 'git checkout -b ' + arg;
+  } else if (cmd === 'git checkout' && arg) {
+    fullCmd = 'git checkout ' + arg;
+  } else if (cmd === 'git switch' && arg) {
+    fullCmd = 'git switch ' + arg;
+  } else if (cmd === 'git merge' && arg) {
+    fullCmd = 'git merge ' + arg;
+  } else if (cmd === 'git rebase' && arg) {
+    fullCmd = 'git rebase ' + arg;
+  } else if (cmd === 'git reset HEAD' && arg) {
+    fullCmd = 'git reset HEAD ' + arg;
+  } else if (cmd === 'git tag' && arg) {
+    fullCmd = 'git tag ' + arg;
+  } else if (cmd === 'git revert' && arg) {
+    fullCmd = 'git revert ' + arg;
+  }
+
+  if (!_ge('gitOutput')) return;
+  _ge('gitOutput').className = 'git-output';
+  _ge('gitOutput').textContent = '执行中…';
+
+  try {
+    var r = await fetch('/api/git/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cwd: cwd, command: fullCmd}),
+    });
+    var data = await r.json();
+    if (!r.ok) {
+      _ge('gitOutput').className = 'git-output error';
+      _ge('gitOutput').textContent = '❌ ' + (data.detail || r.statusText);
+    } else {
+      _ge('gitOutput').className = 'git-output success';
+      _ge('gitOutput').textContent = '✅ ' + (data.stdout || '命令执行成功');
+      refreshGitStatus();
+      // Refresh file list in files tab
+      _loadGitStatusDetail(cwd);
+    }
+  } catch (e) {
+    _ge('gitOutput').className = 'git-output error';
+    _ge('gitOutput').textContent = '❌ 请求失败: ' + e.message;
+  }
+}
+
+// ===== Event listeners =====
+document.addEventListener('DOMContentLoaded', function() {
+  // Git modal tabs
+  document.querySelectorAll('.git-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      _switchGitTab(btn.dataset.tab);
+    });
+  });
+
+  // Git action buttons
+  if (_ge('gitStageSelectedBtn')) {
+    _ge('gitStageSelectedBtn').addEventListener('click', _stageSelected);
+  }
+  if (_ge('gitUnstageSelectedBtn')) {
+    _ge('gitUnstageSelectedBtn').addEventListener('click', _unstageSelected);
+  }
+  if (_ge('gitDiscardSelectedBtn')) {
+    _ge('gitDiscardSelectedBtn').addEventListener('click', _discardSelected);
+  }
+  if (_ge('gitCommitBtn')) {
+    _ge('gitCommitBtn').addEventListener('click', function() {
+      _showCommitBar();
+    });
+  }
+  if (_ge('gitCommitCancelBtn')) {
+    _ge('gitCommitCancelBtn').addEventListener('click', _hideCommitBar);
+  }
+  if (_ge('gitCommitRunBtn')) {
+    _ge('gitCommitRunBtn').addEventListener('click', function() {
+      _doCommit(_ge('gitCommitMsgInput').value.trim());
+    });
+  }
+  if (_ge('gitPushBtn')) {
+    _ge('gitPushBtn').addEventListener('click', _doPush);
+  }
+  if (_ge('gitPullBtn')) {
+    _ge('gitPullBtn').addEventListener('click', _doPull);
+  }
+
+  // Git command buttons
+  if (_ge('openGitModalBtn')) {
+    _ge('openGitModalBtn').addEventListener('click', openGitModal);
+  }
+  if (_ge('gitRunBtn')) {
+    _ge('gitRunBtn').addEventListener('click', runGitCommand);
+  }
+
+  // Git command select: adaptive placeholder
+  if (_ge('gitCmdSelect')) {
+    _ge('gitCmdSelect').addEventListener('change', function() {
+      var val = _ge('gitCmdSelect').value;
+      if (val.includes('<file>')) {
+        _ge('gitArgInput').placeholder = '文件路径（如 src/main.py）';
+      } else if (val.includes('<branch>')) {
+        _ge('gitArgInput').placeholder = '分支名（如 develop）';
+      } else if (val.includes('<commit>')) {
+        _ge('gitArgInput').placeholder = '提交哈希（如 abc1234）';
+      } else if (val.includes('<name>')) {
+        _ge('gitArgInput').placeholder = '标签名';
+      } else if (val.includes('message')) {
+        _ge('gitArgInput').placeholder = '提交信息';
+      } else {
+        _ge('gitArgInput').placeholder = '参数（如分支名、文件路径等）';
+      }
+    });
+  }
+
+  // Enter key in git arg input triggers run
+  if (_ge('gitArgInput')) {
+    _ge('gitArgInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        runGitCommand();
+      }
+    });
+  }
+
+  // Enter key in commit message triggers commit
+  if (_ge('gitCommitMsgInput')) {
+    _ge('gitCommitMsgInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        _doCommit(_ge('gitCommitMsgInput').value.trim());
+      }
+      if (e.key === 'Escape') {
+        _hideCommitBar();
+      }
+    });
+  }
+});
+
+// ===== CWD History Modal =====
+// CWD History — DOM queried lazily
+
+async function openCwdHistory() {
+  const ch = $('cwdHistoryModal');
+  if (ch) {
+    openModal(ch);
+    ch.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', (e) => closeModal(e.target.closest('.modal-backdrop')), {once: true}));
+    ch.addEventListener('click', (e) => { if (e.target === ch) closeModal(ch); }, {once: true});
+  }
+  await loadCwdHistory();
+}
+
+async function loadCwdHistory() {
+  try {
+    const r = await fetch('/api/cwd-history');
+    if (!r.ok) {
+      $('cwdHistoryList').innerHTML = '<div class="text-xs text-center py-6" style="color:#ef4444;">加载失败</div>';
+      return;
+    }
+    const items = await r.json();
+    if (items.length === 0) {
+      $('cwdHistoryList').innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">暂无目录历史</div>';
+      return;
+    }
+
+    let html = '';
+    items.forEach(item => {
+      const path = item.path;
+      const time = new Date(item.created_at * 1000).toLocaleString('zh-CN');
+      html += `<div class="cwd-history-item" onclick="selectCwdHistory('${escapeHtml(path)}')">
+        <span style="font-size:14px;">📁</span>
+        <span class="path" title="${escapeHtml(path)}">${escapeHtml(path)}</span>
+        <span style="font-size:10px;color:var(--text-subtle);white-space:nowrap;">${time}</span>
+        <button class="del-btn" onclick="event.stopPropagation();deleteCwdHistory('${escapeHtml(path)}')" title="删除">×</button>
+      </div>`;
+    });
+    $('cwdHistoryList').innerHTML = html;
+  } catch {
+    $('cwdHistoryList').innerHTML = '<div class="text-xs text-center py-6" style="color:#ef4444;">加载失败</div>';
+  }
+}
+
+async function selectCwdHistory(path) {
+  cwdInput.value = path;
+  cwdInput.dispatchEvent(new Event('change'));
+  const ch = $('cwdHistoryModal');
+  if (ch) closeModal(ch);
+  await upsertCwdHistory(path);
+  refreshGitStatus();
+}
+
+async function deleteCwdHistory(path) {
+  if (!confirm('删除 "' + path + '" 从目录历史？')) return;
+  try {
+    await fetch('/api/cwd-history/' + encodeURIComponent(path), {method: 'DELETE'});
+    await loadCwdHistory();
+  } catch {}
+}
+
+async function clearCwdHistory() {
+  if (!confirm('确定要清空所有目录历史吗？')) return;
+  try {
+    await fetch('/api/cwd-history/clear', {method: 'POST'});
+    await loadCwdHistory();
+  } catch {}
+}
+
+async function upsertCwdHistory(path) {
+  try {
+    await fetch('/api/cwd-history?path=' + encodeURIComponent(path), {method: 'POST'});
+  } catch {}
+}
+
+// ===== Wire up event listeners =====
+
+// Folder picker button
+const openFolderBtn = $('openFolderBtn');
+if (openFolderBtn) {
+  openFolderBtn.addEventListener('click', openFilePicker);
+}
+
+// CWD history button
+const openCwdHistoryBtn = $('openCwdHistoryBtn');
+if (openCwdHistoryBtn) {
+  openCwdHistoryBtn.addEventListener('click', openCwdHistory);
+}
+
+// File tree button
+const openFileTreeBtn = $('openFileTreeBtn');
+if (openFileTreeBtn) {
+  openFileTreeBtn.addEventListener('click', openFileTree);
+}
+
+// CWD history button (via cwd history icon in header or keyboard shortcut)
+// We also add a button in the advanced bar next to the cwd input
+// The cwdHistoryModal can be opened via the folder picker icon's datalist dropdown
+// Let's add a separate button for it
+
+// Keyboard shortcut: Ctrl+H for CWD history
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'h' && !e.shiftKey) {
+    // Only prevent if not in input field
+    const tag = e.target.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+      e.preventDefault();
+      openCwdHistory();
+    }
+  }
+});
+
+// CWD clear all button
+const cwdClearAllBtn = $('cwdClearAllBtn');
+if (cwdClearAllBtn) {
+  cwdClearAllBtn.addEventListener('click', clearCwdHistory);
+}
+
+// ===== Auto-save CWD to history on change =====
+cwdInput.addEventListener('change', async () => {
+  const cwd = cwdInput.value.trim();
+  if (cwd) {
+    await upsertCwdHistory(cwd);
+  }
+});
+
+// Initial load: also load from sessions database for the datalist
+async function initCwdHistorySync() {
+  try {
+    const r = await fetch('/api/cwds');
+    if (!r.ok) return;
+    const paths = await r.json();
+    // Insert each into cwd_history table
+    for (const p of paths) {
+      if (p && p.trim()) {
+        await upsertCwdHistory(p.trim());
+      }
+    }
+  } catch {}
+}
+
+// Run initial sync
+initCwdHistorySync();
+
 </script>
+
+<!-- File Tree Modal -->
+<div id="fileTreeModal" class="modal-backdrop hidden">
+  <div class="modal-box file-tree-modal" style="max-width:900px;">
+    <div class="flex items-center justify-between px-4 pt-3 pb-2">
+      <div class="font-semibold" style="font-size:15px;">📂 项目文件</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span id="fileTreeCwdLabel" class="text-xs truncate max-w-[200px]" style="color:var(--text-subtle);font-family:ui-monospace,monospace;"></span>
+        <button id="fileTreeRefreshBtn" class="sb-icon-btn" title="刷新" style="font-size:14px;">↻</button>
+        <button data-close class="text-xl" style="font-size:18px;">×</button>
+      </div>
+    </div>
+    <div class="flex flex-1 min-h-0" style="max-height:70vh;">
+      <div class="file-tree-pane">
+        <div class="file-tree-pane-header">目录结构</div>
+        <div id="fileTreeContent" class="file-tree-content"></div>
+      </div>
+      <div class="file-viewer-pane">
+        <div class="file-viewer-tabs" id="fileViewerTabs"></div>
+        <div class="file-viewer-body" id="fileViewerBody">
+          <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-subtle);font-size:13px;">
+            双击文件查看内容
+          </div>
+        </div>
+        <div class="file-viewer-footer" id="fileViewerFooter" style="display:none;">
+          <div>
+            <span id="fileViewerPath" class="text-xs truncate" style="max-width:300px;display:inline-block;font-family:ui-monospace,monospace;"></span>
+            <span id="fileViewerLang" class="lang-badge" style="margin-left:6px;"></span>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button id="toggleEditBtn" class="text-xs px-2 py-1 rounded" style="background:var(--surface-2);border:1px solid var(--border);cursor:pointer;">✏️ 编辑</button>
+            <button id="saveFileBtn" class="text-xs px-2 py-1 rounded" style="background:var(--accent);color:white;border:none;cursor:pointer;display:none;">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Git Operations Modal -->
+<div id="gitModal" class="modal-backdrop hidden">
+  <div class="modal-box git-modal" style="max-width:900px;display:flex;flex-direction:column;height:80vh;">
+    <div class="flex items-center justify-between px-4 pt-3 pb-2">
+      <div class="font-semibold" style="font-size:15px;">⎇ Git 操作</div>
+      <button data-close class="text-xl" style="font-size:18px;">×</button>
+    </div>
+
+    <!-- Status bar -->
+    <div class="git-status-bar">
+      <span class="branch" id="gitModalBranch">—</span>
+      <span id="gitModalDirty" class="text-xs" style="color:var(--text-subtle);"></span>
+      <span id="gitModalRemote" class="text-xs" style="color:var(--text-subtle);margin-left:auto;" title="远程地址"></span>
+      <span id="gitModalStatus" class="text-xs" style="color:var(--text-subtle);"></span>
+    </div>
+
+    <!-- Tabs -->
+    <div class="git-tabs" style="display:flex;border-bottom:1px solid var(--border);padding:0 12px;">
+      <button class="git-tab active" data-tab="files" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;">📁 文件</button>
+      <button class="git-tab" data-tab="log" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-subtle);font-size:13px;cursor:pointer;">📜 历史</button>
+    </div>
+
+    <!-- Tab: Files Panel (flex col: toolbar + scrollable list) -->
+    <div id="gitFilesPanel" class="git-files-panel" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+      <!-- Top toolbar: staging & committing -->
+      <div class="git-file-toolbar" style="flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <button id="gitStageSelectedBtn" title="暂选中的文件" style="padding:4px 12px;font-size:12px;background:var(--accent);color:white;border:1px solid var(--accent);border-radius:5px;cursor:pointer;font-weight:600;">⊕ 暂存选中</button>
+          <button id="gitUnstageSelectedBtn" title="取消暂存选中文件" style="padding:4px 12px;font-size:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:5px;cursor:pointer;">⊖ 取消暂存</button>
+          <button id="gitDiscardSelectedBtn" title="丢弃选中文件的修改" style="padding:4px 12px;font-size:12px;background:var(--surface-2);color:#ef4444;border:1px solid #ef444440;border-radius:5px;cursor:pointer;">✕ 丢弃</button>
+          <span style="flex:1;"></span>
+          <button id="gitCommitBtn" title="提交所有暂存文件" style="padding:4px 12px;font-size:12px;background:#10b981;color:white;border:1px solid #10b981;border-radius:5px;cursor:pointer;font-weight:600;">✓ 提交</button>
+          <button id="gitPushBtn" title="推送到远程" style="padding:4px 12px;font-size:12px;background:#8b5cf6;color:white;border:1px solid #8b5cf6;border-radius:5px;cursor:pointer;font-weight:600;">↗ 推送</button>
+          <button id="gitPullBtn" title="从远程拉取" style="padding:4px 12px;font-size:12px;background:#6366f1;color:white;border:1px solid #6366f1;border-radius:5px;cursor:pointer;">↓ 拉取</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;" class="hidden" id="gitCommitBar">
+          <textarea id="gitCommitMsgInput" class="git-arg-input git-commit-textarea" placeholder="提交信息…" style="width:100%;min-width:0;resize:vertical;min-height:50px;" rows="2"></textarea>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button id="gitCommitRunBtn" style="padding:4px 14px;font-size:12px;background:#10b981;color:white;border:none;border-radius:5px;cursor:pointer;font-weight:600;">确认提交</button>
+            <button id="gitCommitCancelBtn" style="padding:4px 10px;font-size:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:5px;cursor:pointer;">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- File list container: flex-shrink to make room for diff view -->
+      <div id="gitFileList" style="overflow:auto;flex:1;min-height:80px;">
+        <div style="padding:24px;text-align:center;color:var(--text-subtle);">加载中…</div>
+      </div>
+    </div>
+
+    <!-- Tab: Log Panel -->
+    <div id="gitLogPanel" class="hidden git-commits-list" style="flex:1;min-height:0;border-top:1px solid var(--border);">
+      <div id="gitLogContent" style="padding:8px;"></div>
+    </div>
+
+    <!-- Diff view: sits below files/log, flex-grow to fill remaining modal height -->
+    <div id="gitDiffView" class="hidden" style="border-top:1px solid var(--border);flex:1;min-height:0;overflow:auto;background:var(--surface-2);">
+      <div class="flex items-center justify-between px-4 pt-2 pb-1" style="font-size:13px;font-weight:600;">
+        <span id="gitDiffTitle">差异</span>
+        <button id="gitDiffCloseBtn" style="background:none;border:none;color:var(--text-subtle);cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;">✕</button>
+      </div>
+      <div id="gitDiffFileList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- CWD History Modal -->
+<div id="cwdHistoryModal" class="modal-backdrop hidden">
+  <div class="modal-box cwd-history-modal">
+    <div class="flex items-center justify-between px-4 pt-3 pb-2">
+      <div class="font-semibold" style="font-size:15px;">📁 工作目录历史</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="cwdClearAllBtn" class="cwd-clear-btn">清空全部</button>
+        <button data-close class="text-xl" style="font-size:18px;">×</button>
+      </div>
+    </div>
+    <div id="cwdHistoryList" style="padding:8px 12px;">
+      <div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载中…</div>
+    </div>
+  </div>
+</div>
+
+<!-- File Picker Modal -->
+<div id="filePickerModal" class="modal-backdrop hidden">
+  <div class="modal-box" style="max-width:560px;">
+    <div class="flex items-center justify-between px-4 pt-3 pb-2">
+      <div class="font-semibold" style="font-size:15px;">📂 选择项目目录</div>
+      <button data-close class="text-xl" style="font-size:18px;">×</button>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;max-height:50vh;">
+      <div id="filePickerBreadcrumb" style="padding:8px 12px;font-size:12px;font-family:ui-monospace,monospace;color:var(--text-subtle);background:var(--surface-2);border-bottom:1px solid var(--border);word-break:break-all;">/</div>
+      <div id="filePickerContent" style="overflow:auto;flex:1;">
+        <div style="padding:12px;color:var(--text-subtle);">加载中…</div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 0;">
+      <button id="confirmFilePickerBtn" class="btn btn-primary text-sm" onclick="confirmFilePickerSelection()" style="border-radius:8px;">确定选择</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
