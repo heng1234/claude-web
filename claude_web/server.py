@@ -4290,6 +4290,40 @@ async def get_version():
     return {"version": __version__}
 
 
+class GitCommitRequest(BaseModel):
+    cwd: str
+    message: str
+
+
+@app.post("/api/git/commit")
+async def git_commit(req: GitCommitRequest):
+    """Execute git commit with proper message handling."""
+    cwd = os.path.expanduser(req.cwd)
+    if not os.path.isdir(cwd):
+        raise HTTPException(status_code=400, detail="cwd not found")
+    if not req.message.strip():
+        raise HTTPException(status_code=400, detail="commit message cannot be empty")
+    
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git", "-C", cwd, "commit", "-m", req.message,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
+        return {
+            "stdout": stdout.decode("utf-8", errors="replace"),
+            "stderr": stderr.decode("utf-8", errors="replace"),
+            "returncode": proc.returncode,
+        }
+    except asyncio.TimeoutExpired:
+        raise HTTPException(status_code=408, detail="git commit timed out")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="git not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/changelog.json")
 async def get_changelog():
     path = STATIC_DIR / "changelog.json"

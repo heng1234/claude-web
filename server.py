@@ -3644,6 +3644,41 @@ async def git_run(req: GitRunRequest):
     return result
 
 
+class GitCommitRequest(BaseModel):
+    cwd: str
+    message: str
+
+
+@app.post("/api/git/commit")
+async def git_commit(req: GitCommitRequest):
+    """Execute git commit with proper message handling."""
+    cwd = os.path.expanduser(req.cwd)
+    if not os.path.isdir(cwd):
+        raise HTTPException(status_code=400, detail="cwd not found")
+    if not req.message.strip():
+        raise HTTPException(status_code=400, detail="commit message cannot be empty")
+    
+    # Use subprocess directly to avoid shell escaping issues
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git", "-C", cwd, "commit", "-m", req.message,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
+        return {
+            "stdout": stdout.decode("utf-8", errors="replace"),
+            "stderr": stderr.decode("utf-8", errors="replace"),
+            "returncode": proc.returncode,
+        }
+    except asyncio.TimeoutExpired:
+        raise HTTPException(status_code=408, detail="git commit timed out")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="git not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/git/diff")
 async def git_diff(path: str = Query(...), cwd: str = Query(default=""), cached: bool = Query(default=False)):
     """Get git diff for a specific file."""

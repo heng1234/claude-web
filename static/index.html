@@ -7965,20 +7965,26 @@ async function _doCommit(msg) {
   var cwd = cwdInput.value.trim();
   if (!msg) { alert('请输入提交信息'); return; }
 
-  if (_ge('gitCommitRunBtn')) {
-    _ge('gitCommitRunBtn').textContent = '提交中…';
-    _ge('gitCommitRunBtn').disabled = true;
+  var commitBtn = _ge('gitCommitBtn');
+  if (commitBtn) {
+    commitBtn.textContent = '提交中…';
+    commitBtn.disabled = true;
   }
 
   try {
-    var r = await fetch('/api/git/run', {
+    var r = await fetch('/api/git/commit', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({cwd: cwd, command: 'git commit -m "' + msg.replace(/"/g, '') + '"'}),
+      body: JSON.stringify({cwd: cwd, message: msg}),
     });
     var data = await r.json();
     if (!r.ok) {
       alert('提交失败: ' + (data.detail || r.statusText));
+    } else if (data.returncode !== 0) {
+      var err = data.stderr || '';
+      var out = data.stdout || '';
+      var hint = _parseGitErrorHint(err, out);
+      alert('提交失败: ' + (hint || err || out || 'unknown error'));
     } else {
       alert('✅ 提交成功');
       _hideCommitBar();
@@ -7989,11 +7995,57 @@ async function _doCommit(msg) {
   } catch (e) {
     alert('提交失败: ' + e.message);
   } finally {
-    if (_ge('gitCommitRunBtn')) {
-      _ge('gitCommitRunBtn').textContent = '确认提交';
-      _ge('gitCommitRunBtn').disabled = false;
+    if (commitBtn) {
+      commitBtn.textContent = '✓ 提交';
+      commitBtn.disabled = false;
     }
   }
+}
+
+function _parseGitErrorHint(stderr, stdout) {
+  var combined = (stderr + '\n' + stdout).toLowerCase();
+
+  // 本地与远程分叉
+  if (combined.indexOf('diverged') !== -1 || combined.indexOf('distanced') !== -1) {
+    return '分支与远程出现分叉，请先拉取远程变更：\n  git pull --rebase origin main\n解决冲突后再提交。';
+  }
+
+  // 拒绝非快进式推送/提交
+  if (combined.indexOf('non-fast-forward') !== -1 || combined.indexOf('failed to push') !== -1) {
+    return '远程有新的提交，请先拉取：\n  git pull --rebase origin main\n然后再重试提交。';
+  }
+
+  // 没有设置 upstream
+  if (combined.indexOf('no upstream configured') !== -1 || combined.indexOf('unset upstream') !== -1) {
+    return '当前分支未设置上游分支，请先关联远程分支：\n  git push --set-upstream origin main';
+  }
+
+  // 未配置 user.name / user.email
+  if (combined.indexOf('user.name') !== -1 || combined.indexOf('user.email') !== -1) {
+    return 'Git 未配置用户信息，请运行：\n  git config --global user.name "Your Name"\n  git config --global user.email "you@example.com"\n然后再重试。';
+  }
+
+  // gpg 签名失败
+  if (combined.indexOf('gpg') !== -1 && combined.indexOf('failed') !== -1) {
+    return 'GPG 签名失败。如果不需要签名，可以临时关闭：\n  git commit -m "xxx" --no-gpg-sign';
+  }
+
+  // hook 失败
+  if (combined.indexOf('hook') !== -1 && combined.indexOf('refusing') !== -1) {
+    return 'Git hook 拒绝提交。查看上面的错误信息了解具体原因。';
+  }
+
+  // 没有可提交的变更
+  if (combined.indexOf('nothing to commit') !== -1 || combined.indexOf('working tree clean') !== -1) {
+    return '没有可提交的变更。';
+  }
+
+  // 工作区有未暂存的变更
+  if (combined.indexOf('not stage') !== -1 || combined.indexOf('unstaged') !== -1) {
+    return '请先将变更添加到暂存区：\n  git add <文件>\n或全部添加：\n  git add -A';
+  }
+
+  return null;
 }
 
 // ===== Push / Pull =====
@@ -8187,16 +8239,17 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   if (_ge('gitCommitBtn')) {
     _ge('gitCommitBtn').addEventListener('click', function() {
-      _showCommitBar();
+      var bar = _ge('gitCommitBar');
+      if (bar && bar.classList.contains('hidden')) {
+        _showCommitBar();
+      } else {
+        var msg = _ge('gitCommitMsgInput') ? _ge('gitCommitMsgInput').value.trim() : '';
+        _doCommit(msg);
+      }
     });
   }
   if (_ge('gitCommitCancelBtn')) {
     _ge('gitCommitCancelBtn').addEventListener('click', _hideCommitBar);
-  }
-  if (_ge('gitCommitRunBtn')) {
-    _ge('gitCommitRunBtn').addEventListener('click', function() {
-      _doCommit(_ge('gitCommitMsgInput').value.trim());
-    });
   }
   if (_ge('gitPushBtn')) {
     _ge('gitPushBtn').addEventListener('click', _doPush);
@@ -8478,7 +8531,6 @@ initCwdHistorySync();
         <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;" class="hidden" id="gitCommitBar">
           <textarea id="gitCommitMsgInput" class="git-arg-input git-commit-textarea" placeholder="提交信息…" style="width:100%;min-width:0;resize:vertical;min-height:50px;" rows="2"></textarea>
           <div style="display:flex;align-items:center;gap:6px;">
-            <button id="gitCommitRunBtn" style="padding:4px 14px;font-size:12px;background:#10b981;color:white;border:none;border-radius:5px;cursor:pointer;font-weight:600;">确认提交</button>
             <button id="gitCommitCancelBtn" style="padding:4px 10px;font-size:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:5px;cursor:pointer;">取消</button>
           </div>
         </div>
