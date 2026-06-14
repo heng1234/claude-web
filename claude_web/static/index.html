@@ -1799,7 +1799,7 @@ const memoryBar = $('memoryBar');
 const tokenBar = $('tokenBar');
 const tokenCounter = $('tokenCounter');
 const filePicker = $('filePicker');
-const viewActiveBtn = $('viewActive'), viewArchivedBtn = $('viewArchived');
+const viewActiveBtn = $('viewActive'), viewArchivedBtn = $('viewArchived'), viewCliBtn = $('viewCli');
 const tagFilter = $('tagFilter');
 const lightbox = $('lightbox');
 const gitBar = $('gitBar');
@@ -6220,7 +6220,6 @@ document.querySelectorAll('.empty-card').forEach(card => {
 });
 
 // ===== sidebar tab styling =====
-const viewCliBtn = $('viewCli');
 function updateTabStyles() {
   [viewActiveBtn, viewArchivedBtn, viewCliBtn].forEach(b => {
     if (b) b.style.color = 'var(--text-subtle)';
