@@ -50,6 +50,8 @@ claude-web-extension-path = "claude_web.server:print_extension_path"
 [tool.hatch.version]
 path = "claude_web/__init__.py"
 
+[tool.hatch.build.hooks.custom]
+
 [tool.hatch.build.targets.wheel]
 packages = ["claude_web"]
 artifacts = [
@@ -62,6 +64,7 @@ artifacts = [
 include = [
     "browser-extension/**",
     "claude_web/**",
+    "hatch_build.py",
     "pyproject.toml",
     "README.md",
     "LICENSE",

@@ -1059,6 +1059,7 @@ class ChatRequest(BaseModel):
     cwd: Optional[str] = None
     images: Optional[List[str]] = None
     model: Optional[str] = None
+    effort: Optional[str] = None
     system_prompt: Optional[str] = None
     display_message: Optional[str] = None
     permission_mode: Optional[str] = None
@@ -1076,6 +1077,7 @@ class AgentLoopStartRequest(BaseModel):
     session_id: Optional[str] = None
     cwd: Optional[str] = None
     model: Optional[str] = None
+    effort: Optional[str] = None
     system_prompt: Optional[str] = None
     permission_mode: Optional[str] = None
     allowed_tools: Optional[List[str]] = None
@@ -1242,6 +1244,7 @@ class NotificationTestRequest(BaseModel):
 def _proc_sig(
     remote_session_id: str,
     model: Optional[str],
+    effort: Optional[str],
     permission_mode: Optional[str],
     system_prompt: Optional[str],
     cwd: str,
@@ -1258,6 +1261,7 @@ def _proc_sig(
     return (
         remote_session_id or "",
         model or "",
+        _normalize_effort(effort) or "",
         permission_mode or "default",
         (system_prompt or "").strip(),
         str(Path(cwd).resolve()),
@@ -1266,10 +1270,16 @@ def _proc_sig(
     )
 
 
+def _normalize_effort(effort: Optional[str]) -> Optional[str]:
+    value = (effort or "").strip().lower()
+    return value if value in {"low", "medium", "high", "xhigh", "max"} else None
+
+
 def build_persistent_args(
     session_id: str,
     resume: bool,
     model: Optional[str],
+    effort: Optional[str],
     system_prompt: Optional[str],
     permission_mode: Optional[str] = None,
     allowed_tools: Optional[List[str]] = None,
@@ -1284,6 +1294,9 @@ def build_persistent_args(
     args += ["--resume", session_id] if resume else ["--session-id", session_id]
     if model:
         args += ["--model", model]
+    normalized_effort = _normalize_effort(effort)
+    if normalized_effort:
+        args += ["--effort", normalized_effort]
     if system_prompt:
         args += ["--append-system-prompt", system_prompt]
     if permission_mode and permission_mode in ("default", "acceptEdits", "bypassPermissions", "plan"):
@@ -1300,6 +1313,7 @@ def build_args(
     session_id: str,
     resume: bool,
     model: Optional[str],
+    effort: Optional[str],
     system_prompt: Optional[str],
     permission_mode: Optional[str] = None,
     allowed_tools: Optional[List[str]] = None,
@@ -1322,6 +1336,9 @@ def build_args(
         args += ["--session-id", session_id]
     if model:
         args += ["--model", model]
+    normalized_effort = _normalize_effort(effort)
+    if normalized_effort:
+        args += ["--effort", normalized_effort]
     if system_prompt:
         args += ["--append-system-prompt", system_prompt]
     if permission_mode and permission_mode in ("default", "acceptEdits", "bypassPermissions", "plan"):
@@ -3872,7 +3889,7 @@ async def _chat_response(req: ChatRequest):
         )
         current_sig = _proc_sig(
             remote_session_id,
-            req.model, req.permission_mode, effective_system_prompt,
+            req.model, req.effort, req.permission_mode, effective_system_prompt,
             work_dir, req.allowed_tools, req.disallowed_tools,
         )
 
@@ -3906,6 +3923,7 @@ async def _chat_response(req: ChatRequest):
                     remote_session_id,
                     resume=not is_new,
                     model=req.model,
+                    effort=req.effort,
                     system_prompt=effective_system_prompt,
                     permission_mode=req.permission_mode,
                     allowed_tools=req.allowed_tools,
@@ -4464,6 +4482,7 @@ async def _agent_loop_runner(job: AgentLoopJob, req: AgentLoopStartRequest) -> N
                 session_id=job.session_id,
                 cwd=cwd,
                 model=req.model,
+                effort=req.effort,
                 system_prompt=req.system_prompt,
                 display_message=display,
                 permission_mode=req.permission_mode,

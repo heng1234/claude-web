@@ -2,6 +2,16 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.0.0",
+      "date": "2026-06-24",
+      "highlights": [
+        { "type": "feature", "text": "Claude Code Web 2.0 UI：主界面改为更简约的聊天优先布局，默认隐藏项目 / 权限 / CLI 等开发上下文，切换 Code 模式后再展开本地工作区能力" },
+        { "type": "feature", "text": "侧栏重构为轻量列表导航：新会话、搜索、记录和会话列表统一行式交互，底部新增本地会话状态区，无需登录且强调数据留在本机" },
+        { "type": "feature", "text": "浏览器插件 UI 同步升级：Side Panel 和设置页采用同一套 2.0 视觉系统，输入框、状态区、连接设置和移动端触控尺寸统一优化" },
+        { "type": "fix", "text": "移动端布局继续适配 off-canvas 侧栏、安全区和大字号输入，减少横向溢出与按钮拥挤" }
+      ]
+    },
+    {
       "version": "1.6.1",
       "date": "2026-06-19",
       "highlights": [

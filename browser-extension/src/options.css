@@ -1,32 +1,32 @@
 :root {
   color-scheme: light dark;
-  --bg: #fafaf9;
+  --bg: #fbfaf8;
   --surface: #ffffff;
-  --surface-2: #f5f5f4;
-  --surface-3: #e7e5e4;
-  --border: #e7e5e4;
-  --border-strong: #d6d3d1;
-  --text: #1c1917;
-  --muted: #78716c;
-  --subtle: #a8a29e;
-  --accent: #c2410c;
+  --surface-2: #f5f4f2;
+  --surface-3: #eeebe7;
+  --border: #e5e0d9;
+  --border-strong: #d4ccc2;
+  --text: #262421;
+  --muted: #746d64;
+  --subtle: #9c948a;
+  --accent: #c35a2e;
   --green: #166534;
   --danger: #be123c;
-  --shadow-md: 0 2px 8px rgba(28, 25, 23, .06), 0 1px 2px rgba(28, 25, 23, .04);
+  --shadow-md: 0 12px 34px rgba(36, 32, 28, .08), 0 1px 2px rgba(36, 32, 28, .04);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0c0a09;
+    --bg: #12100e;
     --surface: #1c1917;
-    --surface-2: #292524;
-    --surface-3: #44403c;
-    --border: #292524;
-    --border-strong: #44403c;
-    --text: #fafaf9;
-    --muted: #a8a29e;
-    --subtle: #78716c;
-    --accent: #fb923c;
+    --surface-2: #25211d;
+    --surface-3: #302b26;
+    --border: #302b26;
+    --border-strong: #4a423a;
+    --text: #f5f1ec;
+    --muted: #b8afa5;
+    --subtle: #857c72;
+    --accent: #f08a56;
     --green: #86efac;
     --danger: #fb7185;
     --shadow-md: 0 2px 10px rgba(0, 0, 0, .34);
@@ -45,9 +45,9 @@ body {
 }
 
 .shell {
-  width: min(920px, calc(100vw - 32px));
+  width: min(860px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 32px 0 42px;
+  padding: 28px 0 42px;
 }
 
 .hero {
@@ -79,10 +79,10 @@ body {
 }
 
 h1 {
-  font-size: 25px;
-  line-height: 1.15;
-  margin: 0 0 6px;
-  font-weight: 730;
+  font-size: 22px;
+  line-height: 1.2;
+  margin: 0 0 5px;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
@@ -112,47 +112,44 @@ code {
 .setup {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .step {
-  min-height: 122px;
-  padding: 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 9px 11px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 1px 2px rgba(28, 25, 23, .04);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  box-shadow: none;
 }
 
 .step span {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  margin-bottom: 12px;
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: 8px;
   color: var(--text);
   background: var(--surface-2);
   font-size: 12px;
   font-weight: 760;
 }
 
-.step strong {
-  display: block;
-  margin-bottom: 5px;
-  font-size: 14px;
-}
-
 .step p {
   font-size: 13px;
+  line-height: 1.35;
 }
 
 .panel {
   padding: 20px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--surface);
   box-shadow: var(--shadow-md);
 }
@@ -208,9 +205,9 @@ label span {
 input,
 select {
   width: 100%;
-  height: 40px;
+  height: 42px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 0 11px;
   font: inherit;
   font-size: 14px;
@@ -245,7 +242,7 @@ select:focus {
 
 button {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 9px 13px;
   font: inherit;
   font-size: 13px;
@@ -320,5 +317,124 @@ footer {
   .grid,
   .row {
     grid-template-columns: 1fr;
+  }
+
+  .shell {
+    width: min(100vw - 24px, 860px);
+    padding-top: 20px;
+  }
+
+  button,
+  input,
+  select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+/* 2.0 compact visual pass */
+.shell {
+  width: min(760px, calc(100vw - 32px));
+  padding: 22px 0 34px;
+}
+
+.hero {
+  margin-bottom: 14px;
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 740;
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: 740;
+}
+
+p,
+.step p,
+.hint p,
+#status {
+  font-size: 12.5px;
+}
+
+.setup {
+  gap: 7px;
+}
+
+.step {
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.step span {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  font-size: 11.5px;
+}
+
+.panel {
+  padding: 16px;
+  border-radius: 13px;
+  box-shadow: 0 12px 32px rgba(36, 32, 28, .06), 0 1px 2px rgba(36, 32, 28, .04);
+}
+
+.panel-head {
+  margin-bottom: 14px;
+}
+
+.badge {
+  min-width: 72px;
+  padding: 5px 9px;
+  font-size: 11.5px;
+}
+
+label {
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+label span {
+  font-size: 12px;
+}
+
+input,
+select {
+  height: 38px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.hint {
+  padding: 11px;
+  border-radius: 10px;
+}
+
+button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+
+@media (max-width: 720px) {
+  .shell {
+    width: min(100vw - 24px, 760px);
+    padding-top: 18px;
+  }
+
+  button,
+  input,
+  select {
+    min-height: 40px;
+    font-size: 14px;
   }
 }

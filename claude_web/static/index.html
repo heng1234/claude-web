@@ -284,6 +284,585 @@
   .session-item.active { background: var(--accent-soft-2); border-left-color: var(--accent); }
   .dark .session-item.active { background: var(--accent-soft); }
 
+  /* ===== Restored Code workspace shell ===== */
+  #sidebar {
+    width: 292px !important;
+    border-right: 1px solid var(--border);
+  }
+  .cw-nav-list {
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  }
+  .cw-nav-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 650;
+    text-align: left;
+    cursor: pointer;
+  }
+  .cw-nav-row:hover,
+  .cw-nav-row.active {
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+  }
+  .cw-nav-icon,
+  .cw-nav-icon svg {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    stroke-width: 1.9;
+  }
+  .cw-tabs {
+    display: none !important;
+  }
+  .cw-session-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 28px;
+    padding: 0 4px 4px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .session-more-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-subtle);
+  }
+  .session-more-btn svg {
+    width: 15px;
+    height: 15px;
+  }
+  .session-more-btn:hover {
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    color: var(--text);
+  }
+  .cw-workspace-card {
+    display: none;
+    margin: 8px 14px 12px;
+    padding: 12px 12px 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface) 88%, var(--surface-2));
+    box-shadow: var(--shadow-sm);
+  }
+  body.code-mode .cw-workspace-card {
+    display: block;
+  }
+  .cw-workspace-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .cw-workspace-branch {
+    color: var(--text-subtle);
+    font-weight: 700;
+  }
+  .cw-workspace-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 34px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 650;
+    text-align: left;
+    cursor: pointer;
+  }
+  .cw-workspace-row:hover {
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+  }
+  .cw-workspace-row svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+  }
+  .cw-code-chip-row,
+  .cw-composer-code-context {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  body.code-mode .cw-code-chip-row,
+  body.code-mode .cw-composer-code-context {
+    display: inline-flex;
+  }
+  body.code-mode #sessionLabelText {
+    display: none;
+  }
+  .cw-code-chip,
+  .cw-context-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 30px;
+    max-width: 170px;
+    padding: 0 11px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--surface) 88%, var(--surface-2));
+    color: var(--text-muted);
+    font-size: 12.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .cw-context-chip {
+    min-height: 28px;
+    padding: 0 10px;
+  }
+  .cw-context-chip svg {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+  }
+  .cw-context-chip span,
+  .cw-code-chip strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  body.code-mode .empty-logo {
+    display: none;
+  }
+  body.code-mode .empty-title {
+    font-size: clamp(34px, 4vw, 48px);
+    font-weight: 760;
+  }
+  body.code-mode .empty-subtitle {
+    max-width: 660px;
+    font-size: 15px;
+  }
+  body.code-mode .empty-cards {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+  }
+  body.code-mode .empty-card {
+    width: auto;
+    min-height: 34px;
+    padding: 0 14px;
+    border-radius: 999px;
+  }
+  body.code-mode .empty-card-sub {
+    display: none;
+  }
+  body.code-mode .composer {
+    max-width: none;
+  }
+  .cw-local-footer {
+    min-height: 66px;
+    padding: 10px 14px !important;
+    border-top: 1px solid var(--border) !important;
+  }
+  .cw-local-mark {
+    position: relative;
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 12px !important;
+    font-size: 15px !important;
+  }
+  .cw-local-mark::after {
+    content: "";
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 9px;
+    height: 9px;
+    border: 2px solid var(--surface-2);
+    border-radius: 50%;
+    background: #54a36a;
+  }
+
+  /* ===== Redrawn shell from reference screenshots ===== */
+  body {
+    --cw-sidebar-width: 292px;
+    --cw-empty-form-top: 54vh;
+    overflow: hidden;
+  }
+  #sidebar {
+    width: var(--cw-sidebar-width) !important;
+    min-width: var(--cw-sidebar-width) !important;
+    background: #f8f7f6 !important;
+  }
+  #sidebar > .px-3:first-child {
+    min-height: 54px;
+    padding: 18px 14px 8px !important;
+    align-items: flex-start;
+  }
+  #sidebar > .px-3:first-child .avatar,
+  #themeBtn,
+  #closeSidebar {
+    display: none;
+  }
+  #sidebar > .px-3:first-child .font-semibold {
+    font-size: 15px !important;
+    font-weight: 740 !important;
+    color: #2e2b29;
+  }
+  #sidebar > .px-2 {
+    padding: 18px 10px 8px !important;
+  }
+  #newSession {
+    min-height: 42px;
+    border: 0 !important;
+    background: transparent !important;
+    border-radius: 12px !important;
+    color: #2f2c2a !important;
+    font-size: 16px !important;
+    font-weight: 720 !important;
+  }
+  #newSession:hover,
+  .cw-nav-row:hover,
+  .cw-nav-row.active {
+    background: #ecebea !important;
+  }
+  .cw-nav-list {
+    gap: 5px;
+    padding: 8px 10px 18px;
+    border-bottom: 1px solid #e8e3df;
+  }
+  .cw-nav-row {
+    min-height: 42px;
+    border-radius: 13px;
+    padding: 0 12px;
+    font-size: 16px;
+    font-weight: 720;
+    color: #2f2c2a;
+  }
+  .cw-nav-icon,
+  .cw-nav-icon svg {
+    width: 18px;
+    height: 18px;
+    color: #756f69;
+  }
+  .cw-search-row {
+    margin-bottom: 8px;
+    min-height: 42px;
+    border-radius: 13px;
+    background: #ecebea;
+  }
+  .cw-search-row input {
+    height: 42px;
+    font-size: 16px !important;
+    font-weight: 650;
+    color: #8f969f;
+  }
+  #sessionList {
+    padding: 18px 12px 8px !important;
+  }
+  .cw-session-head {
+    min-height: 30px;
+    padding: 0 4px 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #8c8781;
+  }
+  .session-more-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+  }
+  #sessionItems .session-item {
+    min-height: 38px;
+    padding: 8px 11px !important;
+    margin-bottom: 3px !important;
+    border: 0 !important;
+    border-left: 0 !important;
+    border-radius: 12px !important;
+    background: transparent;
+    color: #2f2c2a;
+  }
+  #sessionItems .session-item:hover,
+  #sessionItems .session-item.active {
+    background: #ecebea !important;
+  }
+  #sessionItems .session-item .text-sm {
+    font-size: 15px !important;
+    font-weight: 700;
+  }
+  .cw-prompt-section,
+  body.code-mode .cw-prompt-section {
+    display: none;
+  }
+  .cw-workspace-card {
+    margin: 8px 14px 16px;
+    padding: 14px 14px 13px;
+    border-color: #dfd8d0;
+    border-radius: 13px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(36, 31, 27, .05);
+  }
+  .cw-workspace-card-head {
+    margin-bottom: 11px;
+    font-size: 13px;
+    color: #8d877f;
+  }
+  .cw-workspace-row {
+    min-height: 38px;
+    padding: 0 5px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 720;
+  }
+  .cw-local-footer {
+    min-height: 72px;
+    background: #fff;
+  }
+  .cw-local-footer #settingsBtn {
+    width: 38px;
+    height: 38px;
+    border: 1px solid #e6dfd8;
+    border-radius: 12px;
+    background: #fff;
+    font-size: 18px;
+  }
+  .mobile-shortcuts-hint {
+    display: none !important;
+  }
+  #mainPane {
+    position: relative;
+    background: #fff !important;
+  }
+  #mainPane > header {
+    min-height: 52px;
+    padding: 0 16px 0 18px !important;
+    background: #fff !important;
+    border-bottom: 1px solid #ece6df !important;
+  }
+  #titleLabel {
+    font-size: 16px !important;
+    font-weight: 760 !important;
+    color: #282523;
+  }
+  .cw-code-chip {
+    min-height: 34px;
+    padding: 0 16px;
+    border-color: #e4ddd6;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(36,31,27,.04);
+    color: #3a3530;
+    font-size: 13px;
+  }
+  #mainPane > header select,
+  #configCenterBtn,
+  #headerMoreBtn,
+  #helpBtn,
+  #exportBtn {
+    color: #6f6963;
+  }
+  #chat {
+    background: #fff !important;
+  }
+  #chatInner {
+    max-width: 980px !important;
+    padding-top: 14vh !important;
+  }
+  .empty-logo {
+    display: none;
+  }
+  .empty-title {
+    margin-bottom: 12px;
+    color: #2b2927;
+    font-size: clamp(38px, 4vw, 56px);
+    font-weight: 780;
+    line-height: 1.05;
+    letter-spacing: 0;
+  }
+  .empty-subtitle {
+    margin-bottom: 0;
+    color: #7e7770;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .empty-cards {
+    display: none !important;
+  }
+  body.code-mode #chatInner {
+    padding-top: 18vh !important;
+  }
+  body.code-mode .empty-title {
+    font-size: clamp(40px, 4.2vw, 58px);
+  }
+  body.cw-empty footer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: var(--cw-empty-form-top);
+    z-index: 12;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    background: transparent !important;
+    pointer-events: none;
+  }
+  body.cw-empty footer form {
+    pointer-events: auto;
+  }
+  body.cw-empty #form {
+    width: min(900px, calc(100vw - var(--cw-sidebar-width) - 220px)) !important;
+    max-width: 900px !important;
+  }
+  body.code-mode.cw-empty #form {
+    width: min(960px, calc(100vw - var(--cw-sidebar-width) - 220px)) !important;
+    max-width: 960px !important;
+  }
+  .composer {
+    border-color: #ded4cb;
+    border-radius: 22px;
+    box-shadow: 0 24px 65px rgba(61, 52, 43, .10);
+  }
+  body.cw-empty .composer {
+    padding: 22px 24px 18px;
+  }
+  body.cw-empty .composer-textarea {
+    min-height: 44px;
+    padding: 0 2px 12px;
+    font-size: 18px;
+    line-height: 1.5;
+  }
+  body.cw-empty .composer-actions {
+    margin-top: 6px;
+  }
+  .composer-btn {
+    border-radius: 11px;
+  }
+  #webSearchBtn.toolbar-btn-active,
+  #webSearchBtn[aria-pressed="true"] {
+    background: #efd9cf !important;
+    color: #c46136 !important;
+  }
+  .cw-context-chip {
+    min-height: 32px;
+    padding: 0 13px;
+    border-color: #e4ddd6;
+    border-radius: 10px;
+    background: #fff;
+    color: #5b554f;
+    font-size: 13px;
+  }
+  .cw-model-select {
+    min-height: 34px;
+    padding: 0 28px 0 10px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #2f2b28;
+    font-size: 14px;
+    font-weight: 760;
+    cursor: pointer;
+  }
+  .cw-model-select:hover {
+    background: #f1eeeb;
+  }
+  .composer-send {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    background: #24211f;
+    color: #fff;
+  }
+  .cw-quick-actions {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 28px;
+  }
+  body.cw-empty .cw-quick-actions {
+    display: flex;
+  }
+  .cw-quick-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 38px;
+    padding: 0 18px;
+    border: 1px solid #e3dcd4;
+    border-radius: 999px;
+    background: #fff;
+    color: #3b3632;
+    font-size: 14px;
+    font-weight: 720;
+    box-shadow: 0 4px 12px rgba(38, 31, 26, .035);
+  }
+  .cw-quick-action svg {
+    width: 17px;
+    height: 17px;
+    color: #777069;
+  }
+  body:not(.code-mode) .cw-code-only {
+    display: none;
+  }
+  body.code-mode .cw-chat-only {
+    display: none;
+  }
+  body.cw-empty footer .text-center.text-\\[11px\\] {
+    position: fixed;
+    left: var(--cw-sidebar-width);
+    right: 0;
+    bottom: 20px;
+    margin: 0 !important;
+    color: #b0a8a0 !important;
+  }
+  body:not(.cw-empty) .cw-quick-actions {
+    display: none !important;
+  }
+  @media (max-width: 768px) {
+    body {
+      --cw-sidebar-width: 286px;
+      --cw-empty-form-top: 50vh;
+    }
+    #chatInner {
+      padding-top: 10vh !important;
+    }
+    body.cw-empty footer {
+      position: static;
+      padding: 0 12px 18px !important;
+    }
+    body.cw-empty #form {
+      max-width: 100% !important;
+    }
+    body.cw-empty footer .text-center.text-\\[11px\\] {
+      position: static;
+      margin-top: 10px !important;
+    }
+    .empty-title {
+      font-size: 31px;
+    }
+    .empty-subtitle {
+      font-size: 14px;
+    }
+  }
+
   /* ===== Buttons ===== */
   .btn {
     display: inline-flex; align-items: center; justify-content: center;
@@ -2036,6 +2615,251 @@
   .session-item:hover { background: var(--border); }
   .session-item.active { background: var(--accent-soft-2); border-left-color: var(--accent); }
   .dark .session-item.active { background: var(--accent-soft); }
+
+  /* ===== Final redraw overrides: keep these at the end of CSS ===== */
+  body {
+    --cw-sidebar-width: 292px;
+    --cw-empty-form-top: clamp(330px, 37vh, 420px);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: #30302e;
+  }
+  #mainPane { position: relative; }
+  #sidebar {
+    width: var(--cw-sidebar-width) !important;
+    min-width: var(--cw-sidebar-width) !important;
+  }
+  #sidebar > .px-3:first-child .avatar,
+  #themeBtn,
+  #closeSidebar {
+    display: none !important;
+  }
+  #sidebar > .px-3:first-child {
+    padding: 20px 16px 8px !important;
+  }
+  #sidebar > .px-2 {
+    padding: 18px 12px 8px !important;
+  }
+  #sidebar > .px-3:first-child .font-semibold {
+    font-family: Georgia, "Times New Roman", "Songti SC", serif;
+    font-size: 22px !important;
+    font-weight: 600 !important;
+    line-height: 1.1 !important;
+    letter-spacing: 0 !important;
+    color: #22201e !important;
+  }
+  #newSession,
+  .cw-nav-row {
+    min-height: 40px !important;
+    border-radius: 12px !important;
+    font-size: 15px !important;
+    font-weight: 610 !important;
+    letter-spacing: 0 !important;
+  }
+  #newSession {
+    border: 0 !important;
+    background: transparent !important;
+  }
+  .cw-nav-list { padding: 8px 12px 18px !important; gap: 3px !important; }
+  .cw-tabs { display: none !important; }
+  .cw-prompt-section,
+  body.code-mode .cw-prompt-section { display: none !important; }
+  .cw-workspace-card {
+    margin: 8px 14px 16px !important;
+    padding: 14px !important;
+    border-radius: 13px !important;
+    background: #fff !important;
+  }
+  .empty-hero {
+    min-height: auto !important;
+    justify-content: flex-start !important;
+    padding: 0 20px !important;
+    text-align: center !important;
+  }
+  #chatInner {
+    max-width: 980px !important;
+    padding-top: 22vh !important;
+  }
+  body.code-mode #chatInner {
+    padding-top: 22vh !important;
+  }
+  .empty-logo { display: none !important; }
+  .empty-title {
+    margin: 0 0 14px !important;
+    color: #4b4641 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif !important;
+    font-size: clamp(36px, 3.55vw, 50px) !important;
+    font-weight: 380 !important;
+    line-height: 1.12 !important;
+    letter-spacing: 0 !important;
+  }
+  .empty-subtitle {
+    max-width: none !important;
+    margin: 0 auto !important;
+    color: #756f69 !important;
+    font-size: 14px !important;
+    line-height: 1.55 !important;
+    font-weight: 400 !important;
+  }
+  .empty-cards { display: none !important; }
+  body.cw-empty footer {
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: var(--cw-empty-form-top) !important;
+    z-index: 12 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    background: transparent !important;
+    pointer-events: none !important;
+  }
+  body.cw-empty footer form { pointer-events: auto !important; }
+  body.cw-empty #form {
+    width: min(860px, calc(100vw - var(--cw-sidebar-width) - 260px)) !important;
+    max-width: 860px !important;
+  }
+  body.code-mode.cw-empty #form {
+    width: min(920px, calc(100vw - var(--cw-sidebar-width) - 240px)) !important;
+    max-width: 920px !important;
+  }
+  body.cw-empty .composer {
+    min-height: 166px !important;
+    padding: 24px 26px 20px !important;
+    border-color: #ded4cb !important;
+    border-radius: 21px !important;
+    box-shadow: 0 20px 55px rgba(61, 52, 43, .08) !important;
+  }
+  body.cw-empty .composer-textarea {
+    min-height: 66px !important;
+    padding: 2px 2px 14px !important;
+    font-size: 17px !important;
+    line-height: 1.48 !important;
+    font-weight: 400 !important;
+  }
+  body.cw-empty .composer-actions { margin-top: 4px !important; }
+  body.cw-empty .cw-quick-actions {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 28px;
+  }
+  body:not(.cw-empty) .cw-quick-actions { display: none !important; }
+  body:not(.code-mode) .cw-code-only { display: none !important; }
+  body.code-mode .cw-chat-only { display: none !important; }
+  .cw-quick-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 36px;
+    padding: 0 16px;
+    border: 1px solid #e3dcd4;
+    border-radius: 999px;
+    background: #fff;
+    color: #3b3632;
+    font-size: 13px;
+    font-weight: 620;
+    box-shadow: 0 4px 12px rgba(38, 31, 26, .035);
+  }
+  .cw-quick-action svg { width: 17px; height: 17px; color: #777069; }
+  .cw-model-select {
+    min-height: 32px;
+    padding: 0 28px 0 10px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #2f2b28;
+    font-size: 14px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .mobile-shortcuts-hint { display: none !important; }
+  .composer-send {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 12px !important;
+    background: #24211f !important;
+  }
+  body.cw-empty footer .text-center.text-\[11px\] {
+    position: fixed !important;
+    left: var(--cw-sidebar-width) !important;
+    right: 0 !important;
+    bottom: 20px !important;
+    margin: 0 !important;
+    color: #b0a8a0 !important;
+  }
+  @media (max-width: 768px) {
+    body { --cw-sidebar-width: 286px; --cw-empty-form-top: 50vh; }
+    #chatInner { padding-top: 12vh !important; }
+    body.cw-empty footer {
+      position: static !important;
+      padding: 0 12px 18px !important;
+    }
+    body.cw-empty #form { max-width: 100% !important; }
+    body.code-mode.cw-empty #form,
+    body.cw-empty #form { width: 100% !important; }
+    body.cw-empty footer .text-center.text-\[11px\] {
+      position: static !important;
+      margin-top: 10px !important;
+    }
+    .empty-title { font-size: 31px !important; }
+    .empty-subtitle { font-size: 14px !important; }
+  }
+
+  /* Claude-like typography polish */
+  #titleLabel {
+    font-size: 15px !important;
+    font-weight: 650 !important;
+    color: #2f2c29 !important;
+  }
+  .cw-code-chip {
+    min-height: 32px !important;
+    padding: 0 13px !important;
+    border-radius: 10px !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    color: #3b3733 !important;
+  }
+  .cw-context-chip {
+    min-height: 30px !important;
+    padding: 0 12px !important;
+    border-radius: 9px !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    color: #57514b !important;
+  }
+  .cw-workspace-card-head {
+    font-size: 12px !important;
+    font-weight: 600 !important;
+  }
+  .cw-workspace-row {
+    min-height: 34px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+  }
+  #sessionItems .session-item {
+    min-height: 34px !important;
+    padding: 7px 10px !important;
+  }
+  #sessionItems .session-item .text-sm {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+  }
+  .cw-local-footer strong {
+    font-size: 12.5px !important;
+    font-weight: 650 !important;
+  }
+  .cw-local-footer span {
+    font-size: 11px !important;
+  }
+  .composer-btn {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .composer-btn svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
 </style>
 </head>
 <body class="h-screen flex">
@@ -2058,14 +2882,33 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       <span>新会话</span>
     </button>
-    <div class="relative">
+    <div class="relative cw-search-row hidden">
       <input id="searchInput" type="text" placeholder="搜索"
         class="w-full pl-8 pr-3 py-1.5 text-[13px]" style="background:transparent; border:1px solid transparent;" />
       <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-subtle); font-size:11px;">🔍</span>
     </div>
   </div>
 
-  <div class="px-3 pt-3 pb-1 flex items-center gap-3 text-[11px] uppercase tracking-wider" style="color:var(--text-subtle); font-weight:600;">
+  <nav class="cw-nav-list" aria-label="主导航">
+    <button type="button" class="cw-nav-row active" id="cwChatNav" data-cw-view="chat">
+      <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg></span>
+      <span>聊天</span>
+    </button>
+    <button type="button" class="cw-nav-row" id="cwSearchNav" data-cw-view="search">
+      <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+      <span>搜索</span>
+    </button>
+    <button type="button" class="cw-nav-row" id="cwRecordsNav" data-cw-view="records">
+      <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+      <span>记录</span>
+    </button>
+    <button type="button" class="cw-nav-row" id="cwCodeNav" data-cw-view="code">
+      <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg></span>
+      <span>代码工作区</span>
+    </button>
+  </nav>
+
+  <div class="cw-tabs px-3 pt-3 pb-1 flex items-center gap-3 text-[11px] uppercase tracking-wider" style="color:var(--text-subtle); font-weight:600;">
     <button id="viewActive" class="tab-btn transition-colors tab-active">活跃</button>
     <button id="viewArchived" class="tab-btn transition-colors">归档</button>
     <button id="viewMilestones" class="tab-btn transition-colors">标记</button>
@@ -2074,10 +2917,37 @@
   <div id="tagFilter" class="px-3 text-xs hidden"></div>
 
   <div class="flex-1 overflow-y-auto px-2 py-1" id="sessionList">
-    <div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载中...</div>
+    <div class="cw-session-head">
+      <span id="sessionSectionTitle">最近</span>
+      <button type="button" id="sessionMoreBtn" class="session-more-btn" title="历史对话" aria-label="历史对话">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 2"/></svg>
+      </button>
+    </div>
+    <div id="sessionItems">
+      <div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载中...</div>
+    </div>
   </div>
 
-  <div class="pt-2 pb-1 px-2" style="border-top:1px solid var(--border);">
+  <div id="cwWorkspaceCard" class="cw-workspace-card">
+    <div class="cw-workspace-card-head">
+      <span>工作区</span>
+      <span id="cwWorkspaceBranch" class="cw-workspace-branch">main</span>
+    </div>
+    <button type="button" class="cw-workspace-row" id="cwWorkspaceProjectBtn" title="切换或查看工作目录">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z"/></svg>
+      <span id="cwWorkspaceProjectName">claude-web</span>
+    </button>
+    <button type="button" class="cw-workspace-row" id="cwWorkspacePermBtn" title="工具权限策略">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M6 8h12"/><path d="M7 8l-3 7h6z"/><path d="M17 8l-3 7h6z"/></svg>
+      <span id="cwWorkspacePermLabel">本地模式</span>
+    </button>
+    <button type="button" class="cw-workspace-row" id="cwWorkspaceTaskBtn" title="打开任务面板">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="m4 6 1 1 2-2"/><path d="m4 12 1 1 2-2"/><path d="m4 18 1 1 2-2"/></svg>
+      <span>任务面板</span>
+    </button>
+  </div>
+
+  <div class="cw-prompt-section pt-2 pb-1 px-2" style="border-top:1px solid var(--border);">
     <div class="px-2 py-1 flex items-center justify-between text-[11px] uppercase tracking-wider" style="color:var(--text-subtle); font-weight:600;">
       <span>提示词模板</span>
       <button id="managePrompts" class="normal-case tracking-normal hover:underline text-[11px]" style="color:var(--accent); font-weight:500;">管理</button>
@@ -2085,22 +2955,35 @@
     <div id="promptList" class="max-h-36 overflow-y-auto space-y-0.5 py-1"></div>
   </div>
 
-  <div class="px-3 py-2.5 text-[12px] flex items-center justify-between gap-2" style="border-top:1px solid var(--border); color:var(--text-muted);">
-    <button id="statsBar" class="sidebar-footer-action hover:underline flex items-center gap-1" style="color:var(--text);" title="查看统计（估算价，仅供参考）">💰 ~$0.00</button>
-    <button id="mcpBtn" class="sidebar-footer-action hover:underline flex items-center gap-1" style="color:var(--text);" title="MCP 管理">🔌</button>
-    <button id="settingsBtn" class="sidebar-footer-action hover:underline flex items-center gap-1" style="color:var(--text);">⚙️</button>
+  <div class="cw-local-footer px-3 py-2.5 text-[12px] flex items-center justify-between gap-2" style="border-top:1px solid var(--border); color:var(--text-muted);">
+    <button id="statsBar" class="hidden sidebar-footer-action" title="查看统计（估算价，仅供参考）">~$0.00</button>
+    <button id="mcpBtn" class="hidden sidebar-footer-action" title="MCP 管理">MCP</button>
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="avatar cw-local-mark">C</div>
+      <div class="min-w-0">
+        <strong style="display:block;color:var(--text);font-size:13px;line-height:1.2;">本地会话</strong>
+        <span style="display:block;margin-top:3px;color:var(--text-muted);font-size:11.5px;line-height:1.25;">无需登录 · 数据留在本机</span>
+      </div>
+    </div>
+    <button id="settingsBtn" class="sb-icon-btn" style="color:var(--text);" title="设置" aria-label="设置">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10"/><path d="M18 6h2"/><path d="M4 12h3"/><path d="M11 12h9"/><path d="M4 18h12"/><path d="M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+    </button>
   </div>
 </aside>
 <div id="sidebarScrim" class="sidebar-scrim" aria-hidden="true"></div>
 
 <!-- Main -->
-<div class="flex-1 flex flex-col min-w-0" style="background:var(--bg);">
+<div id="mainPane" class="flex-1 flex flex-col min-w-0" style="background:var(--bg);">
   <header class="px-4 py-2.5 flex items-center justify-between gap-3" style="background:var(--bg); border-bottom:1px solid var(--border);">
     <div class="flex items-center gap-2 min-w-0">
       <button id="toggleSidebar" class="sidebar-toggle text-xl px-1" style="color:var(--text-muted);" aria-label="打开会话列表" aria-expanded="false">☰</button>
       <div class="min-w-0 flex items-center gap-2">
         <span id="titleLabel" class="font-medium truncate" style="letter-spacing:-0.01em; font-size:14.5px;">新会话</span>
         <button id="suggestTitleBtn" class="text-sm hidden opacity-60 hover:opacity-100" style="color:var(--accent);" title="让 Claude 自动命名">🪄</button>
+        <span class="cw-code-chip-row" id="cwHeaderCodeChips">
+          <span class="cw-code-chip"><strong id="cwHeaderProjectName">claude-web</strong></span>
+          <span class="cw-code-chip"><strong id="cwHeaderBranchName">main</strong></span>
+        </span>
         <span class="text-[11px] truncate flex items-center gap-2" id="sessionLabel" style="color:var(--text-subtle);">
           <span id="sessionLabelText"></span>
           <span id="sessionIdText" class="hidden"></span>
@@ -2111,16 +2994,19 @@
       </div>
     </div>
     <div class="flex items-center gap-1 flex-shrink-0">
-      <select id="modelSelect" class="text-[12px] px-2.5 py-1" title="模型" style="border:1px solid transparent; background:transparent;">
-        <option value="">默认模型</option>
-        <option value="opus">Opus</option>
-        <option value="sonnet">Sonnet</option>
-        <option value="haiku">Haiku</option>
-      </select>
-      <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions">⚙</button>
-      <button id="headerMoreBtn" class="sb-icon-btn" title="工作目录 / 权限策略">⋯</button>
-      <button id="helpBtn" class="sb-icon-btn relative" title="帮助 / 快捷键 / 更新日志">?<span id="helpBadge" class="hidden absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style="background:#ef4444;"></span></button>
-      <button id="exportBtn" class="sb-icon-btn" title="导出 Markdown">📥</button>
+      <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions" aria-label="配置中心">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h10"/><path d="M8 12h10"/><path d="M8 18h10"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
+      </button>
+      <button id="headerMoreBtn" class="sb-icon-btn" title="工作目录 / 权限策略" aria-label="工作目录 / 权限策略">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z"/></svg>
+      </button>
+      <button id="helpBtn" class="sb-icon-btn relative" title="帮助 / 快捷键 / 更新日志" aria-label="帮助">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.7 2.7 0 0 1 5 1.4c0 1.8-2.5 2.1-2.5 3.6"/><path d="M12 17h.01"/></svg>
+        <span id="helpBadge" class="hidden absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style="background:#ef4444;"></span>
+      </button>
+      <button id="exportBtn" class="sb-icon-btn" title="导出 Markdown" aria-label="导出 Markdown">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11"/><path d="m8 11 4 4 4-4"/><path d="M5 20h14"/></svg>
+      </button>
       <button id="reopenArtifactBtn" class="sb-icon-btn hidden" title="重新打开 Artifact 面板">📐<span id="reopenArtifactCount" class="ml-1 text-[10px]" style="color:var(--accent);"></span></button>
     </div>
   </header>
@@ -2148,28 +3034,28 @@
     <div class="max-w-3xl w-full mx-auto px-6 py-8" id="chatInner">
     <div id="welcome" class="empty-hero">
       <div class="empty-logo">C</div>
-      <div class="empty-title">Claude Code Web</div>
-      <div class="empty-subtitle">Claude Code CLI 的可视化界面 · 支持工具可视化、Git 回滚、会话分叉</div>
+      <div class="empty-title">今天想聊点什么？</div>
+      <div class="empty-subtitle">默认是普通聊天，界面保持轻一点；需要项目上下文、权限策略或 Git 状态时，再切到 Code 模式。</div>
       <div class="empty-cards">
-        <div class="empty-card" data-prompt="帮我审查当前目录的代码质量，重点关注：代码风格、潜在 bug、安全问题。请先用 Glob 列出所有源文件。">
+        <div class="empty-card" data-prompt="帮我解释下面这段文字，提炼核心意思、关键结论和可能的隐含前提：">
           <div class="empty-card-icon">🔍</div>
-          <div class="empty-card-title">代码审查</div>
-          <div class="empty-card-sub">扫描当前目录 · 列出改进建议</div>
+          <div class="empty-card-title">解释一段文字</div>
+          <div class="empty-card-sub">快速理解重点</div>
         </div>
-        <div class="empty-card" data-prompt="解释一下 Python 的装饰器，配合代码示例说明常见用法。">
+        <div class="empty-card" data-prompt="帮我整理一下思路，把这些零散想法归纳成清晰的结构：">
           <div class="empty-card-icon">📚</div>
-          <div class="empty-card-title">技术解释</div>
-          <div class="empty-card-sub">深入讲解某个技术概念</div>
+          <div class="empty-card-title">整理思路</div>
+          <div class="empty-card-sub">把想法变清楚</div>
         </div>
-        <div class="empty-card" data-prompt="帮我写一个命令行工具，功能是：读取目录下的所有 markdown 文件，统计总字数。要求用 Python 实现，含参数解析和错误处理。">
+        <div class="empty-card" data-prompt="帮我把这个目标拆成一个可执行清单，按优先级排序：">
           <div class="empty-card-icon">🛠️</div>
-          <div class="empty-card-title">写个小工具</div>
-          <div class="empty-card-sub">快速搭建一个脚本</div>
+          <div class="empty-card-title">生成清单</div>
+          <div class="empty-card-sub">拆成可执行步骤</div>
         </div>
-        <div class="empty-card" data-prompt="用 Mermaid 画一个 HTTP 请求从浏览器到后端的完整流程图，包括 DNS、TCP、TLS、服务器处理、数据库查询。">
+        <div class="empty-card" data-prompt="帮我改写下面这段话，让语气更自然、更清楚：">
           <div class="empty-card-icon">📊</div>
-          <div class="empty-card-title">画个流程图</div>
-          <div class="empty-card-sub">Mermaid 图表可视化</div>
+          <div class="empty-card-title">改写语气</div>
+          <div class="empty-card-sub">润色表达方式</div>
         </div>
       </div>
       <div class="mobile-shortcuts-hint text-xs mt-8" style="color:var(--text-subtle);">快捷键：⌘K 搜索 · ⌘N 新会话 · Esc 关闭</div>
@@ -2216,9 +3102,26 @@
             <button type="button" id="agentLoopBtn" class="composer-btn" title="Agent Loop 自主工作">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>
             </button>
+            <span class="cw-composer-code-context" id="cwComposerCodeContext">
+              <span class="cw-context-chip">
+                <span id="cwComposerProjectName">claude-web</span>
+              </span>
+              <span class="cw-context-chip">
+                <span id="cwComposerBranchName">main</span>
+              </span>
+              <span class="cw-context-chip">
+                <span id="cwComposerPermLabel">本地模式</span>
+              </span>
+            </span>
             <div id="tokenCounter" class="text-[10px] ml-1" style="color:var(--text-subtle);">0 tokens</div>
           </div>
           <div class="flex items-center gap-1.5">
+            <select id="modelSelect" class="cw-model-select" title="模型">
+              <option value="">默认模型</option>
+              <option value="opus">Opus</option>
+              <option value="sonnet">Sonnet</option>
+              <option value="haiku">Haiku</option>
+            </select>
             <button type="button" id="stopBtn" class="hidden composer-btn composer-btn-stop" title="停止">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
             </button>
@@ -2231,6 +3134,40 @@
       </div>
       <div class="text-center text-[11px] mt-2" style="color:var(--text-subtle);">
         Claude 可能会出错，重要信息请核实
+      </div>
+      <div id="composerQuickActions" class="cw-quick-actions">
+        <button type="button" class="cw-quick-action cw-chat-only" data-prompt="帮我解释下面这段文字，提炼核心意思、关键结论和可能的隐含前提：">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span>解释一段文字</span>
+        </button>
+        <button type="button" class="cw-quick-action cw-chat-only" data-prompt="帮我整理一下思路，把这些零散想法归纳成清晰的结构：">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6"/></svg>
+          <span>整理思路</span>
+        </button>
+        <button type="button" class="cw-quick-action cw-chat-only" data-prompt="帮我把这个目标拆成一个可执行清单，按优先级排序：">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h10"/><path d="m4 7 1 1 2-2"/></svg>
+          <span>生成清单</span>
+        </button>
+        <button type="button" class="cw-quick-action cw-chat-only" data-prompt="帮我改写下面这段话，让语气更自然、更清楚：">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19V5"/><path d="M8 19V9"/><path d="M12 19V13"/><path d="M16 19V7"/><path d="M20 19V11"/></svg>
+          <span>改写语气</span>
+        </button>
+        <button type="button" class="cw-quick-action cw-code-only" data-prompt="帮我审查当前目录的代码质量，重点关注：代码风格、潜在 bug、安全问题。请先列出相关源文件。">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span>代码审查</span>
+        </button>
+        <button type="button" class="cw-quick-action cw-code-only" data-prompt="帮我解释这个报错，定位原因并给出修复方案：">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6"/></svg>
+          <span>解释报错</span>
+        </button>
+        <button type="button" class="cw-quick-action cw-code-only" data-prompt="请根据下面需求直接修改代码，并说明改动点：">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m14 6 4 4-9 9H5v-4z"/><path d="m16 4 4 4"/></svg>
+          <span>生成补丁</span>
+        </button>
+        <button type="button" class="cw-quick-action cw-code-only" data-prompt="请为当前改动补充关键测试，并运行相关测试验证：">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19V5"/><path d="M8 19V9"/><path d="M12 19V13"/><path d="M16 19V7"/><path d="M20 19V11"/></svg>
+          <span>写测试</span>
+        </button>
       </div>
     </form>
   </footer>
@@ -3071,6 +4008,7 @@ let currentController = null;
 let archivedView = false;
 let cliView = false;
 let milestoneView = false;
+let codeMode = false;
 let activeTagFilter = null;
 let sessionListRequestId = 0;
 let cliSessionListRequestId = 0;
@@ -3101,6 +4039,24 @@ const sessionLabel = $('sessionIdText'), titleLabel = $('titleLabel');
 const cwdInput = $('cwdInput'), cwdList = $('cwdList');
 const newSessionBtn = $('newSession'), welcome = $('welcome');
 const sessionList = $('sessionList');
+const sessionItems = $('sessionItems') || sessionList;
+const sessionSectionTitle = $('sessionSectionTitle');
+const sessionMoreBtn = $('sessionMoreBtn');
+const cwChatNav = $('cwChatNav');
+const cwSearchNav = $('cwSearchNav');
+const cwRecordsNav = $('cwRecordsNav');
+const cwCodeNav = $('cwCodeNav');
+const cwWorkspaceProjectName = $('cwWorkspaceProjectName');
+const cwWorkspaceBranch = $('cwWorkspaceBranch');
+const cwWorkspacePermLabel = $('cwWorkspacePermLabel');
+const cwWorkspaceProjectBtn = $('cwWorkspaceProjectBtn');
+const cwWorkspacePermBtn = $('cwWorkspacePermBtn');
+const cwWorkspaceTaskBtn = $('cwWorkspaceTaskBtn');
+const cwHeaderProjectName = $('cwHeaderProjectName');
+const cwHeaderBranchName = $('cwHeaderBranchName');
+const cwComposerProjectName = $('cwComposerProjectName');
+const cwComposerBranchName = $('cwComposerBranchName');
+const cwComposerPermLabel = $('cwComposerPermLabel');
 const fileInput = $('fileInput'), attachBtn = $('attachBtn'), attachmentsEl = $('attachments');
 const webSearchBtn = $('webSearchBtn');
 const docInput = $('docInput');
@@ -3148,6 +4104,7 @@ const artifactFullscreenBtn = $('artifactFullscreenBtn');
 const artifactDownloadBtn = $('artifactDownloadBtn');
 const artifactCopyBtn = $('artifactCopyBtn');
 const searchInput = $('searchInput');
+const sidebarSearchRow = searchInput ? searchInput.closest('.cw-search-row') : null;
 const modelSelect = $('modelSelect');
 const permSelect = $('permSelect');
 const mobileModeBanner = $('mobileModeBanner');
@@ -7246,7 +8203,7 @@ function startNewSession() {
   sessionId = null;
   sessionFeedback = {};
   milestoneView = false;
-  titleLabel.textContent = '新会话';
+  titleLabel.textContent = codeMode ? 'Code 模式' : '新会话';
   sessionLabelText.textContent = '尚未开始';
   suggestTitleBtn.classList.add('hidden');
   chatInner.innerHTML = '';
@@ -7265,13 +8222,18 @@ function startNewSession() {
   refreshMemories();
   restoreDraft();
   updateViewTabs();
+  setCodeMode(codeMode);
+  syncEmptyShellState();
   highlightActiveSession();
 }
 
 let searchTimer = null;
 searchInput.addEventListener('input', () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => refreshSessions(), 300);
+  searchTimer = setTimeout(() => {
+    updateShellNav(searchInput.value.trim() ? 'search' : undefined);
+    refreshSessions();
+  }, 300);
 });
 
 viewActiveBtn.addEventListener('click', () => { archivedView = false; cliView = false; milestoneView = false; updateViewTabs(); refreshTags(); refreshSessions(); });
@@ -7300,6 +8262,7 @@ viewCliBtn.addEventListener('click', () => {
 
 function updateViewTabs() {
   updateTabStyles();
+  updateShellNav();
 }
 
 async function refreshTags() {
@@ -7343,10 +8306,10 @@ async function refreshSessions() {
     const list = await r.json();
     if (cliView || requestId !== sessionListRequestId || isArchivedRequest !== archivedView) return;
     if (list.length === 0) {
-      sessionList.innerHTML = `<div class="text-xs text-gray-400 text-center py-4">${q ? '无匹配' : (archivedView ? '无归档' : '暂无历史')}</div>`;
+      sessionItems.innerHTML = `<div class="text-xs text-gray-400 text-center py-4">${q ? '无匹配' : (archivedView ? '无归档' : '暂无历史')}</div>`;
       return;
     }
-    sessionList.innerHTML = list.map(s => `
+    sessionItems.innerHTML = list.map(s => `
       <div class="session-item mb-1 p-2 rounded-lg border border-transparent hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer group ${s.id === sessionId ? 'active' : ''}" data-id="${s.id}">
         <div class="flex items-start justify-between gap-2">
           <div class="flex-1 min-w-0">
@@ -7371,13 +8334,13 @@ async function refreshSessions() {
       </div>
     `).join('');
 
-    sessionList.querySelectorAll('.session-item').forEach(el => {
+    sessionItems.querySelectorAll('.session-item').forEach(el => {
       el.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
         loadSession(el.dataset.id);
       });
     });
-    sessionList.querySelectorAll('button[data-del]').forEach(b => {
+    sessionItems.querySelectorAll('button[data-del]').forEach(b => {
       b.addEventListener('click', async (e) => {
         e.stopPropagation();
         const targetId = b.dataset.del;
@@ -7400,7 +8363,7 @@ async function refreshSessions() {
         refreshSessions(); refreshStats(); refreshTags();
       });
     });
-    sessionList.querySelectorAll('button[data-pin]').forEach(b => {
+    sessionItems.querySelectorAll('button[data-pin]').forEach(b => {
       b.addEventListener('click', async (e) => {
         e.stopPropagation();
         const pinned = b.dataset.pinned === 'true';
@@ -7411,7 +8374,7 @@ async function refreshSessions() {
         refreshSessions();
       });
     });
-    sessionList.querySelectorAll('button[data-archive]').forEach(b => {
+    sessionItems.querySelectorAll('button[data-archive]').forEach(b => {
       b.addEventListener('click', async (e) => {
         e.stopPropagation();
         const archived = b.dataset.archived === 'true';
@@ -7422,7 +8385,7 @@ async function refreshSessions() {
         refreshSessions();
       });
     });
-    sessionList.querySelectorAll('button[data-tag-edit]').forEach(b => {
+    sessionItems.querySelectorAll('button[data-tag-edit]').forEach(b => {
       b.addEventListener('click', async (e) => {
         e.stopPropagation();
         const current = b.dataset.tags;
@@ -7470,10 +8433,10 @@ async function renderMilestones() {
   const requestId = ++sessionListRequestId;
   tagFilter.classList.add('hidden');
   if (!sessionId) {
-    sessionList.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">打开一个会话后查看标记</div>';
+    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">打开一个会话后查看标记</div>';
     return;
   }
-  sessionList.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载标记中...</div>';
+  sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载标记中...</div>';
   try {
     const r = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/milestones`);
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -7481,10 +8444,10 @@ async function renderMilestones() {
     if (!milestoneView || requestId !== sessionListRequestId) return;
     const items = data.milestones || [];
     if (!items.length) {
-      sessionList.innerHTML = '<div class="text-xs text-center py-6 px-3" style="color:var(--text-subtle);">还没有标记。点消息旁边的 ⭐，就能把关键轮次收进这里。</div>';
+      sessionItems.innerHTML = '<div class="text-xs text-center py-6 px-3" style="color:var(--text-subtle);">还没有标记。点消息旁边的 ⭐，就能把关键轮次收进这里。</div>';
       return;
     }
-    sessionList.innerHTML = `
+    sessionItems.innerHTML = `
       <div class="px-1 pb-2 text-[11px]" style="color:var(--text-subtle);">当前会话 · ${items.length} 个标记</div>
       <div class="space-y-2">
         ${items.map((item, idx) => {
@@ -7502,7 +8465,7 @@ async function renderMilestones() {
         }).join('')}
       </div>
     `;
-    sessionList.querySelectorAll('[data-milestone-idx]').forEach(btn => {
+    sessionItems.querySelectorAll('[data-milestone-idx]').forEach(btn => {
       btn.addEventListener('click', () => {
         const item = items[Number(btn.dataset.milestoneIdx)];
         if (item) scrollToMilestone(item);
@@ -7510,12 +8473,12 @@ async function renderMilestones() {
     });
   } catch (e) {
     if (!milestoneView || requestId !== sessionListRequestId) return;
-    sessionList.innerHTML = `<div class="text-xs text-center py-6" style="color:#ef4444;">标记加载失败：${escapeHtml(e.message || e)}</div>`;
+    sessionItems.innerHTML = `<div class="text-xs text-center py-6" style="color:#ef4444;">标记加载失败：${escapeHtml(e.message || e)}</div>`;
   }
 }
 
 function highlightActiveSession() {
-  sessionList.querySelectorAll('.session-item').forEach(el => {
+  sessionItems.querySelectorAll('.session-item').forEach(el => {
     el.classList.toggle('active', el.dataset.id === sessionId);
   });
 }
@@ -7545,6 +8508,7 @@ async function loadSession(id) {
     chatInner.innerHTML = '';
     restoreDraft();
     refreshGitStatus();
+    syncEmptyShellState();
 
     let asstContainer = null;
     data.events.forEach((ev, eventIndex) => {
@@ -7612,17 +8576,19 @@ async function refreshCwds() {
 }
 async function refreshGitStatus() {
   const cwd = cwdInput.value.trim();
-  if (!cwd) { gitBar.classList.add('hidden'); return; }
+  if (!cwd) { gitBar.classList.add('hidden'); updateWorkspaceLabels(); return; }
   try {
     const r = await fetch('/api/git?cwd=' + encodeURIComponent(cwd));
-    if (!r.ok) { gitBar.classList.add('hidden'); return; }
+    if (!r.ok) { gitBar.classList.add('hidden'); updateWorkspaceLabels(); return; }
     const d = await r.json();
-    if (!d.available || !d.branch) { gitBar.classList.add('hidden'); return; }
+    if (!d.available || !d.branch) { gitBar.classList.add('hidden'); updateWorkspaceLabels(); return; }
     gitBar.classList.remove('hidden');
     gitBar.textContent = `⎇ ${d.branch}${d.dirty ? ' ±' + d.dirty : ''}`;
-  } catch { gitBar.classList.add('hidden'); }
+    updateWorkspaceLabels();
+  } catch { gitBar.classList.add('hidden'); updateWorkspaceLabels(); }
 }
 cwdInput.addEventListener('change', refreshGitStatus);
+cwdInput.addEventListener('input', updateWorkspaceLabels);
 
 // ===== stats =====
 function renderFeedbackStats(feedback) {
@@ -8635,6 +9601,7 @@ const ALL_TOOLS = ['Bash','Read','Write','Edit','MultiEdit','Grep','Glob','WebFe
 permSelect.value = LS.get('permMode', 'free');
 permSelect.addEventListener('change', () => {
   LS.set('permMode', permSelect.value);
+  updateWorkspaceLabels();
   if (permSelect.value === 'custom') openCustomToolsModal();
 });
 
@@ -9700,9 +10667,327 @@ window.addEventListener('resize', () => {
 // ===== header more (advanced toolbar) =====
 const headerMoreBtn = $('headerMoreBtn');
 const advancedBar = $('advancedBar');
+const emptyTitle = document.querySelector('.empty-title');
+const emptySubtitle = document.querySelector('.empty-subtitle');
+const emptyCards = Array.from(document.querySelectorAll('.empty-card'));
+
+function projectNameFromCwdValue(value) {
+  const raw = (value || '').trim();
+  if (!raw || raw === '~') return 'claude-web';
+  const parts = raw.replace(/\\/g, '/').split('/').filter(Boolean);
+  return parts.pop() || 'claude-web';
+}
+
+function currentProjectName() {
+  return projectNameFromCwdValue(cwdInput ? cwdInput.value : '');
+}
+
+function currentPermissionLabel() {
+  const labels = {
+    free: '本地模式',
+    readonly: '只读模式',
+    plan: '计划模式',
+    acceptEdits: '允许编辑',
+    custom: '自定义权限'
+  };
+  return labels[permSelect?.value] || '本地模式';
+}
+
+function currentBranchLabel() {
+  const text = (gitBar?.textContent || '').trim();
+  const match = text.match(/⎇\s*([^\s±]+)/);
+  return match ? match[1] : 'main';
+}
+
+function setText(el, text) {
+  if (el) el.textContent = text;
+}
+
+function updateWorkspaceLabels() {
+  const project = currentProjectName();
+  const branch = currentBranchLabel();
+  const permission = currentPermissionLabel();
+  [cwWorkspaceProjectName, cwHeaderProjectName, cwComposerProjectName].forEach(el => setText(el, project));
+  [cwWorkspaceBranch, cwHeaderBranchName, cwComposerBranchName].forEach(el => setText(el, branch));
+  [cwWorkspacePermLabel, cwComposerPermLabel].forEach(el => setText(el, permission));
+}
+
+function sidebarSectionLabel() {
+  if (milestoneView) return '标记';
+  if (cliView) return 'CLI 会话';
+  if (archivedView) return '记录';
+  if (searchInput?.value.trim()) return '搜索结果';
+  return codeMode ? '最近' : '最近';
+}
+
+function updateShellNav(active) {
+  const activeKey = active || (codeMode ? 'code' : (archivedView ? 'records' : (searchInput?.value.trim() ? 'search' : 'chat')));
+  [
+    [cwChatNav, 'chat'],
+    [cwSearchNav, 'search'],
+    [cwRecordsNav, 'records'],
+    [cwCodeNav, 'code']
+  ].forEach(([btn, key]) => {
+    if (btn) btn.classList.toggle('active', key === activeKey);
+  });
+  setText(sessionSectionTitle, sidebarSectionLabel());
+}
+
+function updateWelcomeCopy() {
+  if (!welcome) return;
+  if (codeMode) {
+    setText(emptyTitle, '准备处理哪个代码任务？');
+    setText(emptySubtitle, 'Code 模式会显示项目、分支和本地执行状态，但仍然保持聊天的轻量入口。');
+    const codeCards = [
+      ['代码审查', '检查当前项目的问题', '帮我审查当前目录的代码质量，重点关注：代码风格、潜在 bug、安全问题。请先列出相关源文件。'],
+      ['解释报错', '定位原因并给出修复', '帮我解释这个报错，定位原因并给出修复方案：'],
+      ['生成补丁', '按需求直接改代码', '请根据下面需求直接修改代码，并说明改动点：'],
+      ['写测试', '补充关键测试覆盖', '请为当前改动补充关键测试，并运行相关测试验证：']
+    ];
+    emptyCards.forEach((card, idx) => {
+      const title = card.querySelector('.empty-card-title');
+      const sub = card.querySelector('.empty-card-sub');
+      if (codeCards[idx]) {
+        setText(title, codeCards[idx][0]);
+        setText(sub, codeCards[idx][1]);
+        card.dataset.prompt = codeCards[idx][2];
+      }
+    });
+  } else {
+    setText(emptyTitle, '今天想聊点什么？');
+    setText(emptySubtitle, '默认是普通聊天，界面保持轻一点；需要项目上下文、权限策略或 Git 状态时，再切到 Code 模式。');
+    const chatCards = [
+      ['解释一段文字', '快速理解重点', '帮我解释下面这段文字，提炼核心意思、关键结论和可能的隐含前提：'],
+      ['整理思路', '把想法变清楚', '帮我整理一下思路，把这些零散想法归纳成清晰的结构：'],
+      ['生成清单', '拆成可执行步骤', '帮我把这个目标拆成一个可执行清单，按优先级排序：'],
+      ['改写语气', '润色表达方式', '帮我改写下面这段话，让语气更自然、更清楚：']
+    ];
+    emptyCards.forEach((card, idx) => {
+      const title = card.querySelector('.empty-card-title');
+      const sub = card.querySelector('.empty-card-sub');
+      if (chatCards[idx]) {
+        setText(title, chatCards[idx][0]);
+        setText(sub, chatCards[idx][1]);
+        card.dataset.prompt = chatCards[idx][2];
+      }
+    });
+  }
+}
+
+function setCodeMode(enabled, options = {}) {
+  codeMode = !!enabled;
+  document.body.classList.toggle('code-mode', codeMode);
+  if (!sessionId) {
+    setText(titleLabel, codeMode ? 'Code 模式' : '新会话');
+  }
+  if (input) {
+    input.placeholder = codeMode ? '描述要修改、检查或生成的代码任务' : '输入消息，继续对话';
+  }
+  if (advancedBar && !options.keepAdvanced && !options.forceAdvanced) {
+    advancedBar.classList.add('hidden');
+    headerMoreBtn?.classList.remove('toolbar-btn-active');
+  }
+  if (advancedBar && options.forceAdvanced) {
+    advancedBar.classList.remove('hidden');
+    headerMoreBtn?.classList.add('toolbar-btn-active');
+  }
+  updateWorkspaceLabels();
+  updateWelcomeCopy();
+  updateShellNav(codeMode ? 'code' : undefined);
+}
+
+function showSearchField() {
+  if (!sidebarSearchRow || !searchInput) return;
+  sidebarSearchRow.classList.remove('hidden');
+  searchInput.focus();
+  searchInput.select();
+}
+
+function hideSearchFieldIfEmpty() {
+  if (!sidebarSearchRow || !searchInput?.value.trim()) {
+    sidebarSearchRow?.classList.add('hidden');
+  }
+}
+
+function syncEmptyShellState() {
+  const empty = !!(welcome && chatInner && welcome.parentElement === chatInner);
+  document.body.classList.toggle('cw-empty', empty);
+  return empty;
+}
+
+function activateShellView(view) {
+  if (view === 'code') {
+    archivedView = false;
+    cliView = false;
+    milestoneView = false;
+    if (searchInput) searchInput.value = '';
+    hideSearchFieldIfEmpty();
+    setCodeMode(true);
+    updateViewTabs();
+    refreshTags();
+    refreshSessions();
+    closeMobileSidebar();
+    syncEmptyShellState();
+    return;
+  }
+  if (view === 'records') {
+    codeMode = false;
+    archivedView = true;
+    cliView = false;
+    milestoneView = false;
+    if (searchInput) searchInput.value = '';
+    hideSearchFieldIfEmpty();
+    setCodeMode(false);
+    updateShellNav('records');
+    updateViewTabs();
+    refreshTags();
+    refreshSessions();
+    closeMobileSidebar();
+    syncEmptyShellState();
+    return;
+  }
+  if (view === 'search') {
+    codeMode = false;
+    archivedView = false;
+    cliView = false;
+    milestoneView = false;
+    setCodeMode(false);
+    showSearchField();
+    updateShellNav('search');
+    updateViewTabs();
+    refreshSessions();
+    closeMobileSidebar();
+    syncEmptyShellState();
+    return;
+  }
+  codeMode = false;
+  archivedView = false;
+  cliView = false;
+  milestoneView = false;
+  if (searchInput) searchInput.value = '';
+  hideSearchFieldIfEmpty();
+  setCodeMode(false);
+  updateViewTabs();
+  refreshTags();
+  refreshSessions();
+  closeMobileSidebar();
+  syncEmptyShellState();
+}
+
+if (sidebar) {
+  sidebar.addEventListener('click', (e) => {
+    const nav = e.target.closest('[data-cw-view]');
+    if (!nav) return;
+    e.preventDefault();
+    e.stopPropagation();
+    activateShellView(nav.dataset.cwView || 'chat');
+  }, true);
+}
+
+if (chatInner && window.MutationObserver) {
+  new MutationObserver(syncEmptyShellState).observe(chatInner, { childList: true });
+}
+
 headerMoreBtn.addEventListener('click', () => {
+  setCodeMode(true, { keepAdvanced: true });
   advancedBar.classList.toggle('hidden');
-  headerMoreBtn.classList.toggle('toolbar-btn-active');
+  headerMoreBtn.classList.toggle('toolbar-btn-active', !advancedBar.classList.contains('hidden'));
+});
+
+cwChatNav?.addEventListener('click', () => {
+  codeMode = false;
+  archivedView = false;
+  cliView = false;
+  milestoneView = false;
+  searchInput.value = '';
+  hideSearchFieldIfEmpty();
+  setCodeMode(false);
+  updateViewTabs();
+  refreshTags();
+  refreshSessions();
+  closeMobileSidebar();
+});
+
+cwSearchNav?.addEventListener('click', () => {
+  codeMode = false;
+  archivedView = false;
+  cliView = false;
+  milestoneView = false;
+  setCodeMode(false);
+  showSearchField();
+  updateShellNav('search');
+  updateViewTabs();
+  refreshSessions();
+  closeMobileSidebar();
+});
+
+cwRecordsNav?.addEventListener('click', () => {
+  codeMode = false;
+  archivedView = true;
+  cliView = false;
+  milestoneView = false;
+  searchInput.value = '';
+  hideSearchFieldIfEmpty();
+  setCodeMode(false);
+  updateShellNav('records');
+  updateViewTabs();
+  refreshTags();
+  refreshSessions();
+  closeMobileSidebar();
+});
+
+cwCodeNav?.addEventListener('click', () => {
+  archivedView = false;
+  cliView = false;
+  milestoneView = false;
+  searchInput.value = '';
+  hideSearchFieldIfEmpty();
+  setCodeMode(true);
+  updateViewTabs();
+  refreshTags();
+  refreshSessions();
+  closeMobileSidebar();
+});
+
+sessionMoreBtn?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  archivedView = true;
+  cliView = false;
+  milestoneView = false;
+  codeMode = false;
+  setCodeMode(false);
+  updateShellNav('records');
+  updateViewTabs();
+  refreshTags();
+  refreshSessions();
+});
+
+cwWorkspaceProjectBtn?.addEventListener('click', () => {
+  setCodeMode(true, { forceAdvanced: true });
+  cwdInput?.focus();
+});
+
+cwWorkspacePermBtn?.addEventListener('click', () => {
+  setCodeMode(true, { forceAdvanced: true });
+  permSelect?.focus();
+});
+
+cwWorkspaceTaskBtn?.addEventListener('click', () => {
+  setCodeMode(true);
+  if (todoPanel) todoPanel.classList.toggle('hidden');
+});
+
+document.querySelectorAll('.cw-quick-action').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const p = btn.dataset.prompt;
+    if (!p) return;
+    input.value = p;
+    input.focus();
+    updateTokenCount();
+    autosizeTextarea();
+    input.setSelectionRange(p.length, p.length);
+  });
 });
 
 // ===== empty state cards =====
@@ -9731,16 +11016,16 @@ function updateTabStyles() {
 async function renderCliSessionList() {
   updateViewTabs();
   const requestId = ++cliSessionListRequestId;
-  sessionList.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载中...</div>';
+  sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载中...</div>';
   try {
     const data = await fetch('/api/cli-sessions/scan').then(r => r.json());
     if (!cliView || requestId !== cliSessionListRequestId) return;
     const sessions = data.sessions || [];
     if (!sessions.length) {
-      sessionList.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">未找到 CLI 会话</div>';
+      sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">未找到 CLI 会话</div>';
       return;
     }
-    sessionList.innerHTML = sessions.map(s => {
+    sessionItems.innerHTML = sessions.map(s => {
       const alreadyImported = s.already_imported;
       const date = s.updated_at ? new Date(s.updated_at * 1000).toLocaleDateString('zh-CN', {month:'numeric',day:'numeric'}) : '';
       const title = (s.title || s.first_message || s.session_id || '').trim();
@@ -9762,7 +11047,7 @@ async function renderCliSessionList() {
         </div>
       </div>`;
     }).join('');
-    sessionList.querySelectorAll('.cli-import-one').forEach(btn => {
+    sessionItems.querySelectorAll('.cli-import-one').forEach(btn => {
       if (btn.textContent.trim() === '已导入') return;
       btn.addEventListener('click', async () => {
         btn.disabled = true; btn.textContent = '导入中…';
@@ -9778,7 +11063,7 @@ async function renderCliSessionList() {
     });
   } catch(e) {
     if (!cliView || requestId !== cliSessionListRequestId) return;
-    sessionList.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载失败</div>';
+    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载失败</div>';
   }
 }
 
@@ -10457,6 +11742,8 @@ configCenterBtn.addEventListener('click', async () => {
 });
 
 // ===== init =====
+setCodeMode(false);
+syncEmptyShellState();
 restoreDraft();
 updateTokenCount();
 refreshSessions();

@@ -1,38 +1,38 @@
 :root {
   color-scheme: light dark;
-  --bg: #fafaf9;
+  --bg: #fbfaf8;
   --surface: #ffffff;
-  --surface-2: #f5f5f4;
-  --surface-3: #e7e5e4;
-  --border: #e7e5e4;
-  --border-strong: #d6d3d1;
-  --text: #1c1917;
-  --muted: #78716c;
-  --subtle: #a8a29e;
-  --accent: #c2410c;
-  --accent-hover: #9a3412;
+  --surface-2: #f5f4f2;
+  --surface-3: #eeebe7;
+  --border: #e5e0d9;
+  --border-strong: #d4ccc2;
+  --text: #262421;
+  --muted: #746d64;
+  --subtle: #9c948a;
+  --accent: #c35a2e;
+  --accent-hover: #9f4724;
   --green: #166534;
   --danger: #be123c;
   --code-bg: #0d1117;
   --code-text: #e6edf3;
   --shadow-sm: 0 1px 2px rgba(28, 25, 23, .04);
-  --shadow-md: 0 2px 8px rgba(28, 25, 23, .06), 0 1px 2px rgba(28, 25, 23, .04);
+  --shadow-md: 0 12px 34px rgba(36, 32, 28, .08), 0 1px 2px rgba(36, 32, 28, .04);
   --panel-width: 560px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0c0a09;
+    --bg: #12100e;
     --surface: #1c1917;
-    --surface-2: #292524;
-    --surface-3: #44403c;
-    --border: #292524;
-    --border-strong: #44403c;
-    --text: #fafaf9;
-    --muted: #a8a29e;
-    --subtle: #78716c;
-    --accent: #fb923c;
-    --accent-hover: #fdba74;
+    --surface-2: #25211d;
+    --surface-3: #302b26;
+    --border: #302b26;
+    --border-strong: #4a423a;
+    --text: #f5f1ec;
+    --muted: #b8afa5;
+    --subtle: #857c72;
+    --accent: #f08a56;
+    --accent-hover: #f6a170;
     --green: #86efac;
     --danger: #fb7185;
     --code-bg: #09090b;
@@ -90,8 +90,9 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
+  min-height: 58px;
+  padding: 10px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   background: color-mix(in srgb, var(--bg) 94%, transparent);
   backdrop-filter: blur(14px);
 }
@@ -207,12 +208,13 @@ button:disabled {
 }
 
 .empty {
-  margin-top: 56px;
-  padding: 22px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface);
-  box-shadow: var(--shadow-md);
+  margin-top: 60px;
+  padding: 10px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
 }
 
 .empty button {
@@ -220,10 +222,11 @@ button:disabled {
 }
 
 .empty-actions {
+  justify-content: center;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: 20px;
 }
 
 .empty-actions button {
@@ -241,7 +244,7 @@ button:disabled {
   margin-top: 14px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 14px;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
@@ -504,17 +507,18 @@ pre.expanded {
 }
 
 .composer {
-  padding: 8px 10px;
+  min-height: 108px;
+  padding: 12px 12px 10px;
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
-  background: var(--surface);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   box-shadow: var(--shadow-md);
 }
 
 textarea {
   width: 100%;
-  height: 42px;
-  min-height: 42px;
+  height: 46px;
+  min-height: 46px;
   max-height: 132px;
   resize: none;
   overflow: auto;
@@ -522,7 +526,7 @@ textarea {
   border-radius: 10px;
   padding: 7px 5px 5px;
   font: inherit;
-  font-size: 14.5px;
+  font-size: 15.5px;
   line-height: 1.5;
   color: var(--text);
   background: transparent;
@@ -534,7 +538,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 2px;
+  margin-top: 6px;
   min-width: 0;
 }
 
@@ -579,8 +583,8 @@ textarea {
 
 .icon-btn {
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
@@ -636,11 +640,11 @@ textarea {
 
 .icon-btn.primary {
   color: #ffffff;
-  background: var(--accent);
+  background: var(--text);
 }
 
 .icon-btn.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: var(--accent);
 }
 
 .icon-btn.danger {
@@ -690,7 +694,132 @@ select {
     padding-right: 12px;
   }
 
+  .icon-btn,
+  .icon-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .composer {
+    min-height: 104px;
+    border-radius: 18px;
+  }
+
+  textarea {
+    font-size: 16px;
+  }
+
   #answer {
+    font-size: 14px;
+  }
+}
+
+/* 2.0 compact visual pass */
+.topbar {
+  min-height: 52px;
+  padding: 9px 14px;
+  background: var(--bg);
+  backdrop-filter: none;
+}
+
+h1 {
+  font-size: 13.5px;
+  font-weight: 720;
+}
+
+.brand p,
+p {
+  font-size: 12px;
+}
+
+.empty {
+  margin-top: 46px;
+}
+
+.empty h2 {
+  font-size: 18px;
+}
+
+.empty button,
+button {
+  height: 34px;
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+
+.context {
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.source-kicker {
+  color: var(--muted);
+}
+
+#answer {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.composer-wrap {
+  padding: 9px 0 10px;
+}
+
+.composer {
+  min-height: 88px;
+  padding: 10px 10px 8px;
+  border-radius: 17px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(36, 32, 28, .06), 0 1px 2px rgba(36, 32, 28, .04);
+}
+
+textarea {
+  height: 36px;
+  min-height: 36px;
+  max-height: 108px;
+  padding: 3px 4px;
+  font-size: 14px;
+}
+
+.composer-actions {
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.icon-btn,
+.icon-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.icon-btn svg,
+.icon-button svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.8;
+}
+
+select {
+  height: 30px;
+  min-width: 76px;
+  max-width: 90px;
+  font-size: 12px;
+}
+
+@media (max-width: 430px) {
+  .icon-btn,
+  .icon-button {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .composer {
+    min-height: 86px;
+    border-radius: 16px;
+  }
+
+  textarea {
     font-size: 14px;
   }
 }

@@ -10,7 +10,6 @@
   <main class="app">
     <header class="topbar">
       <div class="brand">
-        <div class="mark" aria-hidden="true">C</div>
         <div>
           <h1>Claude Code Web</h1>
           <p id="subtitle">选中网页内容后右键提问</p>
@@ -22,9 +21,8 @@
     </header>
 
     <section id="emptyState" class="empty panel-width">
-      <div class="empty-icon" aria-hidden="true">C</div>
-      <h2>选中内容后直接问 Claude</h2>
-      <p>在网页里选中代码或文字，右键选择 Claude Code Web。回答会出现在这里，也可以继续到完整 Web 会话。</p>
+      <h2>把当前网页交给本地 Claude</h2>
+      <p>选中代码或文字后右键提问，或者直接读取当前页。结果会留在这个标签页的侧边栏里。</p>
       <div class="empty-actions">
         <button id="emptyCapturePageBtn" type="button">读取当前页</button>
         <button id="emptyOptionsBtn" type="button">配置本地连接</button>
@@ -55,7 +53,7 @@
 
       <div class="composer-wrap">
         <div class="composer panel-width">
-          <textarea id="customQuestion" rows="2" placeholder="输入 @ 即可询问标签页相关问题"></textarea>
+          <textarea id="customQuestion" rows="2" placeholder="输入问题，继续询问当前标签页"></textarea>
           <div class="composer-actions">
             <div class="left-actions">
               <button id="toggleContextBtn" class="icon-btn" type="button" title="展开/收起上下文" aria-label="展开/收起上下文" data-tooltip="展开上下文">
