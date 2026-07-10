@@ -2906,7 +2906,7 @@
     margin-top: 8px; padding: 0 2px;
   }
   .composer-btn {
-    width: 34px; height: 34px; border-radius: 10px;
+    width: 38px; height: 38px; border-radius: 12px;
     display: inline-flex; align-items: center; justify-content: center;
     background: transparent; color: var(--text-muted);
     border: none; cursor: pointer;
@@ -2914,10 +2914,11 @@
   }
   .composer-btn:hover { background: var(--surface-2); color: var(--text); }
   .composer-btn.toolbar-btn-active { background: var(--accent-soft) !important; color: var(--accent) !important; border-color: transparent !important; }
+  .composer-btn svg { width: 20px; height: 20px; }
   .composer-btn-stop { background: #ef4444; color: white; }
   .composer-btn-stop:hover { background: #dc2626; color: white; }
   .composer-send {
-    width: 36px; height: 36px; border-radius: 10px;
+    width: 40px; height: 40px; border-radius: 12px;
     display: inline-flex; align-items: center; justify-content: center;
     background: var(--text); color: var(--surface);
     border: none; cursor: pointer;
@@ -4109,10 +4110,11 @@
     border-radius: 12px !important;
   }
   .cw-context-chip {
-    min-height: 24px !important;
-    padding: 0 4px !important;
-    border: 0 !important;
-    background: transparent !important;
+    min-height: 28px !important;
+    padding: 0 8px !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    background: var(--surface) !important;
     box-shadow: none !important;
     color: #77716b !important;
     font-size: 13px !important;
@@ -4482,9 +4484,9 @@
     bottom: calc(100% + 10px);
     z-index: 96;
     display: grid;
-    gap: 3px;
-    width: min(372px, calc(100vw - 32px));
-    padding: 6px;
+    gap: 2px;
+    width: min(380px, calc(100vw - 32px));
+    padding: 8px;
     border: 1px solid #dcd5ce;
     border-radius: 16px;
     background: #fff;
@@ -4495,30 +4497,40 @@
   }
   .cw-mode-option {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr) 20px;
+    grid-template-columns: 40px minmax(0, 1fr) 20px;
     align-items: center;
-    gap: 11px;
+    gap: 12px;
     width: 100%;
-    min-height: 60px;
-    padding: 8px 10px;
+    min-height: 64px;
+    padding: 10px 12px;
     border: 1px solid transparent;
-    border-radius: 11px;
+    border-radius: 12px;
     background: transparent;
     color: #3d3935;
     font-family: inherit;
     text-align: left;
     cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  .cw-mode-option + .cw-mode-option {
+    border-top: 1px solid #f0ece8;
   }
   .cw-mode-option:hover,
   .cw-mode-option:focus-visible {
-    border-color: #eee9e4;
-    background: #f7f5f3;
+    border-color: #e8e2db;
+    background: #f9f7f5;
     outline: 0;
   }
   .cw-mode-option.active {
-    border-color: #e0d7cf;
-    background: #f1ece8;
-    color: #302b27;
+    border-color: #d6cdc3;
+    background: #f3efeb;
+    color: #2b2622;
+  }
+  .cw-mode-option.active + .cw-mode-option {
+    border-top-color: transparent;
+  }
+  .cw-mode-option:has(+ .cw-mode-option.active) {
+    border-bottom-color: transparent;
   }
   .cw-mode-option:disabled {
     cursor: not-allowed;
@@ -4531,21 +4543,21 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
     background: #f5f2ef;
     color: #6d6862;
   }
   .cw-mode-option-icon svg {
     display: block;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
   }
   .cw-mode-option.active .cw-mode-option-icon {
     background: #fff;
     color: #b75631;
-    box-shadow: inset 0 0 0 1px #e5ddd6;
+    box-shadow: inset 0 0 0 1.5px #e5ddd6;
   }
   .cw-mode-option-copy {
     display: block;
@@ -4580,29 +4592,42 @@
   }
   :root.dark .cw-mode-menu {
     border-color: #494744;
-    background: #242424;
-    box-shadow: 0 22px 56px rgba(0, 0, 0, .36);
+    background: #1e1e1e;
+    box-shadow: 0 22px 56px rgba(0, 0, 0, .42);
   }
   :root.dark .cw-mode-option {
     color: #e7e5e2;
   }
+  :root.dark .cw-mode-option + .cw-mode-option {
+    border-top-color: #2e2c2a;
+  }
   :root.dark .cw-mode-option:hover,
   :root.dark .cw-mode-option:focus-visible {
-    background: #333230;
+    border-color: #3d3a37;
+    background: #2a2826;
   }
   :root.dark .cw-mode-option.active {
     border-color: #4f4a46;
-    background: #34312f;
+    background: #2e2c2a;
     color: #f1ede9;
   }
-  :root.dark .cw-mode-option-icon,
+  :root.dark .cw-mode-option.active + .cw-mode-option {
+    border-top-color: transparent;
+  }
+  :root.dark .cw-mode-option:has(+ .cw-mode-option.active) {
+    border-bottom-color: transparent;
+  }
+  :root.dark .cw-mode-option-icon {
+    background: #2a2826;
+    color: #a8a39e;
+  }
   :root.dark .cw-mode-option-description {
     color: #a8a39e;
   }
   :root.dark .cw-mode-option.active .cw-mode-option-icon {
-    background: #292725;
+    background: #1e1e1e;
     color: #e18b62;
-    box-shadow: inset 0 0 0 1px #514c48;
+    box-shadow: inset 0 0 0 1.5px #514c48;
   }
   :root.dark .cw-mode-option.active .cw-mode-option-description {
     color: #bbb3ac;
@@ -9702,7 +9727,6 @@ function buildPermissionPayload() {
     return out;
   }
   if (mode === 'plan') out.permission_mode = 'plan';
-  else if (codeMode && mode === 'free') out.permission_mode = 'auto';
   else if (mode === 'acceptEdits') out.permission_mode = 'acceptEdits';
   else if (mode === 'bypassPermissions') out.permission_mode = 'bypassPermissions';
   else if (mode === 'readonly') out.disallowed_tools = ['Bash', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
