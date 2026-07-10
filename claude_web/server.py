@@ -1291,7 +1291,7 @@ def build_persistent_args(
         args += ["--model", model]
     if system_prompt:
         args += ["--append-system-prompt", system_prompt]
-    if permission_mode and permission_mode in ("default", "acceptEdits", "bypassPermissions", "plan"):
+    if permission_mode and permission_mode in ("default", "acceptEdits", "auto", "bypassPermissions", "plan"):
         args += ["--permission-mode", permission_mode]
     if allowed_tools:
         args += ["--allowed-tools", ",".join(allowed_tools)]
@@ -1329,7 +1329,7 @@ def build_args(
         args += ["--model", model]
     if system_prompt:
         args += ["--append-system-prompt", system_prompt]
-    if permission_mode and permission_mode in ("default", "acceptEdits", "bypassPermissions", "plan"):
+    if permission_mode and permission_mode in ("default", "acceptEdits", "auto", "bypassPermissions", "plan"):
         args += ["--permission-mode", permission_mode]
     if allowed_tools:
         args += ["--allowed-tools", ",".join(allowed_tools)]
@@ -3800,7 +3800,7 @@ def _mobile_safe_chat_request(request: Request, req: ChatRequest) -> ChatRequest
         _require_mobile_cwd_is_known(request, work_dir)
     else:
         work_dir = str(_DATA_DIR)
-    if req.permission_mode in {"acceptEdits", "bypassPermissions"} or req.allowed_tools:
+    if req.permission_mode in {"acceptEdits", "auto", "bypassPermissions"} or req.allowed_tools:
         raise HTTPException(status_code=403, detail="mobile access only supports safe chat permissions")
     return req.copy(update={
         "cwd": work_dir,
@@ -4586,7 +4586,7 @@ async def active_agent_loop(session_id: str = Query(default="")):
 @app.post("/api/agent-loop/start")
 async def start_agent_loop(request: Request, req: AgentLoopStartRequest):
     if _is_mobile_access_request(request):
-        if req.permission_mode in {"acceptEdits", "bypassPermissions"} or req.allowed_tools or (req.test_command or "").strip():
+        if req.permission_mode in {"acceptEdits", "auto", "bypassPermissions"} or req.allowed_tools or (req.test_command or "").strip():
             raise HTTPException(status_code=403, detail="mobile access can only start safe agent loops")
         if req.cwd:
             _require_mobile_cwd_is_known(request, req.cwd)
