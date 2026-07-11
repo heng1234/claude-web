@@ -35,3 +35,11 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local dev files (user-specific)
+start.sh
+CLAUDE.md
+TODO.md
+progress/
+DESIGN-claude.md
+design-system.md

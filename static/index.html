@@ -9,7 +9,23 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
-<script>tailwind.config = { darkMode: 'class' };</script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        // Claude warm-canvas design system
+        canvas:   { DEFAULT: '#faf9f5', soft: '#f5f0e8', card: '#efe9de', strong: '#e8e0d2' },
+        ink:      { DEFAULT: '#141413', body: '#3d3d3a', muted: '#6c6a64', subtle: '#8e8b82' },
+        coral:    { DEFAULT: '#cc785c', hover: '#a9583e', light: '#e89070' },
+        hairline: { DEFAULT: '#e6dfd8', soft: '#ebe6df' },
+        dark:     { DEFAULT: '#181715', elevated: '#252320', soft: '#1f1e1b' },
+      }
+    }
+  }
+};
+</script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 <link id="hljsTheme" rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
@@ -23,43 +39,47 @@
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
-  /* ===== Design Tokens ===== */
+  /* ===== Design Tokens — Claude warm-canvas design system ===== */
   :root {
-    --bg: #fafaf9;
-    --surface: #ffffff;
-    --surface-2: #f5f5f4;
-    --border: #e7e5e4;
-    --border-strong: #d6d3d1;
-    --text: #1c1917;
-    --text-muted: #78716c;
-    --text-subtle: #a8a29e;
-    --accent: #c2410c;       /* muted amber, not loud orange */
-    --accent-hover: #9a3412;
-    --accent-soft: #fef3c7;  /* soft warm bg */
-    --accent-soft-2: #fff7ed;
-    --user-bg: #fef3c7;
+    --bg: #faf9f5;
+    --surface: #faf9f5;
+    --surface-2: #f5f0e8;
+    --border: #e6dfd8;
+    --border-strong: #d6cec4;
+    --text: #141413;
+    --text-muted: #6c6a64;
+    --text-subtle: #8e8b82;
+    --accent: #cc785c;
+    --accent-hover: #a9583e;
+    --accent-soft: #efe9de;
+    --accent-soft-2: #f5f0e8;
+    --user-bg: #fde8d0;
     --user-text: #7c2d12;
-    --asst-bg: #ffffff;
-    --shadow-sm: 0 1px 2px rgba(28,25,23,.04);
-    --shadow-md: 0 2px 8px rgba(28,25,23,.06), 0 1px 2px rgba(28,25,23,.04);
-    --shadow-lg: 0 12px 32px rgba(28,25,23,.08), 0 2px 6px rgba(28,25,23,.04);
+    --asst-bg: #f8f6f0;
+    --thinking-bg: #faf9f5;
+    --thinking-border: #e6dfd8;
+    --shadow-sm: 0 1px 2px rgba(20,20,19,.04);
+    --shadow-md: 0 2px 8px rgba(20,20,19,.06), 0 1px 2px rgba(20,20,19,.04);
+    --shadow-lg: 0 12px 32px rgba(20,20,19,.08), 0 2px 6px rgba(20,20,19,.04);
   }
   .dark {
-    --bg: #0c0a09;
-    --surface: #1c1917;
-    --surface-2: #292524;
-    --border: #292524;
-    --border-strong: #44403c;
-    --text: #fafaf9;
-    --text-muted: #a8a29e;
-    --text-subtle: #78716c;
-    --accent: #fb923c;
-    --accent-hover: #fdba74;
-    --accent-soft: #451a03;
-    --accent-soft-2: #292524;
-    --user-bg: #451a03;
-    --user-text: #fed7aa;
-    --asst-bg: #1c1917;
+    --bg: #181715;
+    --surface: #1f1e1b;
+    --surface-2: #252320;
+    --border: #252320;
+    --border-strong: #3d3a35;
+    --text: #faf9f5;
+    --text-muted: #a09d96;
+    --text-subtle: #6c6a64;
+    --accent: #cc785c;
+    --accent-hover: #e89070;
+    --accent-soft: #2a1f1a;
+    --accent-soft-2: #252320;
+    --user-bg: #4a1a0a;
+    --user-text: #fdd8c0;
+    --asst-bg: #1f1e1b;
+    --thinking-bg: #1f1e1b;
+    --thinking-border: #252320;
     --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
     --shadow-md: 0 2px 8px rgba(0,0,0,.35);
     --shadow-lg: 0 12px 32px rgba(0,0,0,.45);
@@ -73,7 +93,18 @@
     letter-spacing: -0.005em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    line-height: 1.55;
   }
+  h1, h2, h3, .serif-display {
+    font-family: 'EB Garamond', 'Times New Roman', serif;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+  h1 { font-size: 1.75em; letter-spacing: -0.02em; }
+  h2 { font-size: 1.35em; letter-spacing: -0.015em; }
+  h3 { font-size: 1.15em; }
+  ::selection { background: rgba(204,120,92,0.35); color: #141413; }
+  ::-moz-selection { background: rgba(204,120,92,0.35); color: #141413; }
   code, pre, .mono { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
   /* ===== Scrollbars: completely hidden ===== */
@@ -90,14 +121,14 @@
   .prose-custom h2 { font-size: 1.2em; }
   .prose-custom h3 { font-size: 1.08em; }
   .prose-custom pre {
-    background: #0d1117; color: #e6edf3;
+    background: #1f1e1b; color: #faf9f5;
     padding: 14px 16px; border-radius: 10px;
     max-width: 100%; overflow-x: auto; font-size: 13px; position: relative;
     line-height: 1.55; margin: 10px 0;
     -webkit-overflow-scrolling: touch;
   }
   .prose-custom code {
-    background: var(--surface-2); padding: 1.5px 6px; border-radius: 5px;
+    background: var(--accent-soft); padding: 1.5px 6px; border-radius: 5px;
     font-size: 0.88em; color: var(--accent-hover);
   }
   .dark .prose-custom code { color: var(--accent); }
@@ -106,16 +137,16 @@
   .prose-custom th, .prose-custom td { border: 1px solid var(--border); padding: 6px 12px; }
   .prose-custom th { background: var(--surface-2); font-weight: 600; }
   .prose-custom img { max-width: 100%; border-radius: 8px; cursor: zoom-in; margin: 8px 0; }
-  .prose-custom blockquote { border-left: 3px solid var(--accent); padding-left: 14px; color: var(--text-muted); margin: 8px 0; font-style: italic; }
+  .prose-custom blockquote { border-left: 3px solid var(--border-strong); padding-left: 14px; color: var(--text-muted); margin: 8px 0; font-style: italic; }
   .prose-custom hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
   details > summary { cursor: pointer; user-select: none; }
 
   /* ===== Message layout (ChatGPT-style) ===== */
-  /* User message: subtle rounded chip on the right, not full bubble */
+  /* User message: deep orange chip on the right */
   .bubble-user {
-    background: var(--surface-2);
-    color: var(--text);
+    background: var(--user-bg);
+    color: var(--user-text);
     padding: 10px 16px;
     border-radius: 18px;
     white-space: pre-wrap;
@@ -163,7 +194,7 @@
   .user-doc-badge .ud-meta {
     color: var(--text-subtle); font-size: 10.5px; flex-shrink: 0;
   }
-  /* Assistant message: no bubble, just content with left avatar */
+  /* Assistant message: light background card */
   .bubble-asst {
     background: transparent;
     padding: 2px 0;
@@ -173,7 +204,7 @@
     overflow-wrap: anywhere;
   }
   .user-msg-wrap { margin: 12px 0; min-width: 0; }
-  .asst-wrap { margin: 12px 0; min-width: 0; }
+  .asst-wrap { margin: 12px 0; min-width: 0; padding: 12px 16px; border-radius: 12px; background: var(--asst-bg); border: 1px solid var(--border); }
   .message-feedback {
     display: flex; align-items: center; gap: 4px;
     margin-top: 6px; min-height: 24px;
@@ -186,6 +217,7 @@
     color: var(--text-subtle); cursor: pointer;
     transition: background .15s, color .15s, border-color .15s, transform .12s;
   }
+  .feedback-btn svg { width: 14px; height: 14px; }
   .feedback-btn:hover { background: var(--surface-2); color: var(--text); }
   .feedback-btn:active { transform: scale(.96); }
   .feedback-btn.active {
@@ -266,9 +298,9 @@
 
   /* ===== Avatar ===== */
   .avatar {
-    width: 30px; height: 30px; border-radius: 9px;
+    width: 28px; height: 28px; border-radius: 7px;
     background: linear-gradient(135deg, #fb923c, #c2410c);
-    color: white; font-weight: 700; font-size: 13px;
+    color: white; font-weight: 700; font-size: 11px;
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0; box-shadow: var(--shadow-sm);
   }
@@ -562,12 +594,12 @@
   }
   .settings-check input { width: 16px; height: 16px; }
   .sidebar-footer-action {
-    min-width: 34px;
-    min-height: 34px;
+    min-width: 32px; height: 32px;
     border-radius: 8px;
-    align-items: center;
-    justify-content: center;
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 4px; transition: background .15s;
   }
+  .sidebar-footer-action svg { width: 14px; height: 14px; }
   .sidebar-footer-action:hover { background: var(--border); }
   .settings-field {
     width: 100%;
@@ -608,7 +640,7 @@
     .settings-actions, .settings-inline, .settings-token-row { align-items: stretch; }
     .settings-actions > *, .settings-token-row > * { width: 100%; }
     .settings-token-row .grow { min-width: 0; }
-    .sidebar-footer-action { min-width: 44px; min-height: 44px; }
+    .sb-icon-btn, .sidebar-footer-action { min-width: 44px; min-height: 44px; }
   }
 
   /* ===== Prompt optimizer ===== */
@@ -1017,6 +1049,41 @@
     box-shadow: var(--shadow-lg);
     font-size: 13px;
   }
+  #alertToggleBtn.active { color: var(--accent) !important; }
+  .done-alert-bubble {
+    position: fixed; right: 24px; bottom: 80px; z-index: 100;
+    max-width: 320px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    font-size: 13px; line-height: 1.5;
+    display: flex; align-items: flex-start; gap: 10px;
+    cursor: pointer; user-select: none;
+    animation: doneAlertIn 0.3s ease-out;
+  }
+  .done-alert-bubble.removing {
+    animation: doneAlertOut 0.25s ease-in forwards;
+  }
+  .done-alert-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0; margin-top: 4px;
+    animation: pulse-dot 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+  @keyframes doneAlertIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes doneAlertOut {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  }
   .notify-toolbar {
     display: flex;
     gap: 8px;
@@ -1232,7 +1299,7 @@
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   }
   .subagent-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
-  .subagent-status-dot.running { background: #3b82f6; animation: subagent-pulse 1.5s infinite; }
+  .subagent-status-dot.running { background: var(--accent); animation: subagent-pulse 1.5s infinite; }
   .subagent-status-dot.success { background: #10b981; }
   .subagent-status-dot.error { background: #ef4444; }
   .subagent-status-dot.cancelled { background: #f59e0b; }
@@ -1261,6 +1328,24 @@
   :root.dark .task-pill.error { background: rgba(239,68,68,.18); color: #fca5a5; border-color: rgba(239,68,68,.4); }
   :root.dark .task-pill.cancelled { background: rgba(245,158,11,.18); color: #fcd34d; border-color: rgba(245,158,11,.4); }
 
+  /* ===== Shared info box — unified base for thinking blocks, tool details, plan cards ===== */
+  .info-box {
+    margin: 6px 0; max-width: 100%; min-width: 0;
+    border: 1px solid var(--thinking-border); border-left: 3px solid var(--accent);
+    border-radius: 8px; background: var(--thinking-bg); overflow: hidden;
+  }
+  .info-box-header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; font-size: 12px; font-weight: 600;
+    background: var(--surface-2); border-bottom: 1px solid var(--border);
+    color: var(--accent); cursor: pointer; user-select: none;
+  }
+  .info-box-header svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .info-box-body {
+    padding: 8px 12px; font-size: 12px; color: var(--text);
+    max-width: 100%; overflow-x: auto;
+  }
+
   /* Compact tool chip strip — groups consecutive tool calls as a tidy vertical log */
   .tool-strip-wrap { margin: 6px 0; display: flex; flex-direction: column; gap: 4px; max-width: 100%; min-width: 0; }
   .tool-strip {
@@ -1285,11 +1370,14 @@
   .tool-chip-status {
     width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
   }
-  .tool-chip-status.running { background: #3b82f6; animation: subagent-pulse 1.5s infinite; }
+  .tool-chip-status.running { background: var(--accent); animation: subagent-pulse 1.5s infinite; }
   .tool-chip-status.done { background: #10b981; }
   .tool-chip-status.error { background: #ef4444; }
   .tool-chip-status.cancelled { background: #f59e0b; }
-  .tool-chip-icon { width: 16px; text-align: center; flex-shrink: 0; }
+  .tool-chip-icon { width: 16px; text-align: center; flex-shrink: 0; display: inline-flex; align-items: center; }
+  .tool-chip-icon svg { width: 14px; height: 14px; }
+  .tool-strip-detail-header svg,
+  .tool-strip-detail-section-label svg { width: 12px; height: 12px; vertical-align: -1px; }
   .tool-chip-name { font-weight: 600; min-width: 64px; flex-shrink: 0; }
   .tool-chip-arg {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -1668,7 +1756,7 @@
     border-color: var(--accent); transform: translateY(-2px);
     box-shadow: var(--shadow-md);
   }
-  .empty-card-icon { font-size: 20px; margin-bottom: 6px; }
+  .empty-card-icon { display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
   .empty-card-title { font-size: 13.5px; font-weight: 500; color: var(--text); margin-bottom: 3px; }
   .empty-card-sub { font-size: 12px; color: var(--text-muted); line-height: 1.45; }
   @media (max-width: 640px) {
@@ -1690,34 +1778,30 @@
       gap: 6px !important;
       padding-top: max(7px, env(safe-area-inset-top)) !important;
     }
-    header > .flex:first-child { min-width: 0; flex: 1 1 auto; }
     header > .flex:last-child { min-width: 0; flex: 0 0 auto; gap: 2px !important; }
-    #titleLabel { max-width: 132px; font-size: 14px !important; }
-    #sessionLabel,
-    #suggestTitleBtn,
-    #configCenterBtn,
-    #exportBtn,
-    #reopenArtifactBtn { display: none !important; }
+    #configCenterBtn { display: none !important; }
     #modelSelect {
       max-width: 92px;
       min-height: 44px;
       padding: 0 4px;
       font-size: 11px;
     }
-    #advancedBar {
-      padding: 8px 10px !important;
-      gap: 8px !important;
+    /* Per-panel info bar on mobile */
+    .panel-info-bar {
+      padding: 3px 10px !important;
+      min-height: 24px !important;
     }
-    #advancedBar > .relative {
-      flex-basis: 100%;
-      min-width: 0 !important;
+    .panel-info-title { max-width: 100px; }
+    .panel-advanced-bar {
+      padding: 6px 10px !important;
+      gap: 6px !important;
     }
-    #advancedBar input,
-    #advancedBar select {
+    .panel-advanced-bar input,
+    .panel-advanced-bar select {
       min-height: 44px;
       font-size: 16px;
     }
-    #permSelect { flex: 1 1 160px; }
+    .panel-advanced-bar select { flex: 1 1 140px; }
   }
   @media (max-width: 768px) {
     html.sidebar-open,
@@ -1814,7 +1898,8 @@
       scroll-snap-align: start;
     }
     .empty-card:hover { transform: none; box-shadow: var(--shadow-sm); }
-    .empty-card-icon { font-size: 17px; margin-bottom: 5px; }
+    .empty-card-icon { margin-bottom: 5px; }
+    .empty-card-icon svg { width: 17px; height: 17px; }
     .empty-card-title { font-size: 13px; margin-bottom: 2px; }
     .empty-card-sub {
       font-size: 11.5px;
@@ -1826,7 +1911,7 @@
     }
     .mobile-shortcuts-hint { display: none; }
     .artifact-panel { position: fixed; inset: 0; width: 100% !important; z-index: 45; border-left: none; }
-    #chatInner {
+    [id^="chatInner"] {
       padding-left: 16px !important;
       padding-right: 16px !important;
       padding-bottom: 18px !important;
@@ -2002,13 +2087,15 @@
 
   /* ===== Sidebar icon button ===== */
   .sb-icon-btn {
-    width: 28px; height: 28px; border-radius: 7px;
+    width: 32px; height: 32px; border-radius: 8px;
     display: inline-flex; align-items: center; justify-content: center;
     background: transparent; border: none; cursor: pointer;
-    color: var(--text-muted); font-size: 14px;
-    transition: background .15s, color .15s;
+    color: var(--text-muted);
+    transition: background .15s, color .15s, transform .12s;
   }
-  .sb-icon-btn:hover { background: var(--border); color: var(--text); }
+  .sb-icon-btn svg { width: 16px; height: 16px; }
+  .sb-icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  .sb-icon-btn:active { transform: scale(.95); }
 
   /* ===== Tab buttons ===== */
   .tab-btn {
@@ -2021,21 +2108,174 @@
   .tab-btn:hover { color: var(--text) !important; }
 
   /* Select cleanup (header) */
-  header select, #advancedBar select {
+  header select, .panel-advanced-bar select {
     cursor: pointer;
   }
   header select:hover { background: var(--surface-2); }
 
-  /* Session list items - slimmer, no big borders */
-  .session-item {
-    padding: 7px 10px; border-radius: 6px; margin-bottom: 1px;
-    cursor: pointer;
-    transition: background .12s;
-    border-left: 2px solid transparent;
+  /* ===== Split-View Layout ===== */
+  #panelContainer { display: flex; flex-direction: row; overflow: hidden; flex: 1; }
+  .panel { display: flex; flex-direction: column; min-width: 0; }
+  .panel-body { display: flex !important; flex-direction: column !important; flex: 1; min-height: 0; }
+  .panel-body main { display: block; flex: 1 1 0%; min-height: 0; }
+  /* Ensure chat inner content stacks vertically */
+  .panel [id^="chatInner"] { display: block; }
+  .panel.inactive .panel-inactive-overlay {
+    position: absolute; inset: 0; z-index: 5; cursor: pointer;
   }
-  .session-item:hover { background: var(--border); }
-  .session-item.active { background: var(--accent-soft-2); border-left-color: var(--accent); }
-  .dark .session-item.active { background: var(--accent-soft); }
+  .panel-divider {
+    width: 4px; cursor: col-resize; background: var(--border);
+    flex-shrink: 0; transition: background .15s;
+  }
+  .panel-divider:hover { background: var(--accent); }
+  .panel-divider.dragging { background: var(--accent); }
+
+  /* ===== Per-Panel Info Bar ===== */
+  .panel-info-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 2px 12px; font-size: 11px; line-height: 1.3;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg); flex-shrink: 0; min-height: 26px;
+  }
+  .panel-info-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .panel-info-right { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  .panel-info-title {
+    font-weight: 500; font-size: 11px; letter-spacing: -0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;
+    cursor: default; color: var(--text);
+    padding: 1px 8px; border-radius: 4px;
+    background: var(--surface-2); border: 1px solid transparent;
+    transition: background .15s, border-color .15s;
+  }
+  .panel-info-title:hover {
+    background: var(--accent-soft); border-color: var(--border);
+    cursor: text;
+  }
+  .panel-info-session { color: var(--text-subtle); font-size: 10px; white-space: nowrap; }
+  .panel-info-tokens { color: var(--text-subtle); font-size: 10px; cursor: help; }
+  .panel-info-git { color: #10b981; font-size: 10px; }
+  .panel-info-memory { color: var(--text-subtle); font-size: 10px; cursor: help; }
+  .panel-info-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border: none; background: transparent;
+    color: var(--text-subtle); cursor: pointer; border-radius: 4px;
+    font-size: 13px; padding: 0;
+  }
+  .panel-info-btn:hover { background: var(--accent-soft); color: var(--text); }
+  .panel-info-btn.toolbar-btn-active { background: var(--accent-soft); color: var(--accent); }
+  .panel-close-btn:hover { background: #fecaca; color: #dc2626; }
+  .dark .panel-close-btn:hover { background: #7f1d1d; color: #fca5a5; }
+  .panel-info-suggest {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border: none; background: transparent;
+    color: var(--accent); cursor: pointer; border-radius: 4px;
+    font-size: 13px; padding: 0; opacity: 0.6;
+  }
+  .panel-info-suggest:hover { opacity: 1; }
+  .panel-info-artifact-count { font-size: 10px; color: var(--accent); margin-left: 1px; }
+  .panel-advanced-bar {
+    display: flex; align-items: center; gap: 6px; padding: 3px 12px;
+    border-bottom: 1px solid var(--border); background: var(--bg);
+    flex-shrink: 0; font-size: 11px;
+  }
+  .panel-advanced-bar.hidden { display: none; }
+  .panel-advanced-bar input { font-size: 11px; flex: 1; min-width: 0; }
+  .panel-advanced-bar select { font-size: 11px; }
+  /* Inactive panel: fade info bar */
+  .panel.inactive .panel-info-bar { opacity: 0.55; }
+  .panel.inactive .panel-advanced-bar { opacity: 0.55; }
+
+  /* Empty-state hint for non-primary panels */
+  .panel:not(.has-session) .panel-chatInner:not(#chatInner) {
+    min-height: 40vh; color: var(--text-subtle); font-size: 14px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .panel:not(.has-session) .panel-chatInner:not(#chatInner)::before {
+    content: '在侧边栏 Cmd + 点击会话即可在此查看';
+    display: block; text-align: center;
+  }
+  @media (max-width: 768px) {
+    #splitViewBtn { display: none !important; }
+    .panel-divider { display: none !important; }
+  }
+
+  /* ===== Split-View Layout Modes ===== */
+  .layout-single { }
+  .layout-single .panel { flex: 1; }
+
+  .layout-horizontal-2 { display: flex; flex-direction: row; }
+  .layout-horizontal-2 .panel { flex: 1; min-width: 0; }
+
+  .layout-horizontal-3 { display: flex; flex-direction: row; }
+  .layout-horizontal-3 .panel { flex: 1; min-width: 0; }
+
+  .layout-grid-2x2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+  .layout-grid-2x2 .panel { min-width: 0; min-height: 0; overflow: hidden; }
+
+  .panel-divider {
+    width: 4px; cursor: col-resize; background: var(--border);
+    flex-shrink: 0; transition: background .15s; display: none;
+  }
+  .panel-divider:hover, .panel-divider.dragging { background: var(--accent); }
+  .layout-horizontal-2 .panel-divider,
+  .layout-horizontal-3 .panel-divider { display: block; }
+
+  .panel-divider-h {
+    height: 4px; cursor: row-resize; background: var(--border);
+    grid-row: 1; grid-column: 1 / -1; z-index: 10; display: none;
+    transition: background .15s;
+  }
+  .panel-divider-h:hover { background: var(--accent); }
+  .layout-grid-2x2 .panel-divider-h { display: block; }
+
+  .panel-divider-v {
+    width: 4px; cursor: col-resize; background: var(--border);
+    grid-row: 1 / -1; grid-column: 2; z-index: 10; display: none;
+    transition: background .15s;
+  }
+  .panel-divider-v:hover { background: var(--accent); }
+  .layout-grid-2x2 .panel-divider-v { display: block; }
+
+  .panel.inactive .composer { opacity: 0.45; pointer-events: none; }
+  .panel.inactive { opacity: 0.85; }
+  .panel:not(.inactive) {
+    box-shadow: inset 0 0 0 2px var(--accent);
+    z-index: 1;
+  }
+  .panel { transition: opacity .2s, box-shadow .2s; position: relative; }
+  .panel.has-session .empty-hero { display: none; }
+  /* Active panel label — disabled: overlaps close button, re-enable for debug
+  .panel:not(.inactive)::after {
+    content: '当前活跃';
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--accent);
+    color: #fff;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .layout-single .panel:not(.inactive)::after { display: none; }
+  */
+
+  @media (max-width: 768px) {
+    .layout-horizontal-2 .panel-divider,
+    .layout-horizontal-3 .panel-divider,
+    .layout-grid-2x2 .panel-divider-h,
+    .layout-grid-2x2 .panel-divider-v { display: none !important; }
+    .layout-horizontal-2, .layout-horizontal-3, .layout-grid-2x2 {
+      display: flex !important; flex-direction: column !important;
+    }
+    .panel.inactive { opacity: 1; }
+  }
+
 </style>
 </head>
 <body class="h-screen flex">
@@ -2044,12 +2284,13 @@
 <aside id="sidebar" class="w-64 flex flex-col flex-shrink-0" style="background:var(--surface-2);">
   <div class="px-3 pt-3 pb-2 flex items-center justify-between">
     <div class="flex items-center gap-2 min-w-0">
-      <div class="avatar" style="width:26px; height:26px; border-radius:7px; font-size:11px;">C</div>
+      <div class="avatar">C</div>
       <div class="font-semibold text-[13px] truncate" style="letter-spacing:-0.01em;">Claude Code Web</div>
     </div>
     <div class="flex items-center gap-1">
-      <button id="themeBtn" class="sb-icon-btn" title="切换主题">🌙</button>
-      <button id="closeSidebar" class="sb-icon-btn sidebar-close" title="关闭会话列表">×</button>
+      <button id="alertToggleBtn" class="sb-icon-btn" title="回复完成时提醒"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></button>
+      <button id="themeBtn" class="sb-icon-btn" title="切换主题"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+      <button id="closeSidebar" class="sb-icon-btn sidebar-close" title="关闭会话列表"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
   </div>
 
@@ -2061,7 +2302,7 @@
     <div class="relative">
       <input id="searchInput" type="text" placeholder="搜索"
         class="w-full pl-8 pr-3 py-1.5 text-[13px]" style="background:transparent; border:1px solid transparent;" />
-      <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-subtle); font-size:11px;">🔍</span>
+      <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-subtle); display:flex; align-items:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
     </div>
   </div>
 
@@ -2086,29 +2327,18 @@
   </div>
 
   <div class="px-3 py-2.5 text-[12px] flex items-center justify-between gap-2" style="border-top:1px solid var(--border); color:var(--text-muted);">
-    <button id="statsBar" class="sidebar-footer-action hover:underline flex items-center gap-1" style="color:var(--text);" title="查看统计（估算价，仅供参考）">💰 ~$0.00</button>
-    <button id="mcpBtn" class="sidebar-footer-action hover:underline flex items-center gap-1" style="color:var(--text);" title="MCP 管理">🔌</button>
-    <button id="settingsBtn" class="sidebar-footer-action hover:underline flex items-center gap-1" style="color:var(--text);">⚙️</button>
+    <button id="statsBar" class="sidebar-footer-action flex items-center gap-1" style="color:var(--text);" title="查看统计（估算价，仅供参考）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> <span id="statsBarText">~$0.00</span></button>
+    <button id="mcpBtn" class="sidebar-footer-action flex items-center gap-1" style="color:var(--text);" title="MCP 管理"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M2 22h20"/><path d="M17.7 3.7a2.4 2.4 0 0 0-3.4 0L12 6l3 3 2.7-2.3"/></svg></button>
+    <button id="settingsBtn" class="sidebar-footer-action flex items-center gap-1" style="color:var(--text);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
   </div>
 </aside>
 <div id="sidebarScrim" class="sidebar-scrim" aria-hidden="true"></div>
 
 <!-- Main -->
-<div class="flex-1 flex flex-col min-w-0" style="background:var(--bg);">
-  <header class="px-4 py-2.5 flex items-center justify-between gap-3" style="background:var(--bg); border-bottom:1px solid var(--border);">
+<div class="flex-1 flex flex-col min-w-0" style="background:var(--bg);" id="mainContent">
+  <header class="px-4 py-2.5 flex items-center justify-between gap-3" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
     <div class="flex items-center gap-2 min-w-0">
-      <button id="toggleSidebar" class="sidebar-toggle text-xl px-1" style="color:var(--text-muted);" aria-label="打开会话列表" aria-expanded="false">☰</button>
-      <div class="min-w-0 flex items-center gap-2">
-        <span id="titleLabel" class="font-medium truncate" style="letter-spacing:-0.01em; font-size:14.5px;">新会话</span>
-        <button id="suggestTitleBtn" class="text-sm hidden opacity-60 hover:opacity-100" style="color:var(--accent);" title="让 Claude 自动命名">🪄</button>
-        <span class="text-[11px] truncate flex items-center gap-2" id="sessionLabel" style="color:var(--text-subtle);">
-          <span id="sessionLabelText"></span>
-          <span id="sessionIdText" class="hidden"></span>
-          <span id="gitBar" class="hidden" style="color:#10b981;"></span>
-          <span id="memoryBar" class="hidden cursor-help" style="color:var(--text-subtle);"></span>
-          <span id="tokenBar" class="hidden cursor-help" style="color:var(--text-subtle);"></span>
-        </span>
-      </div>
+      <button id="toggleSidebar" class="sidebar-toggle px-1" style="color:var(--text-muted);" aria-label="打开会话列表" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg></button>
     </div>
     <div class="flex items-center gap-1 flex-shrink-0">
       <select id="modelSelect" class="text-[12px] px-2.5 py-1" title="模型" style="border:1px solid transparent; background:transparent;">
@@ -2117,123 +2347,18 @@
         <option value="sonnet">Sonnet</option>
         <option value="haiku">Haiku</option>
       </select>
-      <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions">⚙</button>
-      <button id="headerMoreBtn" class="sb-icon-btn" title="工作目录 / 权限策略">⋯</button>
-      <button id="helpBtn" class="sb-icon-btn relative" title="帮助 / 快捷键 / 更新日志">?<span id="helpBadge" class="hidden absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style="background:#ef4444;"></span></button>
-      <button id="exportBtn" class="sb-icon-btn" title="导出 Markdown">📥</button>
-      <button id="reopenArtifactBtn" class="sb-icon-btn hidden" title="重新打开 Artifact 面板">📐<span id="reopenArtifactCount" class="ml-1 text-[10px]" style="color:var(--accent);"></span></button>
+      <button id="splitViewBtn" class="sb-icon-btn hidden md:inline-flex" title="分屏模式 (⇧⌘S)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg></button>
+      <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      <button id="helpBtn" class="sb-icon-btn relative" title="帮助 / 快捷键 / 更新日志"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span id="helpBadge" class="hidden absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style="background:#ef4444;"></span></button>
     </div>
   </header>
-
-  <!-- Advanced toolbar (toggled by headerMoreBtn) -->
-  <div id="advancedBar" class="hidden px-4 py-2 flex items-center gap-2 flex-wrap" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
-    <div class="relative flex-1 min-w-[240px]">
-      <input id="cwdInput" list="cwdList" placeholder="工作目录（留空默认 ~）" class="text-xs px-2.5 py-1.5 w-full" />
-      <datalist id="cwdList"></datalist>
-    </div>
-    <select id="permSelect" class="text-xs px-2.5 py-1.5" title="工具权限策略">
-      <option value="free">🔓 CLI 默认</option>
-      <option value="acceptEdits">✏️ 允许编辑</option>
-      <option value="plan">📋 计划</option>
-      <option value="readonly">🔒 只读</option>
-      <option value="custom">⚙️ 自定义</option>
-    </select>
-  </div>
   <div id="mobileModeBanner" class="mobile-mode-banner">
     <span><strong>手机问答模式</strong> · 可提问、查看结果，并从已保存项目切换目录；管理功能仅电脑本机可用。</span>
     <button id="dismissMobileBanner" class="sb-icon-btn" type="button" title="关闭提示" aria-label="关闭手机问答提示">×</button>
   </div>
 
-  <main id="chat" class="flex-1 overflow-y-auto w-full" style="background:var(--bg);">
-    <div class="max-w-3xl w-full mx-auto px-6 py-8" id="chatInner">
-    <div id="welcome" class="empty-hero">
-      <div class="empty-logo">C</div>
-      <div class="empty-title">Claude Code Web</div>
-      <div class="empty-subtitle">Claude Code CLI 的可视化界面 · 支持工具可视化、Git 回滚、会话分叉</div>
-      <div class="empty-cards">
-        <div class="empty-card" data-prompt="帮我审查当前目录的代码质量，重点关注：代码风格、潜在 bug、安全问题。请先用 Glob 列出所有源文件。">
-          <div class="empty-card-icon">🔍</div>
-          <div class="empty-card-title">代码审查</div>
-          <div class="empty-card-sub">扫描当前目录 · 列出改进建议</div>
-        </div>
-        <div class="empty-card" data-prompt="解释一下 Python 的装饰器，配合代码示例说明常见用法。">
-          <div class="empty-card-icon">📚</div>
-          <div class="empty-card-title">技术解释</div>
-          <div class="empty-card-sub">深入讲解某个技术概念</div>
-        </div>
-        <div class="empty-card" data-prompt="帮我写一个命令行工具，功能是：读取目录下的所有 markdown 文件，统计总字数。要求用 Python 实现，含参数解析和错误处理。">
-          <div class="empty-card-icon">🛠️</div>
-          <div class="empty-card-title">写个小工具</div>
-          <div class="empty-card-sub">快速搭建一个脚本</div>
-        </div>
-        <div class="empty-card" data-prompt="用 Mermaid 画一个 HTTP 请求从浏览器到后端的完整流程图，包括 DNS、TCP、TLS、服务器处理、数据库查询。">
-          <div class="empty-card-icon">📊</div>
-          <div class="empty-card-title">画个流程图</div>
-          <div class="empty-card-sub">Mermaid 图表可视化</div>
-        </div>
-      </div>
-      <div class="mobile-shortcuts-hint text-xs mt-8" style="color:var(--text-subtle);">快捷键：⌘K 搜索 · ⌘N 新会话 · Esc 关闭</div>
-    </div>
-    </div>
-  </main>
-
-  <div id="urlChips" class="hidden px-4 pt-3 pb-1 max-w-3xl mx-auto w-full flex flex-wrap gap-2" style="background:var(--surface);"></div>
-  <div id="docChips" class="hidden px-4 pt-3 pb-1 max-w-3xl mx-auto w-full flex flex-wrap gap-2" style="background:var(--surface);"></div>
-  <div id="attachments" class="hidden px-4 pt-3 pb-1 max-w-3xl mx-auto w-full flex flex-wrap gap-2" style="background:var(--surface);"></div>
-
-  <button id="jumpBottomBtn" class="hidden fixed bottom-28 right-6 btn btn-primary text-sm z-20" style="border-radius:9999px; padding:8px 14px; box-shadow:var(--shadow-lg);">
-    <span>↓</span><span>最新</span><span id="jumpBottomBadge" class="hidden text-xs rounded-full px-1.5" style="background:white; color:var(--accent);">0</span>
-  </button>
-
-  <footer class="px-4 pt-2 pb-5" style="background:var(--bg);">
-    <form id="form" class="max-w-3xl mx-auto relative">
-      <input type="file" id="fileInput" accept="image/*" multiple class="hidden" />
-      <input type="file" id="docInput" multiple class="hidden" />
-      <div id="agentLoopStatus" class="agent-loop-status">
-        <div class="min-w-0">
-          <div class="font-medium">Agent Loop 运行中</div>
-          <div id="agentLoopStatusText" class="agent-loop-meta">准备中...</div>
-        </div>
-        <button id="agentLoopStopBtn" type="button" class="agent-loop-stop">停止</button>
-      </div>
-      <div class="composer relative" id="composer">
-        <textarea id="input" rows="1" placeholder="输入消息，让 Claude 帮你..."
-          class="composer-textarea"></textarea>
-        <div class="composer-actions">
-          <div class="flex items-center gap-1.5">
-            <button type="button" id="attachBtn" class="composer-btn" title="上传图片 (支持粘贴/拖拽)">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/><line x1="19" y1="3" x2="19" y2="9"/><line x1="16" y1="6" x2="22" y2="6"/><circle cx="9" cy="10" r="2"/><path d="m21 16-3.5-3.5a2 2 0 0 0-2.83 0L6 21"/></svg>
-            </button>
-            <button type="button" id="docAttachBtn" class="composer-btn" title="上传文件 (支持 HTML/源码/文档等文本文件)">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-            </button>
-            <button type="button" id="webSearchBtn" class="composer-btn" title="联网搜索">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-            </button>
-            <button type="button" id="promptOptimizeBtn" class="composer-btn" title="优化 Prompt">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9H6"/><path d="M20 9h-2"/><path d="m17.8 6.2 1.4-1.4"/><path d="m10.8 13.2-1.4 1.4"/><path d="m10.8 4.8-1.4-1.4"/><path d="m17.8 11.8 1.4 1.4"/><path d="M12 9a3 3 0 1 0 6 0 3 3 0 0 0-6 0"/><path d="m3 21 9-9"/></svg>
-            </button>
-            <button type="button" id="agentLoopBtn" class="composer-btn" title="Agent Loop 自主工作">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>
-            </button>
-            <div id="tokenCounter" class="text-[10px] ml-1" style="color:var(--text-subtle);">0 tokens</div>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <button type="button" id="stopBtn" class="hidden composer-btn composer-btn-stop" title="停止">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-            </button>
-            <button type="submit" id="send" class="composer-send" title="发送 (Enter)">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-            </button>
-          </div>
-        </div>
-        <div id="filePicker" class="file-picker hidden"></div>
-      </div>
-      <div class="text-center text-[11px] mt-2" style="color:var(--text-subtle);">
-        Claude 可能会出错，重要信息请核实
-      </div>
-    </form>
-  </footer>
+  <div id="panelContainer" class="flex-1 flex overflow-hidden layout-single"></div>
+</div>
 </div>
 
 <!-- Agent Loop modal -->
@@ -2290,10 +2415,10 @@
         <button data-view="preview" class="active" title="预览">预览</button>
         <button data-view="code" title="源码">源码</button>
       </div>
-      <button id="artifactCopyBtn" title="复制代码">📋</button>
-      <button id="artifactDownloadBtn" title="下载文件">⬇️</button>
-      <button id="artifactFullscreenBtn" title="全屏">⛶</button>
-      <button id="artifactCloseBtn" title="关闭">✕</button>
+      <button id="artifactCopyBtn" title="复制代码"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></button>
+      <button id="artifactDownloadBtn" title="下载文件"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+      <button id="artifactFullscreenBtn" title="全屏"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+      <button id="artifactCloseBtn" title="关闭"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
   </div>
   <div class="artifact-panel-body">
@@ -2515,7 +2640,7 @@
           <div class="settings-section">
             <div class="flex items-center justify-between mb-2">
               <label class="settings-label" style="margin-bottom:0;">记忆列表</label>
-              <span id="activeMemoryCount" class="text-xs text-gray-500">0 条生效</span>
+              <span id="activeMemoryCount" class="text-xs text-ink-muted">0 条生效</span>
             </div>
             <div id="memoriesEditor" class="space-y-2 max-h-[42vh] overflow-y-auto scrollbar-thin"></div>
           </div>
@@ -2561,7 +2686,7 @@
       <button id="cliImportSelectAll" class="px-3 py-1.5 text-sm rounded" style="background:var(--surface-2); border:1px solid var(--border);">全选未导入</button>
       <div class="flex items-center gap-2">
         <button id="cliImportCancel" class="px-3 py-1.5 text-sm rounded" style="background:var(--surface-2); border:1px solid var(--border);">取消</button>
-        <button id="cliImportSubmit" class="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">导入选中</button>
+        <button id="cliImportSubmit" class="px-4 py-1.5 bg-coral hover:bg-coral-hover text-white rounded text-sm">导入选中</button>
       </div>
     </div>
   </div>
@@ -2576,12 +2701,12 @@
     </div>
     <div class="space-y-3 text-sm">
       <div id="promptsEditor" class="space-y-2 max-h-80 overflow-y-auto scrollbar-thin"></div>
-      <div class="border-t border-gray-200 dark:border-slate-700 pt-3 space-y-2">
-        <input id="newPromptName" placeholder="模板名称" class="w-full px-3 py-1.5 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 rounded text-sm" />
-        <input id="newPromptSlash" placeholder="斜杠命令（可选，如 test，不含 /）" class="w-full px-3 py-1.5 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 rounded text-sm" />
+      <div class="border-t border-hairline dark:border-dark pt-3 space-y-2">
+        <input id="newPromptName" placeholder="模板名称" class="w-full px-3 py-1.5 border border-hairline dark:border-dark dark:bg-dark-elevated rounded text-sm" />
+        <input id="newPromptSlash" placeholder="斜杠命令（可选，如 test，不含 /）" class="w-full px-3 py-1.5 border border-hairline dark:border-dark dark:bg-dark-elevated rounded text-sm" />
         <textarea id="newPromptContent" rows="3" placeholder="模板内容"
-          class="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 rounded text-sm"></textarea>
-        <button id="addPromptBtn" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">添加模板</button>
+          class="w-full px-3 py-2 border border-hairline dark:border-dark dark:bg-dark-elevated rounded text-sm"></textarea>
+        <button id="addPromptBtn" class="px-3 py-1.5 bg-coral hover:bg-coral-hover text-white rounded text-sm">添加模板</button>
       </div>
     </div>
   </div>
@@ -2748,17 +2873,17 @@
       <div class="text-lg font-semibold">⚙️ 自定义工具权限</div>
       <button data-close class="text-xl">×</button>
     </div>
-    <div class="text-xs text-gray-500 mb-3">勾选预先放行的工具。Web 版不能在运行中批准权限，MCP 工具请提前加入白名单。</div>
+    <div class="text-xs text-ink-muted mb-3">勾选预先放行的工具。Web 版不能在运行中批准权限，MCP 工具请提前加入白名单。</div>
     <div id="toolCheckboxes" class="grid grid-cols-2 gap-2 text-sm"></div>
     <div class="mt-4">
       <label for="extraToolsInput" class="block text-sm font-medium mb-1">额外工具名（MCP / 自定义）</label>
-      <textarea id="extraToolsInput" rows="4" placeholder="每行一个，例如：&#10;mcp__github__search_code" class="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 rounded-lg text-sm"></textarea>
-      <div class="text-xs text-gray-500 mt-1">支持逗号、空格或换行分隔。</div>
+      <textarea id="extraToolsInput" rows="4" placeholder="每行一个，例如：&#10;mcp__github__search_code" class="w-full px-3 py-2 border border-hairline dark:border-dark dark:bg-dark-elevated rounded-lg text-sm"></textarea>
+      <div class="text-xs text-ink-muted mt-1">支持逗号、空格或换行分隔。</div>
     </div>
     <div class="mt-4 flex gap-2">
-      <button id="saveTools" class="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">保存</button>
-      <button id="selectAllTools" class="px-3 py-1.5 bg-gray-100 dark:bg-slate-700 rounded text-sm">全选</button>
-      <button id="clearTools" class="px-3 py-1.5 bg-gray-100 dark:bg-slate-700 rounded text-sm">清空</button>
+      <button id="saveTools" class="px-4 py-1.5 bg-coral hover:bg-coral-hover text-white rounded text-sm">保存</button>
+      <button id="selectAllTools" class="px-3 py-1.5 bg-canvas-soft dark:bg-dark-elevated rounded text-sm">全选</button>
+      <button id="clearTools" class="px-3 py-1.5 bg-canvas-soft dark:bg-dark-elevated rounded text-sm">清空</button>
     </div>
   </div>
 </div>
@@ -2771,21 +2896,21 @@
       <button data-close class="text-xl">×</button>
     </div>
     <div class="grid grid-cols-4 gap-3 text-sm mb-5">
-      <div class="p-3 rounded bg-orange-50 dark:bg-orange-900/30">
-        <div class="text-xs text-gray-500">估算成本 <span title="按 Anthropic 官方价目表估算；订阅 / 第三方网关用户与实付不同" style="cursor:help;">ⓘ</span></div>
+      <div class="p-3 rounded bg-canvas-card dark:bg-dark">
+        <div class="text-xs text-ink-muted">估算成本 <span title="按 Anthropic 官方价目表估算；订阅 / 第三方网关用户与实付不同" style="cursor:help;">ⓘ</span></div>
         <div id="statCost" class="text-xl font-semibold">~$0.00</div>
         <div id="statCostNote" class="hidden text-[10px] mt-1" style="color:#f59e0b;"></div>
       </div>
       <div class="p-3 rounded bg-blue-50 dark:bg-blue-900/30">
-        <div class="text-xs text-gray-500">会话数</div>
+        <div class="text-xs text-ink-muted">会话数</div>
         <div id="statSessions" class="text-xl font-semibold">0</div>
       </div>
       <div class="p-3 rounded bg-green-50 dark:bg-green-900/30">
-        <div class="text-xs text-gray-500">对话轮次</div>
+        <div class="text-xs text-ink-muted">对话轮次</div>
         <div id="statTurns" class="text-xl font-semibold">0</div>
       </div>
-      <div class="p-3 rounded bg-purple-50 dark:bg-purple-900/30">
-        <div class="text-xs text-gray-500">总耗时</div>
+      <div class="p-3 rounded bg-canvas-card dark:bg-dark">
+        <div class="text-xs text-ink-muted">总耗时</div>
         <div id="statDuration" class="text-xl font-semibold">0s</div>
       </div>
     </div>
@@ -3058,30 +3183,1006 @@ const settings = {
   soundEnabled: LS.get('soundEnabled', false),
   urlAutoFetch: LS.get('urlAutoFetch', true),
   webSearch: LS.get('webSearch', false),
+  alertOnDone: LS.get('alertOnDone', false),
 };
 
-let sessionId = null;
-let pendingImages = [];
-let pendingImageKeys = new Set();
-let activeImageUploadKeys = new Set();
-let activeImageUploadPromises = new Set();
-const activeDocUploadPromises = new Set();
-let pendingImageGeneration = 0;
-let currentController = null;
-let archivedView = false;
-let cliView = false;
-let milestoneView = false;
-let activeTagFilter = null;
+// ===== ConversationPanel Class =====
+// Each panel encapsulates its own state, DOM references, and methods.
+// Replaces the old proxy-based "Active Panel" pattern.
+class ConversationPanel {
+  constructor(index) {
+    this.index = index;
+    this.el = null;
+    this.els = {};
+    this.state = {};
+    this._eventHandlers = [];
+    this._resetState();
+  }
+
+  _resetState() {
+    this.state = {
+      sessionId: null,
+      currentController: null,
+      archivedView: false,
+      cliView: false,
+      milestoneView: false,
+      activeTagFilter: null,
+      streamingMessages: {},
+      streamedIds: new Set(),
+      lastStreamingMsgId: null,
+      sessionFeedback: {},
+      feedbackPopover: null,
+      currentUserIndex: 0,
+      lastUserIndex: -1,
+      sessionTokens: { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 },
+      userScrolledUp: false,
+      newContentCount: 0,
+      sessionLoadState: {
+        sessionId: null, minLoadedIdx: 0, maxLoadedIdx: -1,
+        allLoaded: false, isLoading: false, loadRequestId: 0,
+        firstUserInputIdx: 0,
+      },
+      toolUseBlocks: new Map(),
+      pendingToolUseIds: [],
+      subagentCards: new Map(),
+      subagentCollapsed: false,
+      subagentDismissed: false,
+      planCards: new Map(),
+      artifacts: [],
+      activeArtifactIndex: -1,
+      artifactViewMode: 'preview',
+      artifactStreamGeneration: 0,
+      mutedArtifactGeneration: -1,
+      pendingArtifactTimers: new Set(),
+      todoCollapsed: false,
+      todoFadeTimer: null,
+      todoSnapshotQueue: [],
+      todoDrainTimer: null,
+      pendingImages: [],
+      pendingImageKeys: new Set(),
+      activeImageUploadKeys: new Set(),
+      activeImageUploadPromises: new Set(),
+      activeDocUploadPromises: new Set(),
+      pendingImageGeneration: 0,
+      pendingDocs: [],
+      _docUid: 0,
+      urlContext: '',
+      urlDetectTimer: null,
+      _formDragDepth: 0,
+      pickerItems: [],
+      pickerSel: 0,
+      pickerQuery: '',
+      pickerMode: 'default',
+      pendingSlashFork: null,
+      activeSlashAction: null,
+    };
+  }
+
+  createDOM() {
+    const suffix = this.index === 0 ? '' : '-' + this.index;
+
+    return `
+      <div class="panel-body" style="display:flex;flex-direction:column;min-height:0;flex:1;">
+      <div class="panel-info-bar" id="panelInfoBar${suffix}">
+        <div class="panel-info-left">
+          <span id="titleLabel${suffix}" class="panel-info-title" title="双击重命名会话">新会话</span>
+          <button id="suggestTitleBtn${suffix}" class="hidden panel-info-suggest" title="让 Claude 自动命名"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3Z"/><path d="M19 14v4"/><path d="M21 16h-4"/><path d="M5 17v2"/><path d="M6 18H4"/></svg></button>
+          <span id="sessionLabelText${suffix}" class="panel-info-session"></span>
+          <span id="sessionIdText${suffix}" class="hidden"></span>
+          <span id="gitBar${suffix}" class="hidden panel-info-git"></span>
+          <span id="memoryBar${suffix}" class="hidden panel-info-memory"></span>
+          <span id="tokenBar${suffix}" class="hidden panel-info-tokens"></span>
+        </div>
+        <div class="panel-info-right">
+          <button id="reopenArtifactBtn${suffix}" class="hidden panel-info-btn" title="重新打开 Artifact 面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg><span id="reopenArtifactCount${suffix}" class="panel-info-artifact-count"></span></button>
+          <button id="exportBtn${suffix}" class="panel-info-btn" title="导出 Markdown"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+          <button id="headerMoreBtn${suffix}" class="panel-info-btn" title="工作目录 / 权限策略"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+          <button id="closePanelBtn${suffix}" class="panel-info-btn panel-close-btn" title="关闭面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+      </div>
+      <div class="panel-advanced-bar hidden" id="advancedBar${suffix}">
+        <input id="cwdInput${suffix}" list="cwdList${suffix}" placeholder="工作目录（留空默认 ~）" class="text-xs px-2.5 py-1.5" style="flex:1; min-width:0;" />
+        <datalist id="cwdList${suffix}"></datalist>
+        <select id="permSelect${suffix}" class="text-xs px-2.5 py-1.5" title="工具权限策略">
+          <option value="free">CLI 默认</option>
+          <option value="acceptEdits">允许编辑</option>
+          <option value="bypassPermissions">全部放行</option>
+          <option value="plan">计划</option>
+          <option value="readonly">只读</option>
+          <option value="custom">自定义</option>
+        </select>
+      </div>
+      <main id="chat${suffix}" class="flex-1 overflow-y-auto w-full" style="background:var(--bg); position:relative;">
+        <div class="panel-chatInner max-w-3xl w-full mx-auto px-6 py-8" id="chatInner${suffix}">
+          <div id="welcome${suffix}" class="empty-hero">
+            <div class="empty-logo">C</div>
+            <div class="empty-title">Claude Code Web</div>
+            <div class="empty-subtitle">Claude Code CLI 的可视化界面 · 支持工具可视化、Git 回滚、会话分叉</div>
+            <div class="empty-cards">
+              <div class="empty-card" data-prompt="帮我审查当前目录的代码质量，重点关注：代码风格、潜在 bug、安全问题。请先用 Glob 列出所有源文件。">
+                <div class="empty-card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
+                <div class="empty-card-title">代码审查</div>
+                <div class="empty-card-sub">扫描当前目录 · 列出改进建议</div>
+              </div>
+              <div class="empty-card" data-prompt="解释一下 Python 的装饰器，配合代码示例说明常见用法。">
+                <div class="empty-card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7"/></svg></div>
+                <div class="empty-card-title">技术解释</div>
+                <div class="empty-card-sub">深入讲解某个技术概念</div>
+              </div>
+              <div class="empty-card" data-prompt="帮我写一个命令行工具，功能是：读取目录下的所有 markdown 文件，统计总字数。要求用 Python 实现，含参数解析和错误处理。">
+                <div class="empty-card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.26 2.26 0 0 1-3.2-3.2l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.57 3.57z"/></svg></div>
+                <div class="empty-card-title">写个小工具</div>
+                <div class="empty-card-sub">快速搭建一个脚本</div>
+              </div>
+              <div class="empty-card" data-prompt="用 Mermaid 画一个 HTTP 请求从浏览器到后端的完整流程图，包括 DNS、TCP、TLS、服务器处理、数据库查询。">
+                <div class="empty-card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 16V9"/><path d="M13 16V5"/><path d="M8 16v-3"/></svg></div>
+                <div class="empty-card-title">画个流程图</div>
+                <div class="empty-card-sub">Mermaid 图表可视化</div>
+              </div>
+            </div>
+            <div class="mobile-shortcuts-hint text-xs mt-8" style="color:var(--text-subtle);">快捷键：⌘K 搜索 · ⌘N 新会话 · Esc 关闭</div>
+          </div>
+        </div>
+      <button id="jumpBottomBtn${suffix}" class="hidden absolute bottom-4 right-6 btn btn-primary text-sm z-20" style="border-radius:9999px; padding:8px 14px; box-shadow:var(--shadow-lg);">
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></span><span>最新</span><span id="jumpBottomBadge${suffix}" class="hidden text-xs rounded-full px-1.5" style="background:white; color:var(--accent);">0</span>
+      </button>
+      </main>
+
+      <div id="urlChips${suffix}" class="hidden px-4 pt-3 pb-1 max-w-3xl mx-auto w-full flex flex-wrap gap-2" style="background:var(--surface);"></div>
+      <div id="docChips${suffix}" class="hidden px-4 pt-3 pb-1 max-w-3xl mx-auto w-full flex flex-wrap gap-2" style="background:var(--surface);"></div>
+      <div id="attachments${suffix}" class="hidden px-4 pt-3 pb-1 max-w-3xl mx-auto w-full flex flex-wrap gap-2" style="background:var(--surface);"></div>
+
+
+      <footer class="px-4 pt-2 pb-5" style="background:var(--bg);">
+        <form id="form${suffix}" class="max-w-3xl mx-auto relative">
+          <input type="file" id="fileInput${suffix}" accept="image/*" multiple class="hidden" />
+          <input type="file" id="docInput${suffix}" multiple class="hidden" />
+          <div id="agentLoopStatus${suffix}" class="agent-loop-status">
+            <div class="min-w-0">
+              <div class="font-medium">Agent Loop 运行中</div>
+              <div id="agentLoopStatusText${suffix}" class="agent-loop-meta">准备中...</div>
+            </div>
+            <button id="agentLoopStopBtn${suffix}" type="button" class="agent-loop-stop">停止</button>
+          </div>
+          <div class="composer relative" id="composer${suffix}">
+            <textarea id="input${suffix}" rows="1" placeholder="输入消息，让 Claude 帮你..."
+              class="composer-textarea"></textarea>
+            <div class="composer-actions">
+              <div class="flex items-center gap-1.5">
+                <button type="button" id="attachBtn${suffix}" class="composer-btn" title="上传图片 (支持粘贴/拖拽)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/><line x1="19" y1="3" x2="19" y2="9"/><line x1="16" y1="6" x2="22" y2="6"/><circle cx="9" cy="10" r="2"/><path d="m21 16-3.5-3.5a2 2 0 0 0-2.83 0L6 21"/></svg>
+                </button>
+                <button type="button" id="docAttachBtn${suffix}" class="composer-btn" title="上传文件 (支持 HTML/源码/文档等文本文件)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                </button>
+                <button type="button" id="webSearchBtn${suffix}" class="composer-btn" title="联网搜索">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                </button>
+                <button type="button" id="promptOptimizeBtn${suffix}" class="composer-btn" title="优化 Prompt">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9H6"/><path d="M20 9h-2"/><path d="m17.8 6.2 1.4-1.4"/><path d="m10.8 13.2-1.4 1.4"/><path d="m10.8 4.8-1.4-1.4"/><path d="m17.8 11.8 1.4 1.4"/><path d="M12 9a3 3 0 1 0 6 0 3 3 0 0 0-6 0"/><path d="m3 21 9-9"/></svg>
+                </button>
+                <button type="button" id="agentLoopBtn${suffix}" class="composer-btn" title="Agent Loop 自主工作">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>
+                </button>
+                <div id="tokenCounter${suffix}" class="text-[10px] ml-1" style="color:var(--text-subtle);">0 tokens</div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button type="button" id="stopBtn${suffix}" class="hidden composer-btn composer-btn-stop" title="停止">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                </button>
+                <button type="submit" id="send${suffix}" class="composer-send" title="发送 (Enter)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                </button>
+              </div>
+            </div>
+            <div id="filePicker${suffix}" class="file-picker hidden"></div>
+          </div>
+          <div class="text-center text-[11px] mt-2" style="color:var(--text-subtle);">
+            Claude 可能会出错，重要信息请核实
+          </div>
+        </form>
+      </footer>
+      </div>
+    `;
+  }
+
+  _bindDOMRefs() {
+    const suffix = this.index === 0 ? '' : '-' + this.index;
+    const el = this.el;
+    const $id = (id) => {
+      const escaped = CSS.escape(id);
+      const selector = '#' + escaped;
+      const found = el.querySelector(selector) || document.getElementById(id);
+      return found;
+    };
+    // Per-panel elements (with suffix)
+    this.els = {
+      chatEl: $id('chat' + suffix),
+      chatInner: $id('chatInner' + suffix),
+      form: $id('form' + suffix),
+      input: $id('input' + suffix),
+      sendBtn: $id('send' + suffix),
+      stopBtn: $id('stopBtn' + suffix),
+      attachmentsEl: $id('attachments' + suffix),
+      docChipsEl: $id('docChips' + suffix),
+      filePicker: $id('filePicker' + suffix),
+      urlChipsEl: $id('urlChips' + suffix),
+      tokenCounter: $id('tokenCounter' + suffix),
+      jumpBottomBtn: $id('jumpBottomBtn' + suffix),
+      jumpBottomBadge: $id('jumpBottomBadge' + suffix),
+      agentLoopStatus: $id('agentLoopStatus' + suffix),
+      agentLoopStatusText: $id('agentLoopStatusText' + suffix),
+      agentLoopStopBtn: $id('agentLoopStopBtn' + suffix),
+      fileInput: $id('fileInput' + suffix),
+      docInput: $id('docInput' + suffix),
+      attachBtn: $id('attachBtn' + suffix),
+      docAttachBtn: $id('docAttachBtn' + suffix),
+      webSearchBtn: $id('webSearchBtn' + suffix),
+      agentLoopBtn: $id('agentLoopBtn' + suffix),
+      promptOptimizeBtn: $id('promptOptimizeBtn' + suffix),
+      welcome: $id('welcome' + suffix),
+      // Shared global elements (always use base ID, these are singletons)
+      todoPanel: document.getElementById('todoPanel'),
+      todoPanelList: document.getElementById('todoPanelList'),
+      todoProgress: document.getElementById('todoProgress'),
+      todoProgressFill: document.getElementById('todoProgressFill'),
+      todoCollapseBtn: document.getElementById('todoCollapseBtn'),
+      todoCloseBtn: document.getElementById('todoCloseBtn'),
+      subagentPanel: document.getElementById('subagentPanel'),
+      subagentPanelList: document.getElementById('subagentPanelList'),
+      subagentCount: document.getElementById('subagentCount'),
+      subagentCollapseBtn: document.getElementById('subagentCollapseBtn'),
+      subagentCloseBtn: document.getElementById('subagentCloseBtn'),
+      // Per-panel info bar elements (with suffix)
+      titleLabel: $id('titleLabel' + suffix),
+      sessionLabelText: $id('sessionLabelText' + suffix),
+      sessionLabel: $id('sessionIdText' + suffix),
+      cwdInput: $id('cwdInput' + suffix),
+      cwdList: $id('cwdList' + suffix),
+      tokenBar: $id('tokenBar' + suffix),
+      suggestTitleBtn: $id('suggestTitleBtn' + suffix),
+      gitBar: $id('gitBar' + suffix),
+      memoryBar: $id('memoryBar' + suffix),
+      exportBtn: $id('exportBtn' + suffix),
+      reopenArtifactBtn: $id('reopenArtifactBtn' + suffix),
+      reopenArtifactCount: $id('reopenArtifactCount' + suffix),
+      advancedBar: $id('advancedBar' + suffix),
+      permSelect: $id('permSelect' + suffix),
+      headerMoreBtn: $id('headerMoreBtn' + suffix),
+      closePanelBtn: $id('closePanelBtn' + suffix),
+    };
+  }
+
+  bindEvents() {
+    const e = this.els;
+    const panelIdx = this.index;
+    // Scroll handler for lazy loading
+    const onScroll = () => {
+      const s = this.state;
+      if (!s.sessionId) return;
+      const nearBottom = e.chatEl.scrollHeight - e.chatEl.scrollTop - e.chatEl.clientHeight < 80;
+      s.userScrolledUp = !nearBottom;
+      s.newContentCount = nearBottom ? 0 : s.newContentCount;
+      if (e.chatEl.scrollTop < 400 && !s.sessionLoadState.isLoading && !s.sessionLoadState.allLoaded && s.sessionId) {
+        loadMoreEventsForPanel(panelIdx);
+      }
+    };
+    e.chatEl.addEventListener('scroll', onScroll);
+    this._eventHandlers.push({ el: e.chatEl, type: 'scroll', fn: onScroll });
+
+    // Form submit
+    const onSubmit = (ev) => { ev.preventDefault(); send(); };
+    e.form.addEventListener('submit', onSubmit);
+    this._eventHandlers.push({ el: e.form, type: 'submit', fn: onSubmit });
+
+    // Input keydown (Enter to send)
+    const onKeydown = (ev) => {
+      if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
+        ev.preventDefault();
+        send();
+      }
+    };
+    e.input.addEventListener('keydown', onKeydown);
+    this._eventHandlers.push({ el: e.input, type: 'keydown', fn: onKeydown });
+
+    // Stop button
+    if (e.stopBtn) {
+      const onStop = () => { if (this.state.currentController) this.state.currentController.abort(); };
+      e.stopBtn.addEventListener('click', onStop);
+      this._eventHandlers.push({ el: e.stopBtn, type: 'click', fn: onStop });
+    }
+
+    // Jump to bottom
+    if (e.jumpBottomBtn) {
+      const onJump = () => this.forceScrollBottom();
+      e.jumpBottomBtn.addEventListener('click', onJump);
+      this._eventHandlers.push({ el: e.jumpBottomBtn, type: 'click', fn: onJump });
+    }
+
+    // Per-panel info bar: toggle advanced bar
+    if (e.headerMoreBtn) {
+      const onToggleAdvanced = () => {
+        e.advancedBar.classList.toggle('hidden');
+        e.headerMoreBtn.classList.toggle('toolbar-btn-active');
+      };
+      e.headerMoreBtn.addEventListener('click', onToggleAdvanced);
+      this._eventHandlers.push({ el: e.headerMoreBtn, type: 'click', fn: onToggleAdvanced });
+    }
+
+    // Per-panel info bar: close panel
+    if (e.closePanelBtn) {
+      const onClosePanel = () => {
+        if (layoutManager && layoutManager.count <= 1) return;
+        // Find actual array position (creation index != array position after splice)
+        const idx = layoutManager.panels.indexOf(this);
+        if (idx >= 0) layoutManager.closePanel(idx);
+      };
+      e.closePanelBtn.addEventListener('click', onClosePanel);
+      this._eventHandlers.push({ el: e.closePanelBtn, type: 'click', fn: onClosePanel });
+    }
+
+    // Per-panel info bar: export
+    if (e.exportBtn) {
+      const onExport = () => {
+        if (!this.state.sessionId) { alert('当前没有会话'); return; }
+        window.location.href = '/api/sessions/' + this.state.sessionId + '/export';
+      };
+      e.exportBtn.addEventListener('click', onExport);
+      this._eventHandlers.push({ el: e.exportBtn, type: 'click', fn: onExport });
+    }
+
+    // Per-panel info bar: suggest title
+    if (e.suggestTitleBtn) {
+      const onSuggestTitle = async () => {
+        if (!this.state.sessionId) return;
+        e.suggestTitleBtn.innerHTML = iconSvg('loader');
+        try {
+          const r = await fetch('/api/sessions/' + this.state.sessionId + '/suggest-title', { method: 'POST' });
+          if (!r.ok) { alert('生成失败'); return; }
+          const d = await r.json();
+          e.titleLabel.textContent = d.title;
+          if (typeof refreshSessions === 'function') refreshSessions();
+        } catch (err) { alert('出错: ' + err.message); }
+        finally { e.suggestTitleBtn.innerHTML = iconSvg('sparkles'); }
+      };
+      e.suggestTitleBtn.addEventListener('click', onSuggestTitle);
+      this._eventHandlers.push({ el: e.suggestTitleBtn, type: 'click', fn: onSuggestTitle });
+    }
+
+    // Per-panel info bar: dblclick title → inline edit
+    if (e.titleLabel) {
+      const panel = this;
+      const onTitleDblClick = () => {
+        if (!panel.state.sessionId) return;
+        const label = e.titleLabel;
+        const origText = label.textContent;
+        // Replace span with inline input
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = origText;
+        input.className = 'panel-info-title-input';
+        input.style.cssText = 'font-weight:500;font-size:11px;letter-spacing:-0.01em;padding:1px 6px;border-radius:4px;border:1px solid var(--accent);background:var(--bg);color:var(--text);max-width:160px;outline:none;';
+        label.replaceWith(input);
+        input.focus();
+        input.select();
+        const done = async (cancel) => {
+          const newTitle = cancel ? origText : input.value.trim();
+          // Restore label
+          const newLabel = document.createElement('span');
+          newLabel.id = label.id;
+          newLabel.className = label.className;
+          newLabel.title = label.title;
+          newLabel.textContent = newTitle || origText;
+          // Re-bind dblclick
+          newLabel.addEventListener('dblclick', onTitleDblClick);
+          input.replaceWith(newLabel);
+          // Update panel els ref
+          panel.els.titleLabel = newLabel;
+          if (!cancel && newTitle && newTitle !== origText) {
+            await fetch('/api/sessions/' + panel.state.sessionId, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title: newTitle }),
+            });
+            if (typeof refreshSessions === 'function') refreshSessions();
+          }
+        };
+        input.addEventListener('blur', () => done(false));
+        input.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+          if (ev.key === 'Escape') { ev.preventDefault(); done(true); }
+        });
+      };
+      e.titleLabel.addEventListener('dblclick', onTitleDblClick);
+      this._eventHandlers.push({ el: e.titleLabel, type: 'dblclick', fn: onTitleDblClick });
+    }
+
+    // Per-panel info bar: reopen artifact
+    if (e.reopenArtifactBtn) {
+      const onReopenArtifact = () => {
+        const s = this.state;
+        if (!s.artifacts.length) return;
+        s.mutedArtifactGeneration = -1;
+        if (s.activeArtifactIndex < 0 || s.activeArtifactIndex >= s.artifacts.length) {
+          s.activeArtifactIndex = s.artifacts.length - 1;
+        }
+        const ap = document.getElementById('artifactPanel');
+        if (ap) ap.classList.remove('hidden');
+        if (typeof renderArtifactTabs === 'function') renderArtifactTabs();
+        if (typeof renderArtifactPreview === 'function') renderArtifactPreview();
+        if (typeof updateReopenArtifactBtn === 'function') updateReopenArtifactBtn();
+      };
+      e.reopenArtifactBtn.addEventListener('click', onReopenArtifact);
+      this._eventHandlers.push({ el: e.reopenArtifactBtn, type: 'click', fn: onReopenArtifact });
+    }
+
+    // Per-panel: cwdInput change → refresh git
+    if (e.cwdInput) {
+      const onCwdChange = () => {
+        const cwd = e.cwdInput.value.trim();
+        if (!cwd) { if (e.gitBar) e.gitBar.classList.add('hidden'); return; }
+        fetch('/api/git?cwd=' + encodeURIComponent(cwd))
+          .then(r => r.json())
+          .then(d => {
+            if (!d.available || !d.branch) { if (e.gitBar) e.gitBar.classList.add('hidden'); return; }
+            if (e.gitBar) {
+              e.gitBar.classList.remove('hidden');
+              e.gitBar.textContent = `\u2387 ${d.branch}${d.dirty ? ' \u00B1' + d.dirty : ''}`;
+            }
+          })
+          .catch(() => { if (e.gitBar) e.gitBar.classList.add('hidden'); });
+      };
+      e.cwdInput.addEventListener('change', onCwdChange);
+      this._eventHandlers.push({ el: e.cwdInput, type: 'change', fn: onCwdChange });
+    }
+
+    // Per-panel: permSelect change
+    if (e.permSelect) {
+      e.permSelect.value = LS.get('permMode', 'free');
+      const onPermChange = () => {
+        LS.set('permMode', e.permSelect.value);
+        if (e.permSelect.value === 'custom' && typeof openCustomToolsModal === 'function') openCustomToolsModal();
+      };
+      e.permSelect.addEventListener('change', onPermChange);
+      this._eventHandlers.push({ el: e.permSelect, type: 'change', fn: onPermChange });
+    }
+
+    // Direct click on panel element to activate this panel (split-view)
+    if (this.el && this.index !== 0) {
+      const onPanelClick = (ev) => {
+        console.log('[panel direct click] FIRED on panel', this.index, 'splitViewActive:', splitViewActive, 'activeIdx:', layoutManager ? layoutManager.activeIdx : 'N/A');
+        // Don't activate if clicking on buttons, inputs, or the composer
+        if (ev.target.closest('button, input, textarea, select, a')) return;
+        if (typeof splitViewActive !== 'undefined' && splitViewActive && layoutManager && layoutManager.activeIdx !== this.index) {
+          console.log('[panel direct click] activating panel', this.index);
+          layoutManager.activatePanel(this.index);
+        }
+      };
+      this.el.addEventListener('click', onPanelClick);
+      this._eventHandlers.push({ el: this.el, type: 'click', fn: onPanelClick });
+    }
+  }
+
+  unbindEvents() {
+    this._eventHandlers.forEach(({ el, type, fn }) => {
+      if (el) el.removeEventListener(type, fn);
+    });
+    this._eventHandlers = [];
+  }
+
+  destroy() {
+    this.unbindEvents();
+    if (this.el && this.el.parentNode) this.el.remove();
+    this.el = null;
+    this.els = {};
+  }
+
+  // ---- Per-panel method stubs (migrated from global functions) ----
+
+  isNearBottom() {
+    const e = this.els;
+    return e.chatEl.scrollHeight - e.chatEl.scrollTop - e.chatEl.clientHeight < 80;
+  }
+
+  scrollBottom() {
+    const s = this.state, e = this.els;
+    if (!s.userScrolledUp) {
+      e.chatEl.scrollTop = e.chatEl.scrollHeight;
+    } else if (typeof bumpNewContent === 'function') {
+      bumpNewContent();
+    }
+  }
+
+  forceScrollBottom() {
+    const s = this.state, e = this.els;
+    s.userScrolledUp = false;
+    e.chatEl.scrollTop = e.chatEl.scrollHeight;
+  }
+
+  removeWelcome() {
+    const suffix = this.index === 0 ? '' : '-' + this.index;
+    const w = document.getElementById('welcome' + suffix);
+    if (w && w.parentNode) w.remove();
+  }
+
+  resetSessionTokens() {
+    this.state.sessionTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
+    renderSessionTokens();
+  }
+
+  addSystemInfo(text) {
+    const el = document.createElement('div');
+    el.className = 'text-center text-xs text-ink-subtle py-1';
+    el.textContent = text;
+    this.els.chatInner.appendChild(el);
+  }
+
+  addSystemAction(text, actionText, onClick) {
+    const el = document.createElement('div');
+    el.className = 'text-center text-xs text-ink-subtle py-1';
+    const label = document.createElement('span');
+    label.textContent = text;
+    el.appendChild(label);
+    if (actionText && typeof onClick === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ml-2 underline';
+      btn.style.color = 'var(--accent)';
+      btn.textContent = actionText;
+      btn.addEventListener('click', onClick);
+      el.appendChild(btn);
+    }
+    this.els.chatInner.appendChild(el);
+  }
+
+  addErrorBlock(message) {
+    const el = document.createElement('div');
+    el.className = 'bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-900 text-red-800 dark:text-red-300 px-3 py-2 rounded-lg text-sm';
+    el.textContent = '错误: ' + message;
+    this.els.chatInner.appendChild(el);
+  }
+}
+
+// ===== PanelLayoutManager =====
+class PanelLayoutManager {
+  constructor(containerEl) {
+    this.containerEl = containerEl;
+    this.mode = 'single';
+    this.panels = [];
+    this._activeIdx = 0;
+    this._dividers = [];
+  }
+
+  get active() { return this.panels[this._activeIdx]; }
+  get activeIdx() { return this._activeIdx; }
+  get count() { return this.panels.length; }
+
+  // Wrap an existing DOM element as a panel (for panel-0 which is in static HTML)
+  wrapExistingPanel(el, idx) {
+    const panel = new ConversationPanel(idx);
+    panel.el = el;
+    panel._bindDOMRefs();
+    panel.bindEvents();
+    this.panels.push(panel);
+    // Sync legacy panelManager for backward compat
+    this._syncLegacy(idx, panel);
+    return panel;
+  }
+
+  // Create a new dynamic panel
+  createPanel(idx) {
+    // Remove any existing placeholder panel element (e.g., static #panel-1)
+    const existing = document.getElementById('panel-' + idx);
+    if (existing && existing !== this.panels[0]?.el) {
+      existing.remove();
+    }
+
+    const panel = new ConversationPanel(idx);
+    const panelEl = document.createElement('div');
+    panelEl.id = 'panel-' + idx;
+    panelEl.className = 'panel flex-1 flex flex-col min-w-0';
+    panelEl.innerHTML = panel.createDOM();
+    panel.el = panelEl;
+    panel._bindDOMRefs();
+    panel.bindEvents();
+    this.panels.push(panel);
+    this.containerEl.appendChild(panelEl);
+    // Sync legacy panelManager for backward compat
+    this._syncLegacy(idx, panel);
+    return panel;
+  }
+
+  // Keep legacy panelManager.proxy in sync with this panel's state/els
+  _syncLegacy(idx, panel) {
+    if (typeof panelManager === 'undefined') return;
+    while (panelManager._panels.length <= idx) {
+      panelManager.addPanel(panel.state);
+    }
+    panelManager._panels[idx].state = panel.state;
+    panelManager._panels[idx].els = panel.els;
+  }
+
+  setLayout(mode) {
+    this.mode = mode;
+    const targetCount = { single: 1, 'horizontal-2': 2, 'horizontal-3': 3, 'grid-2x2': 4 }[mode] || 1;
+    while (this.panels.length < targetCount) {
+      const nextIdx = Math.max(-1, ...this.panels.map(p => p.index)) + 1;
+      this.createPanel(nextIdx);
+    }
+    while (this.panels.length > targetCount) {
+      this._removePanel(this.panels.length - 1);
+    }
+    this._render();
+  }
+
+  setActive(idx) {
+    if (idx < 0 || idx >= this.panels.length) return;
+    // Diagnostic: trace when active panel switches FROM 1 TO 0
+    if (this._activeIdx === 1 && idx === 0) {
+      console.trace('[DEBUG] _activeIdx changing from 1→0! Call stack:');
+    }
+    console.log('[layoutManager] setActive:', idx, 'was:', this._activeIdx, 'panels:', this.panels.length, 'panelManager._activeId before:', typeof panelManager !== 'undefined' ? panelManager._activeId : 'N/A');
+    this._activeIdx = idx;
+    // Keep legacy panelManager proxy in sync during transition
+    if (typeof panelManager !== 'undefined') panelManager.setActive(idx);
+    console.log('[layoutManager] setActive done, panelManager._activeId:', typeof panelManager !== 'undefined' ? panelManager._activeId : 'N/A');
+    this._updateVisuals();
+    syncGlobalPanels();
+    highlightActiveSession();
+  }
+
+  activatePanel(idx) {
+    // idx is a creation index (panel.index), find array position
+    const arrIdx = this.panels.findIndex(p => p.index === idx);
+    if (arrIdx < 0 || arrIdx === this._activeIdx) return;
+    const cur = this.active;
+    if (cur && cur.state.sessionId && cur.els.chatEl) {
+      sessionScrollPositions[cur.state.sessionId] = cur.els.chatEl.scrollTop;
+    }
+    this.setActive(arrIdx);
+  }
+
+  loadSessionIntoPanel(panelIdx, id) {
+    console.log('[split-view] loadSessionIntoPanel panelIdx=', panelIdx, 'id=', id);
+    if (panelIdx >= this.panels.length) return;
+    const creationIdx = this.panels[panelIdx].index;
+    if (this._activeIdx !== panelIdx) this.activatePanel(creationIdx);
+    loadSession(id);
+    const panelEl = this.panels[panelIdx].el;
+    if (panelEl) panelEl.classList.add('has-session');
+  }
+
+  _removePanel(idx) {
+    if (idx < 0 || idx >= this.panels.length) return;
+    const panel = this.panels[idx];
+    panel.destroy();
+    this.panels.splice(idx, 1);
+    for (let i = idx; i < this.panels.length; i++) {
+      this.panels[i].index = i;
+      this.panels[i].el.id = 'panel-' + i;
+    }
+    if (this._activeIdx >= this.panels.length) {
+      this._activeIdx = Math.max(0, this.panels.length - 1);
+    }
+  }
+
+  closePanel(idx) {
+    if (this.panels.length <= 1) return; // must keep at least one panel
+    if (idx < 0 || idx >= this.panels.length) return;
+
+    // Save the active session of the panel being closed
+    const closingPanel = this.panels[idx];
+    const closingActive = idx === this._activeIdx;
+
+    // Destroy and remove the panel
+    closingPanel.destroy();
+    this.panels.splice(idx, 1);
+
+    // Adjust activeIdx if the closed panel was before or at the active one
+    if (idx < this._activeIdx) {
+      this._activeIdx--;
+    } else if (closingActive) {
+      // Closed panel was active, activate the nearest remaining panel
+      this._activeIdx = Math.min(idx, this.panels.length - 1);
+    }
+    if (this._activeIdx >= this.panels.length) {
+      this._activeIdx = this.panels.length - 1;
+    }
+
+    // Recalculate layout mode based on remaining count
+    const newMode = _countToMode(this.panels.length);
+    this.mode = newMode;
+    this._render();
+    this._updateVisuals();
+    _afterPanelCountChange();
+
+    // Sync legacy panelManager with the remaining panels
+    if (typeof panelManager !== 'undefined') {
+      panelManager._panels = this.panels.map(p => ({ state: p.state, els: p.els }));
+      panelManager._activeId = this._activeIdx;
+    }
+  }
+
+  _render() {
+    // Remove existing dividers
+    this._dividers.forEach(d => d.remove());
+    this._dividers = [];
+
+    // Update container class
+    this.containerEl.classList.remove('layout-single', 'layout-horizontal-2', 'layout-horizontal-3', 'layout-grid-2x2');
+    this.containerEl.classList.add('layout-' + this.mode);
+
+    // Ensure all panels are in the DOM
+    this.panels.forEach(p => {
+      if (p.el && !p.el.parentNode) this.containerEl.appendChild(p.el);
+    });
+
+    // Create dividers for multi-panel modes — insert between panels
+    const count = this.panels.length;
+    if (this.mode === 'horizontal-2' || this.mode === 'horizontal-3') {
+      for (let i = 0; i < count - 1; i++) {
+        const divider = document.createElement('div');
+        divider.className = 'panel-divider';
+        divider.dataset.dividerIdx = i;
+        // Insert divider BETWEEN panel i and panel i+1
+        const panelB = this.panels[i + 1];
+        if (panelB && panelB.el && panelB.el.parentNode) {
+          this.containerEl.insertBefore(divider, panelB.el);
+        } else {
+          this.containerEl.appendChild(divider);
+        }
+        this._dividers.push(divider);
+        this._makeDividerDraggable(divider, i, i + 1, 'horizontal');
+      }
+    } else if (this.mode === 'grid-2x2') {
+      const hDiv = document.createElement('div');
+      hDiv.className = 'panel-divider-h';
+      this.containerEl.appendChild(hDiv);
+      this._dividers.push(hDiv);
+
+      const vDiv = document.createElement('div');
+      vDiv.className = 'panel-divider-v';
+      this.containerEl.appendChild(vDiv);
+      this._dividers.push(vDiv);
+    }
+
+    this._updateVisuals();
+  }
+
+  _updateVisuals() {
+    this.panels.forEach((panel, i) => {
+      if (panel.el) panel.el.classList.toggle('inactive', i !== this._activeIdx);
+    });
+  }
+
+  _makeDividerDraggable(divider, idxA, idxB, axis) {
+    let dragging = false;
+    divider.addEventListener('mousedown', (e) => {
+      dragging = true;
+      divider.classList.add('dragging');
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const panelA = this.panels[idxA];
+      const panelB = this.panels[idxB];
+      if (!panelA || !panelB || !panelA.el || !panelB.el) return;
+      const containerRect = this.containerEl.getBoundingClientRect();
+      const frac = Math.max(0.15, Math.min(0.85,
+        (axis === 'horizontal' ? e.clientX - containerRect.left : e.clientY - containerRect.top)
+        / (axis === 'horizontal' ? containerRect.width : containerRect.height)
+      ));
+      panelA.el.style.flex = frac;
+      panelB.el.style.flex = 1 - frac;
+    });
+    document.addEventListener('mouseup', () => {
+      if (dragging) {
+        dragging = false;
+        divider.classList.remove('dragging');
+      }
+    });
+  }
+}
+
+// Legacy panelManager (kept for backward compat during migration)
+// ===== Split-View Panel Infrastructure =====
+// Per-panel variable names (state that differs between panels)
+const _PANEL_VARS = [
+  // Session base
+  'sessionId', 'currentController', 'archivedView', 'cliView', 'milestoneView', 'activeTagFilter',
+  // Streaming
+  'streamingMessages', 'streamedIds', 'lastStreamingMsgId', 'sessionFeedback', 'feedbackPopover',
+  // Runtime
+  'currentUserIndex', 'lastUserIndex', 'sessionTokens', 'userScrolledUp', 'newContentCount', 'sessionLoadState',
+  // Tools
+  'toolUseBlocks', 'pendingToolUseIds', 'subagentCards', 'subagentCollapsed', 'subagentDismissed', 'planCards',
+  // Artifacts
+  'artifacts', 'activeArtifactIndex', 'artifactViewMode', 'artifactStreamGeneration', 'mutedArtifactGeneration', 'pendingArtifactTimers',
+  // Todo
+  'todoCollapsed', 'todoFadeTimer', 'todoSnapshotQueue', 'todoDrainTimer',
+  // Input
+  'pendingImages', 'pendingImageKeys', 'activeImageUploadKeys', 'activeImageUploadPromises', 'activeDocUploadPromises',
+  'pendingImageGeneration', 'pendingDocs', '_docUid', 'urlContext', 'urlDetectTimer', '_formDragDepth',
+  // Picker
+  'pickerItems', 'pickerSel', 'pickerQuery', 'pickerMode', 'pendingSlashFork', 'activeSlashAction',
+];
+
+// Per-panel DOM element references
+const _PANEL_DOM_REFS = [
+  'chatEl', 'chatInner', 'form', 'input', 'sendBtn', 'stopBtn',
+  'attachmentsEl', 'docChipsEl', 'filePicker', 'urlChipsEl',
+  'tokenCounter', 'jumpBottomBtn', 'jumpBottomBadge',
+  'todoPanel', 'todoPanelList', 'todoProgress', 'todoProgressFill', 'todoCollapseBtn', 'todoCloseBtn',
+  'subagentPanel', 'subagentPanelList', 'subagentCount', 'subagentCollapseBtn', 'subagentCloseBtn',
+  'titleLabel', 'sessionLabelText', 'sessionLabel',
+  'cwdInput', 'cwdList', 'tokenBar', 'suggestTitleBtn',
+  'gitBar', 'memoryBar', 'exportBtn', 'reopenArtifactBtn', 'reopenArtifactCount',
+  'advancedBar', 'permSelect', 'headerMoreBtn', 'closePanelBtn',
+  'agentLoopStatus', 'agentLoopStatusText', 'agentLoopStopBtn',
+  'welcome', 'attachBtn', 'fileInput', 'docAttachBtn', 'docInput',
+  'webSearchBtn', 'agentLoopBtn', 'promptOptimizeBtn',
+];
+
+function freshPanelState() {
+  return {
+    sessionId: null,
+    currentController: null, archivedView: false, cliView: false, milestoneView: false, activeTagFilter: null,
+    streamingMessages: {}, streamedIds: new Set(), lastStreamingMsgId: null,
+    sessionFeedback: {}, feedbackPopover: null,
+    currentUserIndex: 0, lastUserIndex: -1,
+    sessionTokens: { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 },
+    userScrolledUp: false, newContentCount: 0,
+    sessionLoadState: { sessionId: null, minLoadedIdx: 0, maxLoadedIdx: -1, allLoaded: false, isLoading: false, loadRequestId: 0, firstUserInputIdx: 0 },
+    toolUseBlocks: new Map(), pendingToolUseIds: [],
+    subagentCards: new Map(), subagentCollapsed: false, subagentDismissed: false,
+    planCards: new Map(),
+    artifacts: [], activeArtifactIndex: -1, artifactViewMode: 'preview',
+    artifactStreamGeneration: 0, mutedArtifactGeneration: -1, pendingArtifactTimers: new Set(),
+    todoCollapsed: false, todoFadeTimer: null, todoSnapshotQueue: [], todoDrainTimer: null,
+    pendingImages: [], pendingImageKeys: new Set(),
+    activeImageUploadKeys: new Set(), activeImageUploadPromises: new Set(), activeDocUploadPromises: new Set(),
+    pendingImageGeneration: 0, pendingDocs: [], _docUid: 0,
+    urlContext: '', urlDetectTimer: null, _formDragDepth: 0,
+    pickerItems: [], pickerSel: 0, pickerQuery: '', pickerMode: 'default', pendingSlashFork: null, activeSlashAction: null,
+    els: {},
+  };
+}
+
+const panelManager = {
+  _panels: [],
+  _activeId: 0,
+  get active() { return this._panels[this._activeId]; },
+  get activeId() { return this._activeId; },
+  get count() { return this._panels.length; },
+  init(firstPanelState) {
+    this._panels = [{ state: firstPanelState, els: {} }];
+    this._activeId = 0;
+  },
+  addPanel(state) {
+    const idx = this._panels.length;
+    this._panels.push({ state: state || freshPanelState(), els: {} });
+    return idx;
+  },
+  setActive(idx) {
+    if (idx >= 0 && idx < this._panels.length) this._activeId = idx;
+  },
+  getState(idx) {
+    return idx >= 0 && idx < this._panels.length ? this._panels[idx].state : null;
+  },
+};
+
+function installPanelStateProxy() {
+  // Helper: get the active ConversationPanel (via layoutManager once created)
+  let _activeCallCount = 0;
+  const _active = () => {
+    _activeCallCount++;
+    // PRIMARY: check window.__panelOverride (most reliable, no scope issues)
+    try {
+      if (window.__panelOverride) {
+        if (_activeCallCount <= 3 || _activeCallCount % 50 === 0) {
+          console.log('[proxy _active] call#', _activeCallCount, 'using window.__panelOverride index:', window.__panelOverride.index);
+        }
+        return window.__panelOverride;
+      }
+    } catch(e) {}
+    // SECONDARY: check layoutManager._overridePanel
+    try {
+      if (typeof layoutManager !== 'undefined' && layoutManager && layoutManager._overridePanel) {
+        if (_activeCallCount <= 3 || _activeCallCount % 50 === 0) {
+          console.log('[proxy _active] call#', _activeCallCount, 'using layoutManager._overridePanel index:', layoutManager._overridePanel.index);
+        }
+        return layoutManager._overridePanel;
+      }
+    } catch(e) {}
+    try {
+      if (typeof layoutManager !== 'undefined' && layoutManager && layoutManager.active) {
+        const a = layoutManager.active;
+        if (_activeCallCount <= 3 || _activeCallCount % 50 === 0) {
+          console.log('[proxy _active] call#', _activeCallCount, 'using layoutManager, active.index:', a ? a.index : 'NULL', '_activeIdx:', layoutManager._activeIdx);
+        }
+        return a;
+      }
+    } catch(e) {}
+    // Fallback to legacy panelManager during early init
+    try {
+      if (typeof panelManager !== 'undefined' && panelManager && panelManager.active) {
+        if (_activeCallCount <= 3 || _activeCallCount % 50 === 0) {
+          console.log('[proxy _active] call#', _activeCallCount, 'FALLBACK to panelManager, _activeId:', panelManager._activeId);
+        }
+        return panelManager.active;
+      }
+    } catch(e) {}
+    if (_activeCallCount <= 3 || _activeCallCount % 50 === 0) {
+      console.log('[proxy _active] call#', _activeCallCount, 'RETURNING NULL!');
+    }
+    return null;
+  };
+
+  // Proxy per-panel state variables through getters/setters on window
+  _PANEL_VARS.forEach(key => {
+    try {
+      // Save original value to panel 0's state before replacing
+      const p0 = _active();
+      if (p0 && p0.state && key in p0.state) {
+        try { p0.state[key] = window[key]; } catch(e) {}
+      }
+      try { delete window[key]; } catch(e) {}
+      Object.defineProperty(window, key, {
+        get() { try { const a = _active(); return a ? a.state[key] : undefined; } catch(e) { return undefined; } },
+        set(v) { try { const a = _active(); if (a) a.state[key] = v; } catch(e) {} },
+        configurable: true, enumerable: true,
+      });
+    } catch(e) {
+      console.warn('Panel proxy: failed to proxy', key, e);
+    }
+  });
+
+  // Proxy per-panel DOM element refs
+  _PANEL_DOM_REFS.forEach(key => {
+    try {
+      const p0 = _active();
+      if (p0 && p0.els) {
+        try { p0.els[key] = window[key]; } catch(e) {}
+      }
+      try { delete window[key]; } catch(e) {}
+      Object.defineProperty(window, key, {
+        get() { try { const a = _active(); return a ? a.els[key] : undefined; } catch(e) { return undefined; } },
+        set(v) { try { const a = _active(); if (a) a.els[key] = v; } catch(e) {} },
+        configurable: true, enumerable: true,
+      });
+    } catch(e) {
+      console.warn('Panel proxy: failed to proxy DOM ref', key, e);
+    }
+  });
+}
+
+window.sessionId = null;
+window.pendingImages = [];
+window.pendingImageKeys = new Set();
+window.activeImageUploadKeys = new Set();
+window.activeImageUploadPromises = new Set();
+window.activeDocUploadPromises = new Set();
+window.pendingImageGeneration = 0;
+window.currentController = null;
+window.archivedView = false;
+window.cliView = false;
+window.milestoneView = false;
+window.activeTagFilter = null;
 let sessionListRequestId = 0;
 let cliSessionListRequestId = 0;
+
+// Session lazy-loading state
+const SCROLL_BATCH_SIZE = 20;
+window.sessionLoadState = { sessionId: null, minLoadedIdx: 0, maxLoadedIdx: -1, allLoaded: false, isLoading: false, loadRequestId: 0, firstUserInputIdx: 0, };
+const sessionScrollPositions = {};
+const sessionLoadedMinIdx = {}; // preserve loaded range across session switches
 let dailyChart = null, toolsChart = null;
-let sessionFeedback = {};
-let feedbackPopover = null;
+window.sessionFeedback = {};
+window.feedbackPopover = null;
 
 // Token-level streaming state
-const streamingMessages = {}; // msgId -> { container, blocks: { [index]: {type, el, text} } }
-const streamedIds = new Set();
-let lastStreamingMsgId = null;
+window.streamingMessages = {}; // msgId -> { container, blocks: { [index]: {type, el, text} } };
+window.streamedIds = new Set();
+window.lastStreamingMsgId = null;
 let mobileAccessStatus = { local: true, authorized: false, enabled: false };
 let mobileQuestionMode = false;
 let savedCwdOptions = [];
@@ -3089,24 +4190,25 @@ const MOBILE_BANNER_DISMISSED_KEY = 'mobileQuestionBannerDismissed';
 let mobileBannerDismissed = LS.get(MOBILE_BANNER_DISMISSED_KEY, false);
 
 // Per-turn tracking (for edit/regenerate/restore)
-let currentUserIndex = 0;
-let lastUserIndex = -1;
+window.currentUserIndex = 0;
+window.lastUserIndex = -1;
 const SESSION_PERMISSION_OVERRIDES_KEY = 'sessionPermissionOverrides';
 const sessionPermissionOverrides = LS.get(SESSION_PERMISSION_OVERRIDES_KEY, {});
 
 // ===== dom refs =====
 const $ = (id) => document.getElementById(id);
-const chatEl = $('chat'), chatInner = $('chatInner'), form = $('form'), input = $('input'), sendBtn = $('send'), stopBtn = $('stopBtn');
-const sessionLabel = $('sessionIdText'), titleLabel = $('titleLabel');
-const cwdInput = $('cwdInput'), cwdList = $('cwdList');
-const newSessionBtn = $('newSession'), welcome = $('welcome');
+window.chatEl = $('chat'); window.chatInner = $('chatInner'); window.form = $('form'); window.input = $('input'); window.sendBtn = $('send'); window.stopBtn = $('stopBtn');
+window.sessionLabel = $('sessionIdText'); window.titleLabel = $('titleLabel');
+window.cwdInput = $('cwdInput'); window.cwdList = $('cwdList');
+const newSessionBtn = $('newSession');
+window.welcome = $('welcome');
 const sessionList = $('sessionList');
-const fileInput = $('fileInput'), attachBtn = $('attachBtn'), attachmentsEl = $('attachments');
-const webSearchBtn = $('webSearchBtn');
-const docInput = $('docInput');
-const docAttachBtn = $('docAttachBtn');
-const docChipsEl = $('docChips');
-const agentLoopBtn = $('agentLoopBtn');
+window.fileInput = $('fileInput'); window.attachBtn = $('attachBtn'); window.attachmentsEl = $('attachments');
+window.webSearchBtn = $('webSearchBtn');
+window.docInput = $('docInput');
+window.docAttachBtn = $('docAttachBtn');
+window.docChipsEl = $('docChips');
+window.agentLoopBtn = $('agentLoopBtn');
 const agentLoopModal = $('agentLoopModal');
 const agentLoopGoal = $('agentLoopGoal');
 const agentLoopMaxTurns = $('agentLoopMaxTurns');
@@ -3114,22 +4216,22 @@ const agentLoopTokenBudget = $('agentLoopTokenBudget');
 const agentLoopTestCommand = $('agentLoopTestCommand');
 const agentLoopNotify = $('agentLoopNotify');
 const agentLoopStartBtn = $('agentLoopStartBtn');
-const agentLoopStatus = $('agentLoopStatus');
-const agentLoopStatusText = $('agentLoopStatusText');
-const agentLoopStopBtn = $('agentLoopStopBtn');
-const jumpBottomBtn = $('jumpBottomBtn');
-const jumpBottomBadge = $('jumpBottomBadge');
-const todoPanel = $('todoPanel');
-const todoPanelList = $('todoPanelList');
-const todoProgress = $('todoProgress');
-const todoProgressFill = $('todoProgressFill');
-const todoCollapseBtn = $('todoCollapseBtn');
-const todoCloseBtn = $('todoCloseBtn');
-const subagentPanel = $('subagentPanel');
-const subagentPanelList = $('subagentPanelList');
-const subagentCount = $('subagentCount');
-const subagentCollapseBtn = $('subagentCollapseBtn');
-const subagentCloseBtn = $('subagentCloseBtn');
+window.agentLoopStatus = $('agentLoopStatus');
+window.agentLoopStatusText = $('agentLoopStatusText');
+window.agentLoopStopBtn = $('agentLoopStopBtn');
+window.jumpBottomBtn = $('jumpBottomBtn');
+window.jumpBottomBadge = $('jumpBottomBadge');
+window.todoPanel = $('todoPanel');
+window.todoPanelList = $('todoPanelList');
+window.todoProgress = $('todoProgress');
+window.todoProgressFill = $('todoProgressFill');
+window.todoCollapseBtn = $('todoCollapseBtn');
+window.todoCloseBtn = $('todoCloseBtn');
+window.subagentPanel = $('subagentPanel');
+window.subagentPanelList = $('subagentPanelList');
+window.subagentCount = $('subagentCount');
+window.subagentCollapseBtn = $('subagentCollapseBtn');
+window.subagentCloseBtn = $('subagentCloseBtn');
 const subagentModal = $('subagentModal');
 const subagentModalTitle = $('subagentModalTitle');
 const subagentModalMeta = $('subagentModalMeta');
@@ -3142,14 +4244,14 @@ const artifactCodeView = $('artifactCodeView');
 const artifactCodeBlock = $('artifactCodeBlock');
 const artifactViewToggle = $('artifactViewToggle');
 const artifactCloseBtn = $('artifactCloseBtn');
-const reopenArtifactBtn = $('reopenArtifactBtn');
-const reopenArtifactCount = $('reopenArtifactCount');
+window.reopenArtifactBtn = $('reopenArtifactBtn');
+window.reopenArtifactCount = $('reopenArtifactCount');
 const artifactFullscreenBtn = $('artifactFullscreenBtn');
 const artifactDownloadBtn = $('artifactDownloadBtn');
 const artifactCopyBtn = $('artifactCopyBtn');
 const searchInput = $('searchInput');
 const modelSelect = $('modelSelect');
-const permSelect = $('permSelect');
+window.permSelect = $('permSelect');
 const mobileModeBanner = $('mobileModeBanner');
 const dismissMobileBannerBtn = $('dismissMobileBanner');
 const toolsModal = $('toolsModal');
@@ -3158,8 +4260,9 @@ const extraToolsInput = $('extraToolsInput');
 const saveTools = $('saveTools');
 const selectAllTools = $('selectAllTools');
 const clearTools = $('clearTools');
-const exportBtn = $('exportBtn');
+window.exportBtn = $('exportBtn');
 const themeBtn = $('themeBtn');
+const alertToggleBtn = $('alertToggleBtn');
 const settingsBtn = $('settingsBtn'), settingsModal = $('settingsModal');
 const cliImportModal = $('cliImportModal');
 const cliImportRoot = $('cliImportRoot');
@@ -3211,7 +4314,7 @@ const memoriesEditor = $('memoriesEditor'), newMemoryContent = $('newMemoryConte
 const promptsModal = $('promptsModal'), managePromptsBtn = $('managePrompts');
 const promptList = $('promptList'), promptsEditor = $('promptsEditor');
 const addPromptBtn = $('addPromptBtn'), newPromptName = $('newPromptName'), newPromptSlash = $('newPromptSlash'), newPromptContent = $('newPromptContent');
-const promptOptimizeBtn = $('promptOptimizeBtn');
+window.promptOptimizeBtn = $('promptOptimizeBtn');
 const promptOptimizerModal = $('promptOptimizerModal');
 const poSummary = $('promptOptimizerSummary');
 const poSampleCount = $('poSampleCount'), poRuleCount = $('poRuleCount'), poRewriteCount = $('poRewriteCount');
@@ -3221,21 +4324,160 @@ const poCandidateList = $('poCandidateList'), poSampleList = $('poSampleList');
 const poCurrentPrompt = $('poCurrentPrompt'), poRewriteTask = $('poRewriteTask'), poRewriteBtn = $('poRewriteBtn'), poUseInputBtn = $('poUseInputBtn'), poPrivacyHint = $('poPrivacyHint');
 const poRewriteExplanation = $('poRewriteExplanation'), poVariantList = $('poVariantList'), poRuleList = $('poRuleList'), poSimilarList = $('poSimilarList');
 const statsBar = $('statsBar'), statsModal = $('statsModal');
-const memoryBar = $('memoryBar');
-const tokenBar = $('tokenBar');
-const tokenCounter = $('tokenCounter');
-const filePicker = $('filePicker');
+window.memoryBar = $('memoryBar');
+window.tokenBar = $('tokenBar');
+window.tokenCounter = $('tokenCounter');
+window.filePicker = $('filePicker');
 const viewActiveBtn = $('viewActive'), viewArchivedBtn = $('viewArchived'), viewMilestonesBtn = $('viewMilestones'), viewCliBtn = $('viewCli');
 const tagFilter = $('tagFilter');
 const lightbox = $('lightbox');
-const gitBar = $('gitBar');
-const sessionLabelText = $('sessionLabelText');
-const suggestTitleBtn = $('suggestTitleBtn');
+window.gitBar = $('gitBar');
+window.sessionLabelText = $('sessionLabelText');
+window.suggestTitleBtn = $('suggestTitleBtn');
 const toggleSidebar = $('toggleSidebar'), sidebar = $('sidebar');
 const closeSidebarBtn = $('closeSidebar'), sidebarScrim = $('sidebarScrim');
 
+// ===== Install panel proxy (must be after all var declarations and DOM refs) =====
+// Legacy proxy - kept for backward compat during migration.
+// Once all functions are migrated to ConversationPanel methods,
+// the proxy, _PANEL_VARS, _PANEL_DOM_REFS, freshPanelState, and
+// panelManager can all be removed.
+let splitViewActive = false;
+const MAX_PANELS = 4;
+panelManager.init(freshPanelState());
+installPanelStateProxy();
+
+// ===== New PanelLayoutManager =====
+const layoutManager = new PanelLayoutManager(document.getElementById('panelContainer'));
+
+// Create panel-0 dynamically (all panels use the same createDOM() code)
+layoutManager.createPanel(0);
+layoutManager.setActive(0);
+_afterPanelCountChange();
+
+// Sync shared artifact/todo/subagent panels to reflect active panel state
+function syncGlobalPanels() {
+  try {
+    const p = layoutManager.active;
+    if (!p) return;
+    const s = p.state;
+    // Update artifact panel
+    if (s.artifacts && s.artifacts.length > 0 && s.activeArtifactIndex >= 0) {
+      if (typeof renderArtifactPreview === 'function') renderArtifactPreview(s.activeArtifactIndex);
+    }
+    // Update todo panel
+    if (s.todoSnapshotQueue && s.todoSnapshotQueue.length > 0) {
+      if (typeof renderTodoSnapshot === 'function') {
+        renderTodoSnapshot(s.todoSnapshotQueue[s.todoSnapshotQueue.length - 1]);
+      }
+    }
+    // Update subagent panel
+    if (typeof renderSubagentPanel === 'function') renderSubagentPanel();
+  } catch (e) {
+    console.warn('[syncGlobalPanels] error:', e);
+  }
+}
+
+// ===== Split-View UI Management =====
+
+function _countToMode(count) {
+  if (count <= 1) return 'single';
+  if (count === 2) return 'horizontal-2';
+  if (count === 3) return 'horizontal-3';
+  return 'grid-2x2';
+}
+
+let _toggleSplitViewGuard = false;
+function toggleSplitView() {
+  if (_toggleSplitViewGuard) return;
+  if (window.innerWidth <= 768) {
+    toast('分屏模式仅支持桌面端');
+    return;
+  }
+  // Always add a panel (never cycle back to single)
+  if (layoutManager.count >= MAX_PANELS) {
+    toast(`最多支持 ${MAX_PANELS} 个面板`);
+    return;
+  }
+  _toggleSplitViewGuard = true;
+  const nextIdx = Math.max(-1, ...layoutManager.panels.map(p => p.index)) + 1;
+  layoutManager.createPanel(nextIdx);
+  const newMode = _countToMode(nextIdx + 1);
+  layoutManager.setLayout(newMode);
+  layoutManager.setActive(nextIdx);
+
+  // Update button state and splitViewActive
+  _afterPanelCountChange();
+  setTimeout(() => { _toggleSplitViewGuard = false; }, 100);
+}
+
+function _updateSplitBtnState() {
+  const btn = document.getElementById('splitViewBtn');
+  const count = layoutManager ? layoutManager.count : 1;
+  if (btn) {
+    if (count > 1) {
+      btn.classList.add('toolbar-btn-active');
+      btn.title = `分屏模式 · ${count} 个面板 · 点击添加 (⇧⌘S) · 最多 ${MAX_PANELS} 个`;
+    } else {
+      btn.classList.remove('toolbar-btn-active');
+      btn.title = `分屏模式 (⇧⌘S)`;
+    }
+  }
+  // Update all close button visibility
+  layoutManager.panels.forEach((panel, i) => {
+    if (panel.els && panel.els.closePanelBtn) {
+      panel.els.closePanelBtn.classList.toggle('hidden', count <= 1);
+    }
+  });
+}
+
+// Make _updateSplitBtnState accessible to layoutManager
+function _afterPanelCountChange() {
+  const count = layoutManager.count;
+  splitViewActive = count > 1;
+  _updateSplitBtnState();
+}
+
+// Legacy wrappers for backward compat
+function activatePanel(idx) { layoutManager.activatePanel(idx); }
+function loadSessionIntoPanel(panelIdx, id) { return layoutManager.loadSessionIntoPanel(panelIdx, id); }
+
+// Panel click to activate
+document.getElementById('panelContainer').addEventListener('click', (e) => {
+  if (!splitViewActive) return;
+  if (e.target.closest('button, input, textarea, select, a, .panel-divider, .panel-divider-h, .panel-divider-v')) return;
+  const panelEl = e.target.closest('.panel');
+  if (!panelEl) return;
+  const idx = parseInt(panelEl.id.split('-')[1], 10);
+  console.log('[panel click] panelEl.id:', panelEl.id, 'idx:', idx, 'layoutManager.activeIdx:', layoutManager.activeIdx, 'splitViewActive:', splitViewActive);
+  if (!isNaN(idx) && idx !== layoutManager.activeIdx) {
+    console.log('[panel click] activating panel', idx);
+    layoutManager.activatePanel(idx);
+  }
+});
+
+// Split view button
+document.getElementById('splitViewBtn').addEventListener('click', toggleSplitView);
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  const meta = e.metaKey || e.ctrlKey;
+  if (meta && e.shiftKey && (e.key === 's' || e.key === 'S')) {
+    e.preventDefault();
+    toggleSplitView();
+    return;
+  }
+  if (meta && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4')) {
+    if (!splitViewActive) return;
+    e.preventDefault();
+    const arrIdx = Number(e.key) - 1;
+    const panel = layoutManager.panels[arrIdx];
+    if (panel) layoutManager.activatePanel(panel.index);
+  }
+});
+
 // ===== utilities =====
-let userScrolledUp = false;
+window.userScrolledUp = false;
 function isNearBottom() {
   return chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 80;
 }
@@ -3345,7 +4587,7 @@ function applyMobileQuestionMode() {
   });
   if (permSelect) {
     [...permSelect.options].forEach(opt => {
-      const unsafe = ['acceptEdits', 'custom'].includes(opt.value);
+      const unsafe = ['acceptEdits', 'bypassPermissions', 'custom'].includes(opt.value);
       opt.disabled = mobileQuestionMode && unsafe;
       opt.hidden = mobileQuestionMode && unsafe;
     });
@@ -3404,7 +4646,9 @@ function applyTheme(theme) {
   settings.theme = theme;
   LS.set('theme', theme);
   document.documentElement.classList.toggle('dark', theme === 'dark');
-  themeBtn.textContent = theme === 'dark' ? '☀️' : '🌙';
+  themeBtn.innerHTML = theme === 'dark'
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>'
+    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
   $('hljsTheme').href = theme === 'dark'
     ? 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css'
     : 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css';
@@ -3412,6 +4656,25 @@ function applyTheme(theme) {
 }
 applyTheme(settings.theme);
 themeBtn.addEventListener('click', () => applyTheme(settings.theme === 'dark' ? 'light' : 'dark'));
+// alert-on-done toggle
+function updateAlertToggleUI() {
+  let svg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+  if (settings.alertOnDone) {
+    alertToggleBtn.classList.add('active');
+    alertToggleBtn.innerHTML = svg;
+    alertToggleBtn.title = '回复完成时提醒（已开启）';
+  } else {
+    alertToggleBtn.classList.remove('active');
+    alertToggleBtn.innerHTML = svg;
+    alertToggleBtn.title = '回复完成时提醒（已关闭）';
+  }
+}
+updateAlertToggleUI();
+alertToggleBtn.addEventListener('click', () => {
+  settings.alertOnDone = !settings.alertOnDone;
+  LS.set('alertOnDone', settings.alertOnDone);
+  updateAlertToggleUI();
+});
 
 // ===== notifications / sound =====
 async function maybeRequestNotifyPermission() {
@@ -3439,6 +4702,33 @@ function beep() {
     osc.start();
     osc.stop(ctx.currentTime + 0.25);
   } catch {}
+}
+let doneBubbleEl = null;
+function showDoneBubble() {
+  if (doneBubbleEl) doneBubbleEl.remove();
+  const bubble = document.createElement('div');
+  bubble.className = 'done-alert-bubble';
+  const dot = document.createElement('div');
+  dot.className = 'done-alert-dot';
+  const text = document.createElement('div');
+  text.style.flex = '1';
+  text.innerHTML = '<strong style="font-weight:600;">Claude 已完成回复</strong><br><span style="color:var(--text-muted);">可以继续输入新问题了</span>';
+  bubble.appendChild(dot);
+  bubble.appendChild(text);
+  bubble.addEventListener('click', () => {
+    bubble.classList.add('removing');
+    setTimeout(() => bubble.remove(), 250);
+    doneBubbleEl = null;
+    input.focus();
+  });
+  document.body.appendChild(bubble);
+  doneBubbleEl = bubble;
+  setTimeout(() => {
+    if (doneBubbleEl === bubble) {
+      bubble.classList.add('removing');
+      setTimeout(() => { if (doneBubbleEl === bubble) { bubble.remove(); doneBubbleEl = null; } }, 250);
+    }
+  }, 5000);
 }
 
 // ===== mermaid + katex post-processing =====
@@ -3604,7 +4894,7 @@ function renderUserDocBadges(docs) {
     const meta = [sizeLabel, charsLabel].filter(Boolean).join(' · ');
     const safeName = escapeHtml(d.name || '文档');
     const safeMeta = escapeHtml(meta);
-    return `<span class="user-doc-badge" data-user-doc-idx="${i}" title="点击预览">📄 <span class="ud-name">${safeName}</span>${safeMeta ? `<span class="ud-meta">${safeMeta}</span>` : ''}</span>`;
+    return `<span class="user-doc-badge" data-user-doc-idx="${i}" title="点击预览">${iconSvg('fileText')} <span class="ud-name">${safeName}</span>${safeMeta ? `<span class="ud-meta">${safeMeta}</span>` : ''}</span>`;
   }).join('');
   return `<div class="flex flex-wrap gap-1.5 justify-end mb-1">${items}</div>`;
 }
@@ -3621,6 +4911,10 @@ function addUserMessage(text, images, opts) {
   const excerpt = text.slice(0, 500);
   lastUserIndex = userIdx;
   removeWelcome();
+  // Mark active panel as having a session when content is added
+  if (layoutManager && layoutManager.active && layoutManager.active.el) {
+    layoutManager.active.el.classList.add('has-session');
+  }
   const el = document.createElement('div');
   el.className = 'flex justify-end user-msg-wrap msg-enter';
   el.dataset.userIndex = String(userIdx);
@@ -3633,7 +4927,7 @@ function addUserMessage(text, images, opts) {
   const docsHtml = renderUserDocBadges(docs);
   const textHtml = compacted
     ? `<details class="bubble-user user-msg-text compacted-summary" open>
-        <summary>📚 已压缩的对话摘要</summary>
+        <summary>${iconSvg('bookOpen')} 已压缩的对话摘要</summary>
         <div class="compacted-summary-body">${escapeHtml(text)}</div>
       </details>`
     : `<div class="bubble-user user-msg-text">${escapeHtml(text)}</div>`;
@@ -3643,10 +4937,10 @@ function addUserMessage(text, images, opts) {
       ${imagesHtml}
       ${textHtml}
       <div class="user-msg-actions absolute -left-24 top-2 opacity-0 group-hover:opacity-100 flex flex-col gap-1 text-xs" style="color:var(--text-subtle);">
-        <button data-copy="${encodeURIComponent(text)}" title="复制" class="hover:text-gray-700 dark:hover:text-gray-200">📋</button>
-        <button data-feedback-star-user data-message-key="${messageKey}" data-event-index="${feedbackEventIndex}" data-excerpt="${escapeHtml(excerpt)}" title="标记为里程碑" class="hover:text-amber-500">⭐</button>
-        <button data-edit="${userIdx}" title="编辑并留在当前对话" class="hover:text-blue-500">✏️</button>
-        ${hasCheckpoint ? `<button data-restore="${userIdx}" title="回滚此轮前的文件状态" class="hover:text-amber-500">⏪</button>` : ''}
+        <button data-copy="${encodeURIComponent(text)}" title="复制" class="hover:[color:var(--accent)]">${iconSvg('clipboard')}</button>
+        <button data-feedback-star-user data-message-key="${messageKey}" data-event-index="${feedbackEventIndex}" data-excerpt="${escapeHtml(excerpt)}" title="标记为里程碑" class="hover:[color:var(--accent)]">${iconSvg('star')}</button>
+        <button data-edit="${userIdx}" title="编辑并留在当前对话" class="hover:[color:var(--accent)]">${iconSvg('pencil')}</button>
+        ${hasCheckpoint ? `<button data-restore="${userIdx}" title="回滚此轮前的文件状态" class="hover:[color:var(--accent)]">${iconSvg('rewind')}</button>` : ''}
       </div>
     </div>
   `;
@@ -3673,7 +4967,7 @@ function newAssistantBubble() {
   wrap.innerHTML = `
     <div class="avatar">C</div>
     <div class="flex-1 min-w-0 space-y-2"></div>
-    <button data-regen="${lastUserIndex}" title="重新生成此条回答" class="absolute -right-6 top-2 opacity-0 group-hover:opacity-100 text-xs hover:text-blue-500" style="color:var(--text-subtle);">🔄</button>
+    <button data-regen="${lastUserIndex}" title="重新生成此条回答" class="absolute -right-6 top-2 opacity-0 group-hover:opacity-100 text-xs hover:[color:var(--accent)]" style="color:var(--text-subtle);">${iconSvg('refreshCw')}</button>
   `;
   chatInner.appendChild(wrap);
   return wrap.querySelector('div.flex-1');
@@ -3683,7 +4977,7 @@ function addTextBlock(container, text) {
   const block = document.createElement('div');
   block.className = 'prose-custom bubble-asst relative group';
   block.innerHTML = renderMarkdown(text)
-    + `<button data-copy="${encodeURIComponent(text)}" class="absolute top-2 right-2 text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 opacity-0 group-hover:opacity-100" title="复制全文">📋</button>`;
+    + `<button data-copy="${encodeURIComponent(text)}" class="absolute top-2 right-2 text-xs opacity-0 group-hover:opacity-100" title="复制全文" style="color:var(--text-subtle);">${iconSvg('clipboard')}</button>`;
   block.querySelectorAll('pre').forEach(pre => {
     const code = pre.textContent || '';
     const btn = document.createElement('button');
@@ -3769,10 +5063,10 @@ function renderFeedbackControls(container, meta = {}) {
   bar.dataset.eventIndex = meta.eventIndex ?? '';
   bar.dataset.excerpt = meta.excerpt || '';
   bar.innerHTML = `
-    <button type="button" class="feedback-btn" data-feedback-rating="up" title="好评：这条回答有帮助" aria-label="好评">👍</button>
-    <button type="button" class="feedback-btn" data-feedback-rating="down" title="差评：这条回答有问题" aria-label="差评">👎</button>
-    <button type="button" class="feedback-btn" data-feedback-star title="标记为里程碑：用于长会话回顾" aria-label="标记为里程碑">⭐</button>
-    <button type="button" class="feedback-btn" data-feedback-detail title="添加原因或备注" aria-label="反馈详情">⋯</button>
+    <button type="button" class="feedback-btn" data-feedback-rating="up" title="好评：这条回答有帮助" aria-label="好评">${iconSvg('thumbsUp')}</button>
+    <button type="button" class="feedback-btn" data-feedback-rating="down" title="差评：这条回答有问题" aria-label="差评">${iconSvg('thumbsDown')}</button>
+    <button type="button" class="feedback-btn" data-feedback-star title="标记为里程碑：用于长会话回顾" aria-label="标记为里程碑">${iconSvg('star')}</button>
+    <button type="button" class="feedback-btn" data-feedback-detail title="添加原因或备注" aria-label="反馈详情">${iconSvg('moreHorizontal')}</button>
     <span class="feedback-note-pill hidden"></span>
   `;
   container.appendChild(bar);
@@ -3964,7 +5258,7 @@ function renderEditDiff(inputData) {
   const newStr = inputData.new_string || '';
   const fp = inputData.file_path || '';
   return `
-    <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">${escapeHtml(fp)}</div>
+    <div class="text-xs text-ink-muted dark:text-ink-subtle mb-1">${escapeHtml(fp)}</div>
     <div class="edit-diff-grid grid grid-cols-2 gap-2 text-xs">
       <div class="min-w-0">
         <div class="text-red-700 dark:text-red-400 font-medium mb-1">- 移除</div>
@@ -3978,17 +5272,17 @@ function renderEditDiff(inputData) {
   `;
 }
 
-let toolUseBlocks = new Map();
-let pendingToolUseIds = [];
+window.toolUseBlocks = new Map();
+window.pendingToolUseIds = [];
 
 // ===== Subagent panel state =====
-const subagentCards = new Map(); // tool_use.id -> card
+window.subagentCards = new Map(); // tool_use.id -> card;
 const MAX_SUBAGENT_CARDS = 5;
-let subagentCollapsed = false;
-let subagentDismissed = false;
+window.subagentCollapsed = false;
+window.subagentDismissed = false;
 
 // ===== Plan approval state =====
-const planCards = new Map(); // tool_use.id -> { id, plan, editedPlan, status, decision, cardEl }
+window.planCards = new Map(); // tool_use.id -> { id, plan, editedPlan, status, decision, cardEl };
 function planDecisionsKey(sid) { return `plan-decisions:${sid || ''}`; }
 function loadPlanDecisions(sid) {
   if (!sid) return {};
@@ -4319,19 +5613,19 @@ function openSubagentModal(card) {
   subagentModalBody.innerHTML = '';
   if (card.description) {
     const descEl = document.createElement('div');
-    descEl.className = 'p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-xs';
-    descEl.innerHTML = `<div class="text-gray-500 mb-1">任务</div><div class="font-medium text-sm">${escapeHtml(card.description)}</div>`;
+    descEl.className = 'p-3 rounded-lg border border-hairline dark:border-dark bg-canvas-soft dark:bg-dark-soft text-xs';
+    descEl.innerHTML = `<div class="text-ink-muted mb-1">任务</div><div class="font-medium text-sm">${escapeHtml(card.description)}</div>`;
     subagentModalBody.appendChild(descEl);
   }
   if (card.promptPreview) {
     const promptEl = document.createElement('div');
-    promptEl.className = 'p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-xs whitespace-pre-wrap';
-    promptEl.innerHTML = `<div class="text-gray-500 mb-1">prompt（节选）</div>${escapeHtml(card.promptPreview)}${card.promptPreview.length >= 200 ? '…' : ''}`;
+    promptEl.className = 'p-3 rounded-lg border border-hairline dark:border-dark bg-canvas-soft dark:bg-dark-soft text-xs whitespace-pre-wrap';
+    promptEl.innerHTML = `<div class="text-ink-muted mb-1">prompt（节选）</div>${escapeHtml(card.promptPreview)}${card.promptPreview.length >= 200 ? '…' : ''}`;
     subagentModalBody.appendChild(promptEl);
   }
   if (card.events.length === 0) {
     const emptyEl = document.createElement('div');
-    emptyEl.className = 'text-sm text-gray-500 italic';
+    emptyEl.className = 'text-sm text-ink-muted italic';
     emptyEl.textContent = '该子代理暂无可显示的内部事件';
     subagentModalBody.appendChild(emptyEl);
   } else {
@@ -4340,7 +5634,7 @@ function openSubagentModal(card) {
       if (obj.type === 'assistant' || obj.type === 'user') {
         if (!bubble) {
           bubble = document.createElement('div');
-          bubble.className = 'bubble-asst p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950';
+          bubble.className = 'bubble-asst p-3 rounded-lg border border-hairline dark:border-dark bg-canvas dark:bg-dark';
           subagentModalBody.appendChild(bubble);
         }
         handleEvent(obj, bubble, { replay: true, skipSubagentRouting: true });
@@ -4396,12 +5690,15 @@ function addTaskPill(container, inputData, options = {}) {
 
 // ===== Tool chip strip helpers =====
 const TOOL_ICON_MAP = {
-  Bash: '⚡', Read: '📖', Write: '✏️', Edit: '✂️', MultiEdit: '✂️',
-  Grep: '🔍', Glob: '📁', WebFetch: '🌐', WebSearch: '🔎',
-  NotebookEdit: '📓', TodoWrite: '📋', Task: '🤖',
+  Bash: 'terminal', Read: 'bookOpen', Write: 'pencil', Edit: 'pencil', MultiEdit: 'pencil',
+  Grep: 'search', Glob: 'search', WebFetch: 'globe', WebSearch: 'globe',
+  NotebookEdit: 'bookOpen', TodoWrite: 'clipboard', Task: 'check',
 };
 
-function toolIcon(name) { return TOOL_ICON_MAP[name] || '🔧'; }
+function toolIcon(name) {
+  let key = TOOL_ICON_MAP[name];
+  return iconSvg(key || 'wrench');
+}
 
 function basenameOf(p) {
   if (!p || typeof p !== 'string') return '';
@@ -4573,9 +5870,9 @@ function renderToolDetail(detailEl, info) {
     const truncated = len > 4000 ? text.slice(0, 4000) + `\n... (共 ${len} 字)` : (text || '');
     const cls = result.isError
       ? 'bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200'
-      : 'bg-gray-50 dark:bg-slate-800';
+      : 'bg-canvas-soft dark:bg-dark-soft';
     resultHtml = `
-      <div class="tool-strip-detail-section-label">${result.isError ? '❌ 错误结果' : '📋 结果'} (${len} 字)</div>
+      <div class="tool-strip-detail-section-label">${iconSvg(result.isError ? 'x' : 'clipboard')} ${result.isError ? '错误结果' : '结果'} (${len} 字)</div>
       <pre class="${cls}">${escapeHtml(truncated)}</pre>
     `;
   }
@@ -4689,7 +5986,7 @@ function renderPlanCard(container, inputData, options = {}) {
 
   const header = document.createElement('div');
   header.className = 'plan-card-header';
-  header.innerHTML = '<span>📋 计划审批</span>';
+  header.innerHTML = `<span>${iconSvg('clipboard')} 计划审批</span>`;
   const pill = document.createElement('span');
   pill.className = 'plan-card-status-pill ' + (prior && prior.status === 'approved' ? 'approved' : 'pending');
   pill.textContent = prior && prior.status === 'approved' ? '已批准' : '待审批';
@@ -4875,7 +6172,7 @@ function addToolUseBlock(container, name, inputData, options = {}) {
     const total = inputData.todos.length;
     const done = inputData.todos.filter(t => t.status === 'completed').length;
     const chip = document.createElement('div');
-    chip.className = 'inline-flex items-center gap-2 px-3 py-1.5 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-900 rounded-full text-xs text-orange-700 dark:text-orange-300 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/60 self-start';
+    chip.className = 'inline-flex items-center gap-2 px-3 py-1.5 bg-canvas-card dark:bg-dark-elevated border border-hairline rounded-full text-xs text-ink-body cursor-pointer hover:bg-canvas-soft dark:hover:bg-dark self-start';
     chip.innerHTML = `📋 任务清单已更新 <span class="font-semibold">(${done}/${total})</span>`;
     chip.title = '点击聚焦右上角任务面板';
     chip.addEventListener('click', () => {
@@ -4897,7 +6194,7 @@ function addToolUseBlock(container, name, inputData, options = {}) {
 function addToolResultBlock(container, content, isError) {
   const block = document.createElement('details');
   if (settings.toolResultOpen) block.open = true;
-  block.className = `${isError ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900' : 'bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700'} border rounded-lg overflow-hidden`;
+  block.className = `${isError ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900' : 'bg-canvas-soft dark:bg-dark-soft border-hairline dark:border-dark'} border rounded-lg overflow-hidden`;
   let text = typeof content === 'string' ? content : JSON.stringify(content);
   if (Array.isArray(content)) {
     text = content.map(c => (typeof c === 'string' ? c : (c.text || JSON.stringify(c)))).join('\n');
@@ -4905,7 +6202,7 @@ function addToolResultBlock(container, content, isError) {
   const truncated = text.length > 2000 ? text.slice(0,2000) + `\n... (共 ${text.length} 字)` : text;
   block.innerHTML = `
     <summary class="px-3 py-2 text-xs font-medium">
-      ${isError ? '❌ 工具错误' : '📋 工具结果'} (${text.length} 字)
+      ${iconSvg(isError ? 'x' : 'clipboard')} ${isError ? '工具错误' : '工具结果'} (${text.length} 字)
     </summary>
     <pre class="px-3 py-2 text-xs overflow-x-auto m-0 rounded-none whitespace-pre-wrap">${escapeHtml(truncated)}</pre>
   `;
@@ -4915,10 +6212,10 @@ function addToolResultBlock(container, content, isError) {
 function addThinkingBlock(container, text) {
   if (!String(text || '').trim()) return null;
   const block = document.createElement('details');
-  block.className = 'bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900 rounded-lg overflow-hidden';
+  block.className = 'info-box';
   block.innerHTML = `
-    <summary class="px-3 py-2 text-xs text-purple-700 dark:text-purple-300 font-medium">💭 思考过程</summary>
-    <div class="px-3 py-2 text-xs text-purple-900 dark:text-purple-200 italic whitespace-pre-wrap">${escapeHtml(text)}</div>
+    <summary class="info-box-header">${iconSvg('brain')} 思考过程</summary>
+    <div class="info-box-body" style="font-style:italic; white-space:pre-wrap;">${escapeHtml(text)}</div>
   `;
   container.appendChild(block);
   return block;
@@ -4926,21 +6223,22 @@ function addThinkingBlock(container, text) {
 
 function addSystemInfo(text) {
   const el = document.createElement('div');
-  el.className = 'text-center text-xs text-gray-400 py-1';
+  el.className = 'text-center text-xs text-ink-subtle py-1';
   el.textContent = text;
   chatInner.appendChild(el);
 }
 
 function addSystemAction(text, actionText, onClick) {
   const el = document.createElement('div');
-  el.className = 'text-center text-xs text-gray-400 py-1';
+  el.className = 'text-center text-xs text-ink-subtle py-1';
   const label = document.createElement('span');
   label.textContent = text;
   el.appendChild(label);
   if (actionText && typeof onClick === 'function') {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'ml-2 underline hover:text-amber-500';
+    btn.className = 'ml-2 underline';
+    btn.style.color = 'var(--accent)';
     btn.textContent = actionText;
     btn.addEventListener('click', onClick);
     el.appendChild(btn);
@@ -4951,7 +6249,7 @@ function addSystemAction(text, actionText, onClick) {
 // ===== token usage =====
 // Cumulative usage for the *currently open* session. Reset on session switch /
 // new session / load. Updated on every result event (live + history replay).
-let sessionTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
+window.sessionTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
 
 function _fmtTokens(n) {
   if (!n) return '0';
@@ -4986,36 +6284,56 @@ function usageTokenTotal(usage) {
     + Number(usage.cache_creation_input_tokens || 0);
 }
 
+// Get the currently effective panel (respects __panelOverride set by loadSession etc.)
+function _activePanel() {
+  try { if (window.__panelOverride) return window.__panelOverride; } catch(e) {}
+  try { if (layoutManager && layoutManager._overridePanel) return layoutManager._overridePanel; } catch(e) {}
+  try { if (layoutManager && layoutManager.active) return layoutManager.active; } catch(e) {}
+  try { if (typeof panelManager !== 'undefined' && panelManager && panelManager.active) return panelManager.active; } catch(e) {}
+  return null;
+}
+
 function resetSessionTokens() {
-  sessionTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
+  const panel = _activePanel();
+  const st = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
+  if (panel) {
+    panel.state.sessionTokens = st;
+  } else {
+    sessionTokens = st;
+  }
   renderSessionTokens();
 }
 
 function accumulateSessionTokens(usage) {
   if (!usage || typeof usage !== 'object') return;
-  sessionTokens.input += Number(usage.input_tokens || 0);
-  sessionTokens.output += Number(usage.output_tokens || 0);
-  sessionTokens.cacheRead += Number(usage.cache_read_input_tokens || 0);
-  sessionTokens.cacheCreate += Number(usage.cache_creation_input_tokens || 0);
+  // Use panel-local state to survive proxy context switches
+  const panel = _activePanel();
+  const st = panel ? panel.state.sessionTokens : sessionTokens;
+  st.input += Number(usage.input_tokens || 0);
+  st.output += Number(usage.output_tokens || 0);
+  st.cacheRead += Number(usage.cache_read_input_tokens || 0);
+  st.cacheCreate += Number(usage.cache_creation_input_tokens || 0);
   renderSessionTokens();
 }
 
 function renderSessionTokens() {
-  const totalIn = sessionTokens.input + sessionTokens.cacheRead + sessionTokens.cacheCreate;
-  if (totalIn === 0 && sessionTokens.output === 0) {
-    tokenBar.classList.add('hidden');
+  const panel = _activePanel();
+  const st = panel ? panel.state.sessionTokens : sessionTokens;
+  const tb = panel ? panel.els.tokenBar : tokenBar;
+  if (!tb) return;
+  const totalIn = st.input + st.cacheRead + st.cacheCreate;
+  if (totalIn === 0 && st.output === 0) {
+    tb.classList.add('hidden');
     return;
   }
-  tokenBar.classList.remove('hidden');
-  const hit = totalIn > 0 ? Math.round((sessionTokens.cacheRead / totalIn) * 100) : 0;
-  const sumAll = totalIn + sessionTokens.output;
-  tokenBar.textContent = `🎫 ${_fmtTokens(totalIn)} 输入 · ${_fmtTokens(sessionTokens.output)} 输出 · 缓存 ${hit}%`;
-  // Color cue: warn when total > 100k (cost grows linearly with --resume replay)
-  tokenBar.style.color = totalIn > 100_000 ? '#f59e0b' : 'var(--text-subtle)';
-  tokenBar.title = [
+  tb.classList.remove('hidden');
+  const hit = totalIn > 0 ? Math.round((st.cacheRead / totalIn) * 100) : 0;
+  tb.textContent = `\uD83C\uDFAB ${_fmtTokens(totalIn)} 输入 · ${_fmtTokens(st.output)} 输出 · 缓存 ${hit}%`;
+  tb.style.color = totalIn > 100_000 ? '#f59e0b' : 'var(--text-subtle)';
+  tb.title = [
     `本会话 token 累计`,
-    `输入 ${_fmtTokens(totalIn)} (含缓存读 ${_fmtTokens(sessionTokens.cacheRead)})`,
-    `输出 ${_fmtTokens(sessionTokens.output)}`,
+    `输入 ${_fmtTokens(totalIn)} (含缓存读 ${_fmtTokens(st.cacheRead)})`,
+    `输出 ${_fmtTokens(st.output)}`,
     `缓存命中率 ${hit}%`,
     totalIn > 100_000 ? '上下文较大，每轮重放成本上升，可考虑 /compact 或新建会话' : '',
   ].filter(Boolean).join('\n');
@@ -5137,7 +6455,7 @@ function addPermissionErrorBlock(container, info) {
 
   makeActionBtn(
     '复制 CLI 继续提示',
-    'px-3 py-1.5 rounded-lg bg-white/80 dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-xs',
+    'px-3 py-1.5 rounded-lg bg-canvas/80 dark:bg-dark-soft border border-amber-300 dark:border-amber-700 text-xs',
     async (btn) => {
       await navigator.clipboard.writeText(buildCliContinuePrompt(info.tool_name || ''));
       const orig = btn.textContent;
@@ -5153,10 +6471,10 @@ function addPermissionErrorBlock(container, info) {
 }
 
 // ===== TodoWrite live panel =====
-let todoCollapsed = false;
-let todoFadeTimer = null;
-const todoSnapshotQueue = [];
-let todoDrainTimer = null;
+window.todoCollapsed = false;
+window.todoFadeTimer = null;
+window.todoSnapshotQueue = [];
+window.todoDrainTimer = null;
 const TODO_PLAYBACK_INTERVAL = 600;
 
 function updateTodoPanel(todos) {
@@ -5255,13 +6573,13 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ===== Artifact Preview Panel =====
-const artifacts = [];
-let activeArtifactIndex = -1;
-let artifactViewMode = 'preview'; // 'preview' | 'code'
+window.artifacts = [];
+window.activeArtifactIndex = -1;
+window.artifactViewMode = 'preview'; // 'preview' | 'code';
 const ARTIFACT_DEBOUNCE_MS = 500;
-const pendingArtifactTimers = new Set();
-let artifactStreamGeneration = 0;
-let mutedArtifactGeneration = -1;
+window.pendingArtifactTimers = new Set();
+window.artifactStreamGeneration = 0;
+window.mutedArtifactGeneration = -1;
 
 function previewLangFromCode(lang, code) {
   const normalizedLang = (lang || '').toLowerCase();
@@ -5466,7 +6784,7 @@ function hideArtifactPanel() {
   clearAllArtifactDebounces();
   artifactPanel.classList.add('hidden');
   artifactPanel.classList.remove('fullscreen');
-  artifactFullscreenBtn.textContent = '⛶';
+  artifactFullscreenBtn.innerHTML = iconSvg('maximize');
   artifactIframe.removeAttribute('srcdoc');
   // Keep artifacts[] for the current session — show reopen button so user can return.
   updateReopenArtifactBtn();
@@ -5483,37 +6801,29 @@ function clearArtifacts() {
   artifactTabs.innerHTML = '';
   artifactPanel.classList.add('hidden');
   artifactPanel.classList.remove('fullscreen');
-  artifactFullscreenBtn.textContent = '⛶';
+  artifactFullscreenBtn.innerHTML = iconSvg('maximize');
   updateReopenArtifactBtn();
 }
 
 function updateReopenArtifactBtn() {
+  const panel = _activePanel();
+  const rab = panel ? panel.els.reopenArtifactBtn : reopenArtifactBtn;
+  const rac = panel ? panel.els.reopenArtifactCount : reopenArtifactCount;
+  if (!rab) return;
   const hidden = artifactPanel.classList.contains('hidden');
   const has = artifacts.length > 0;
   if (hidden && has) {
-    reopenArtifactBtn.classList.remove('hidden');
-    reopenArtifactCount.textContent = String(artifacts.length);
+    rab.classList.remove('hidden');
+    if (rac) rac.textContent = String(artifacts.length);
   } else {
-    reopenArtifactBtn.classList.add('hidden');
-    reopenArtifactCount.textContent = '';
+    rab.classList.add('hidden');
+    if (rac) rac.textContent = '';
   }
 }
 
-reopenArtifactBtn.addEventListener('click', () => {
-  if (!artifacts.length) return;
-  mutedArtifactGeneration = -1;
-  if (activeArtifactIndex < 0 || activeArtifactIndex >= artifacts.length) {
-    activeArtifactIndex = artifacts.length - 1;
-  }
-  artifactPanel.classList.remove('hidden');
-  renderArtifactTabs();
-  renderArtifactPreview();
-  updateReopenArtifactBtn();
-});
-
 function toggleArtifactFullscreen() {
   artifactPanel.classList.toggle('fullscreen');
-  artifactFullscreenBtn.textContent = artifactPanel.classList.contains('fullscreen') ? '⊡' : '⛶';
+  artifactFullscreenBtn.innerHTML = iconSvg('maximize');
 }
 
 function renderArtifactTabs() {
@@ -5589,9 +6899,9 @@ artifactCopyBtn.addEventListener('click', () => {
   const art = artifacts[activeArtifactIndex];
   if (!art) return;
   navigator.clipboard.writeText(art.code);
-  const orig = artifactCopyBtn.textContent;
-  artifactCopyBtn.textContent = '✓';
-  setTimeout(() => artifactCopyBtn.textContent = orig, 1200);
+  const orig = artifactCopyBtn.innerHTML;
+  artifactCopyBtn.innerHTML = iconSvg('check');
+  setTimeout(() => artifactCopyBtn.innerHTML = orig, 1200);
 });
 
 function createThinkingIndicator(label) {
@@ -5630,9 +6940,14 @@ function handleEvent(obj, container, options = {}) {
     return container;
   }
   if (obj.type === 'meta') {
-    sessionId = obj.session_id;
-    sessionLabelText.textContent = '会话 ' + sessionId.slice(0, 8);
-    suggestTitleBtn.classList.remove('hidden');
+    // During replay, loadSession() already set sessionId and sessionLabelText
+    // from the API response. Don't overwrite with the meta event's session_id
+    // which may differ for imported sessions (remote vs local ID).
+    if (!replay) {
+      sessionId = obj.session_id;
+      sessionLabelText.textContent = '会话 ' + sessionId.slice(0, 8);
+      suggestTitleBtn.classList.remove('hidden');
+    }
     if (obj.has_checkpoint && lastUserIndex >= 0) {
       markLastUserMessageCheckpoint(lastUserIndex);
     }
@@ -5799,8 +7114,8 @@ function handleStreamEvent(ev, container) {
         hideThinking(state.container);
         const el = document.createElement('details');
         el.open = true;
-        el.className = 'bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900 rounded-lg overflow-hidden';
-        el.innerHTML = '<summary class="px-3 py-2 text-xs text-purple-700 dark:text-purple-300 font-medium">💭 思考中...</summary><div class="stream-content px-3 py-2 text-xs text-purple-900 dark:text-purple-200 italic whitespace-pre-wrap"></div>';
+        el.className = 'info-box';
+        el.innerHTML = `<summary class="info-box-header">${iconSvg('brain')} 思考中...</summary><div class="info-box-body stream-content" style="font-style:italic; white-space:pre-wrap;"></div>`;
         state.container.appendChild(el);
         block.el = el;
       }
@@ -5823,7 +7138,7 @@ function handleStreamEvent(ev, container) {
       const el = block.el;
       el.classList.remove('whitespace-pre-wrap', 'break-words');
       el.innerHTML = renderMarkdown(text) +
-        `<button data-copy="${encodeURIComponent(text)}" class="absolute top-2 right-2 text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 opacity-0 group-hover:opacity-100" title="复制全文">📋</button>`;
+        `<button data-copy="${encodeURIComponent(text)}" class="absolute top-2 right-2 text-xs opacity-0 group-hover:opacity-100" title="复制全文" style="color:var(--text-subtle);">${iconSvg('clipboard')}</button>`;
       el.querySelectorAll('pre').forEach(pre => {
         const code = pre.textContent || '';
         const btn = document.createElement('button');
@@ -5853,7 +7168,7 @@ function handleStreamEvent(ev, container) {
         block.el.remove();
       } else {
         const summary = block.el.querySelector('summary');
-        if (summary) summary.textContent = '💭 思考过程';
+        if (summary) summary.innerHTML = iconSvg('brain') + ' 思考过程';
       }
     } else if (block.type === 'tool_use') {
       if (block.name === 'TodoWrite') return container;
@@ -5955,9 +7270,9 @@ document.addEventListener('click', (e) => {
   if (copyBtn) {
     const text = decodeURIComponent(copyBtn.dataset.copy);
     navigator.clipboard.writeText(text);
-    const orig = copyBtn.textContent;
-    copyBtn.textContent = '✓';
-    setTimeout(() => copyBtn.textContent = orig, 1200);
+    const orig = copyBtn.innerHTML;
+    copyBtn.innerHTML = iconSvg('check');
+    setTimeout(() => copyBtn.innerHTML = orig, 1200);
     return;
   }
   const editBtn = e.target.closest('button[data-edit]');
@@ -5992,8 +7307,9 @@ function markLastUserMessageCheckpoint(userIdx) {
   const btn = document.createElement('button');
   btn.dataset.restore = String(userIdx);
   btn.title = '回滚此轮前的文件状态';
-  btn.className = 'hover:text-amber-500';
-  btn.textContent = '⏪';
+  btn.className = '';
+  btn.style.color = 'var(--accent)';
+  btn.innerHTML = iconSvg('rewind');
   actions.appendChild(btn);
 }
 
@@ -6006,12 +7322,12 @@ function startEditUserMessage(userIdx) {
   const ta = document.createElement('textarea');
   ta.value = original;
   ta.rows = Math.max(2, Math.min(10, original.split('\n').length));
-  ta.className = 'w-full px-3 py-2 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 rounded-lg text-sm resize-y text-black dark:text-white';
+  ta.className = 'w-full px-3 py-2 border border-hairline dark:border-dark dark:bg-dark-elevated rounded-lg text-sm resize-y text-black dark:text-white';
   const btns = document.createElement('div');
   btns.className = 'mt-2 flex gap-2 justify-end';
   btns.innerHTML = `
-    <button data-save-edit class="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded text-xs">保存并继续</button>
-    <button data-cancel-edit class="px-3 py-1 bg-gray-200 dark:bg-slate-600 rounded text-xs">取消</button>
+    <button data-save-edit class="px-3 py-1 bg-coral hover:bg-coral-hover text-white rounded text-xs">保存并继续</button>
+    <button data-cancel-edit class="px-3 py-1 bg-canvas-strong dark:bg-dark rounded text-xs">取消</button>
   `;
   textEl.replaceWith(ta);
   ta.parentElement.appendChild(btns);
@@ -6211,7 +7527,7 @@ document.addEventListener('paste', async (e) => {
   }
   if (handled) e.preventDefault();
 });
-let _formDragDepth = 0;
+window._formDragDepth = 0;
 form.addEventListener('dragenter', (e) => {
   if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
   e.preventDefault();
@@ -6245,7 +7561,7 @@ function renderAttachments() {
   attachmentsEl.innerHTML = pendingImages.map((img, i) => `
     <div class="relative group">
       <img src="${img.url}" data-preview-idx="${i}" title="点击放大预览"
-        class="w-20 h-20 object-cover rounded-lg border dark:border-slate-600 cursor-zoom-in transition-transform hover:scale-105" />
+        class="w-20 h-20 object-cover rounded-lg border dark:border-dark cursor-zoom-in transition-transform hover:scale-105" />
       <button type="button" data-idx="${i}" title="移除"
         class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100">×</button>
     </div>
@@ -6273,7 +7589,7 @@ function estimateTokens(text) {
 function updateTokenCount() {
   const t = estimateTokens(input.value);
   tokenCounter.textContent = `~${t} tokens`;
-  tokenCounter.classList.toggle('text-orange-500', t > 50000);
+  tokenCounter.classList.toggle('text-coral', t > 50000);
 }
 
 // ===== draft autosave =====
@@ -6351,13 +7667,13 @@ async function applyExtensionDraftFromUrl() {
 }
 
 // ===== @ mention / slash picker =====
-let pickerItems = [];
-let pickerSel = 0;
-let pickerQuery = '';
-let pickerMode = null;
+window.pickerItems = [];
+window.pickerSel = 0;
+window.pickerQuery = '';
+window.pickerMode = null;
 let promptsCache = [];
-let pendingSlashFork = null;
-let activeSlashAction = false;
+window.pendingSlashFork = null;
+window.activeSlashAction = false;
 
 const builtinSlashCommands = [
   { group: '🔧 操作', kind: 'action', trigger: 'new', name: '新建会话', desc: '开一个空会话', handler: slashNew },
@@ -6684,6 +8000,7 @@ function buildPermissionPayload() {
   }
   if (mode === 'plan') out.permission_mode = 'plan';
   else if (mode === 'acceptEdits') out.permission_mode = 'acceptEdits';
+  else if (mode === 'bypassPermissions') out.permission_mode = 'bypassPermissions';
   else if (mode === 'readonly') out.disallowed_tools = ['Bash', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
   else if (mode === 'custom') {
     const list = getStoredCustomTools();
@@ -7136,6 +8453,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     if (!quiet) {
       notifyUser('Claude Code 已完成', titleLabel.textContent);
       beep();
+      if (settings.alertOnDone) showDoneBubble();
     }
     fetchFollowupSuggestions();
     return { ok: true, result: lastResultEvent, usage: lastResultEvent?.usage || null, text: collectedAssistantText.trim() };
@@ -7243,7 +8561,13 @@ newSessionBtn.addEventListener('click', () => {
 
 function startNewSession() {
   hidePicker();
+  // Save scroll position of current session before starting new
+  if (sessionId) sessionScrollPositions[sessionId] = chatEl.scrollTop;
   sessionId = null;
+  // Remove has-session from active panel (welcome screen is shown)
+  if (layoutManager && layoutManager.active && layoutManager.active.el) {
+    layoutManager.active.el.classList.remove('has-session');
+  }
   sessionFeedback = {};
   milestoneView = false;
   titleLabel.textContent = '新会话';
@@ -7262,6 +8586,10 @@ function startNewSession() {
   lastStreamingMsgId = null;
   resetToolUseRuntimeState();
   resetSessionTokens();
+  // Reset lazy-load state
+  sessionLoadState.sessionId = null;
+  sessionLoadState.allLoaded = false;
+  sessionLoadState.isLoading = false;
   refreshMemories();
   restoreDraft();
   updateViewTabs();
@@ -7309,9 +8637,9 @@ async function refreshTags() {
     const tags = await r.json();
     if (tags.length === 0) { tagFilter.classList.add('hidden'); tagFilter.innerHTML = ''; return; }
     tagFilter.classList.remove('hidden');
-    tagFilter.innerHTML = '<div class="text-gray-500 mb-1">标签:</div><div class="flex flex-wrap gap-1">'
-      + `<button class="tag-chip ${activeTagFilter===null?'ring-2 ring-orange-400':''}" data-tag-filter="">全部</button>`
-      + tags.map(t => `<button class="tag-chip ${activeTagFilter===t.name?'ring-2 ring-orange-400':''}" data-tag-filter="${escapeHtml(t.name)}">${escapeHtml(t.name)} (${t.count})</button>`).join('')
+    tagFilter.innerHTML = '<div class="text-ink-muted mb-1">标签:</div><div class="flex flex-wrap gap-1">'
+      + `<button class="tag-chip ${activeTagFilter===null?'ring-2 ring-coral':''}" data-tag-filter="">全部</button>`
+      + tags.map(t => `<button class="tag-chip ${activeTagFilter===t.name?'ring-2 ring-coral':''}" data-tag-filter="${escapeHtml(t.name)}">${escapeHtml(t.name)} (${t.count})</button>`).join('')
       + '</div>';
     tagFilter.querySelectorAll('button[data-tag-filter]').forEach(b => {
       b.addEventListener('click', () => { activeTagFilter = b.dataset.tagFilter || null; refreshTags(); refreshSessions(); });
@@ -7343,28 +8671,28 @@ async function refreshSessions() {
     const list = await r.json();
     if (cliView || requestId !== sessionListRequestId || isArchivedRequest !== archivedView) return;
     if (list.length === 0) {
-      sessionList.innerHTML = `<div class="text-xs text-gray-400 text-center py-4">${q ? '无匹配' : (archivedView ? '无归档' : '暂无历史')}</div>`;
+      sessionList.innerHTML = `<div class="text-xs text-ink-subtle text-center py-4">${q ? '无匹配' : (archivedView ? '无归档' : '暂无历史')}</div>`;
       return;
     }
     sessionList.innerHTML = list.map(s => `
-      <div class="session-item mb-1 p-2 rounded-lg border border-transparent hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer group ${s.id === sessionId ? 'active' : ''}" data-id="${s.id}">
+      <div class="session-item mb-1 rounded-lg border border-transparent hover:bg-canvas-soft dark:hover:bg-dark-elevated cursor-pointer group ${s.id === sessionId ? 'active' : ''}" data-id="${s.id}">
         <div class="flex items-start justify-between gap-2">
           <div class="flex-1 min-w-0">
             <div class="text-sm truncate flex items-center gap-1">
-              ${s.pinned ? '<span title="已置顶">📌</span>' : ''}
+              ${s.pinned ? `<span title="已置顶">${iconSvg('pin')}</span>` : ''}
               <span>${escapeHtml(s.title)}</span>
             </div>
-            <div class="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-1 items-center">
+            <div class="text-xs text-ink-subtle mt-0.5 flex flex-wrap gap-1 items-center">
               <span>${formatTime(s.updated_at)}</span>
               ${s.tags.map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}
             </div>
           </div>
-          <div class="flex flex-col items-end gap-0.5 opacity-0 group-hover:opacity-100 text-gray-400">
-            <button data-pin="${s.id}" data-pinned="${s.pinned}" title="${s.pinned?'取消置顶':'置顶'}" class="text-xs hover:text-orange-500">${s.pinned?'📌':'📍'}</button>
+          <div class="flex flex-col items-end gap-0.5 opacity-0 group-hover:opacity-100 text-ink-subtle">
+            <button data-pin="${s.id}" data-pinned="${s.pinned}" title="${s.pinned?'取消置顶':'置顶'}" class="text-xs" style="color:var(--accent);">${iconSvg('pin')}</button>
             ${mobileQuestionMode ? '' : `
-              <button data-archive="${s.id}" data-archived="${s.archived}" title="${s.archived?'取消归档':'归档'}" class="text-xs hover:text-blue-500">${s.archived?'📤':'📥'}</button>
-              <button data-tag-edit="${s.id}" data-tags="${escapeHtml(s.tags.join(','))}" title="标签" class="text-xs hover:text-purple-500">🏷</button>
-              <button data-del="${s.id}" class="text-xs hover:text-red-500" title="删除">🗑</button>
+              <button data-archive="${s.id}" data-archived="${s.archived}" title="${s.archived?'取消归档':'归档'}" class="text-xs" style="color:var(--accent);">${iconSvg('archive')}</button>
+              <button data-tag-edit="${s.id}" data-tags="${escapeHtml(s.tags.join(','))}" title="标签" class="text-xs" style="color:var(--accent);">${iconSvg('tag')}</button>
+              <button data-del="${s.id}" class="text-xs hover:text-red-500" title="删除">${iconSvg('trash')}</button>
             `}
           </div>
         </div>
@@ -7374,7 +8702,19 @@ async function refreshSessions() {
     sessionList.querySelectorAll('.session-item').forEach(el => {
       el.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
-        loadSession(el.dataset.id);
+        const id = el.dataset.id;
+        const meta = e.metaKey || e.ctrlKey;
+        console.log('[split-view] sidebar click: id=', id, 'splitViewActive=', splitViewActive, 'metaKey=', meta, 'activeId=', layoutManager.activeIdx);
+        if (splitViewActive && meta) {
+          // Cmd/Ctrl+Click: load into next non-active panel (round-robin)
+          e.preventDefault();
+          e.stopPropagation();
+          const targetPanel = (layoutManager.activeIdx + 1) % layoutManager.count;
+          console.log('[split-view] Cmd+Click detected, loading into panel', targetPanel);
+          layoutManager.loadSessionIntoPanel(targetPanel, id);
+        } else {
+          loadSession(id);
+        }
       });
     });
     sessionList.querySelectorAll('button[data-del]').forEach(b => {
@@ -7521,108 +8861,333 @@ function highlightActiveSession() {
 }
 
 async function loadSession(id) {
+  // Lock the active panel for the entire session load to prevent
+  // proxy routing races. This ensures ALL proxy variable accesses
+  // (sessionId, chatInner, etc.) go to the intended panel.
+  const targetPanel = layoutManager
+    ? layoutManager.active
+    : null;
+  if (targetPanel) {
+    // Set override on window (most reliable) and layoutManager
+    window.__panelOverride = targetPanel;
+    layoutManager._overridePanel = targetPanel;
+    // VERIFY: immediately check where the proxy routes
+    console.log('[loadSession] override set to panel:', targetPanel.index, 'chatInner.id:', chatInner.id, 'sessionId:', sessionId);
+  } else {
+    console.log('[loadSession] WARNING: no active panel found');
+  }
   try {
+    console.log('[loadSession] id:', id, 'panelManager._activeId:', typeof panelManager !== 'undefined' ? panelManager._activeId : 'N/A', 'layoutManager.activeIdx:', layoutManager ? layoutManager.activeIdx : 'N/A', 'current sessionId (proxy):', sessionId);
     hidePicker();
-    const r = await fetch('/api/sessions/' + id);
+
+    // Save current scroll position and loaded range before switching sessions
+    if (sessionId && sessionId !== id) {
+      sessionScrollPositions[sessionId] = chatEl.scrollTop;
+      sessionLoadedMinIdx[sessionId] = sessionLoadState.minLoadedIdx;
+    }
+
+    // Restore previously loaded range if switching back to a viewed session
+    const savedMin = sessionLoadedMinIdx[id];
+    const fetchUrl = (savedMin !== undefined)
+      ? '/api/sessions/' + id + '?offset=' + savedMin + '&limit=200'
+      : '/api/sessions/' + id + '?limit=' + SCROLL_BATCH_SIZE;
+
+    const r = await fetch(fetchUrl);
     if (!r.ok) return;
     const data = await r.json();
     sessionId = data.id;
     sessionFeedback = data.feedback || {};
+    // Mark active panel as having a session
+    if (layoutManager && layoutManager.active && layoutManager.active.el) {
+      layoutManager.active.el.classList.add('has-session');
+    }
     if (milestoneView) renderMilestones();
-    titleLabel.textContent = data.title;
-    sessionLabelText.textContent = '会话 ' + data.id.slice(0, 8);
+    // Set info bar elements using document.getElementById as the most reliable
+    // method, bypassing both proxy routing and panel-local els references.
+    // The suffix pattern matches createDOM(): panel-0 uses base IDs, panel-N uses ID-N.
+    const infoSuffix = (targetPanel && targetPanel.index > 0) ? '-' + targetPanel.index : '';
+    const setInfoEl = (baseId, value, fn) => {
+      const el = document.getElementById(baseId + infoSuffix);
+      if (el && fn) { fn(el, value); }
+      else if (el && value !== undefined) { el.textContent = value; }
+      if (!el) console.warn('[loadSession] element not found by id:', baseId + infoSuffix);
+      return !!el;
+    };
+    console.log('[loadSession] using infoSuffix:', JSON.stringify(infoSuffix), 'targetPanel.index:', targetPanel ? targetPanel.index : 'null',
+      'data.id:', data.id, 'data.title:', data.title);
+    // Diagnostic: list all info bar elements in the DOM
+    console.log('[loadSession] DOM elements:', {
+      titleLabels: [...document.querySelectorAll('[id^="titleLabel"]')].map(el => el.id),
+      sessionLabels: [...document.querySelectorAll('[id^="sessionLabelText"]')].map(el => el.id),
+      gitBars: [...document.querySelectorAll('[id^="gitBar"]')].map(el => el.id),
+      tokenBars: [...document.querySelectorAll('[id^="tokenBar"]')].map(el => el.id),
+    });
+    setInfoEl('titleLabel', data.title);
+    setInfoEl('sessionLabelText', '会话 ' + (data.id || '').slice(0, 8));
+    setInfoEl('sessionIdText', data.id);
+    setInfoEl('suggestTitleBtn', null, (el) => el.classList.remove('hidden'));
+    if (data.cwd) setInfoEl('cwdInput', data.cwd, (el, v) => { el.value = v; });
+    // Flash the info bar to make it visually obvious when updated
+    const infoBar = document.getElementById('panelInfoBar' + infoSuffix);
+    if (infoBar) {
+      infoBar.style.transition = 'none';
+      infoBar.style.background = '#fef3c7'; // amber-100
+      requestAnimationFrame(() => {
+        infoBar.style.transition = 'background 0.8s';
+        infoBar.style.background = '';
+      });
+    }
+    // Verify after microtask that content stuck
+    Promise.resolve().then(() => {
+      const slEl = document.getElementById('sessionLabelText' + infoSuffix);
+      const tlEl = document.getElementById('titleLabel' + infoSuffix);
+      console.log('[loadSession] VERIFY sessionLabelText:', slEl ? slEl.textContent : 'NULL', 'titleLabel:', tlEl ? tlEl.textContent : 'NULL');
+    });
     streamedIds.clear();
     lastStreamingMsgId = null;
     resetToolUseRuntimeState();
     hideTodoPanel();
     clearArtifacts();
-    currentUserIndex = 0;
+
+    // Set up session load state for lazy loading
+    const totalCount = data.event_count || data.events.length;
+    const loadedCount = data.events.length;
+    sessionLoadState.sessionId = id;
+    if (savedMin !== undefined) {
+      sessionLoadState.minLoadedIdx = savedMin;
+      sessionLoadState.maxLoadedIdx = savedMin + loadedCount - 1;
+    } else {
+      sessionLoadState.minLoadedIdx = Math.max(0, totalCount - loadedCount);
+      sessionLoadState.maxLoadedIdx = totalCount - 1;
+    }
+    sessionLoadState.allLoaded = sessionLoadState.minLoadedIdx <= 0 && sessionLoadState.maxLoadedIdx >= totalCount - 1;
+    sessionLoadState.isLoading = false;
+    sessionLoadState.loadRequestId++;
+    sessionLoadState.firstUserInputIdx = data.first_user_input_index || 0;
+    currentUserIndex = sessionLoadState.firstUserInputIdx;
     lastUserIndex = -1;
     resetSessionTokens();
-    if (data.cwd) cwdInput.value = data.cwd;
-    refreshMemories();
-    suggestTitleBtn.classList.remove('hidden');
+    console.log('[loadSession] clearing chatInner, element id:', chatInner.id, 'activeIdx:', layoutManager ? layoutManager.activeIdx : 'N/A', 'sessionId:', sessionId);
     chatInner.innerHTML = '';
     restoreDraft();
-    refreshGitStatus();
 
+    const baseEventIdx = sessionLoadState.minLoadedIdx;
     let asstContainer = null;
-    data.events.forEach((ev, eventIndex) => {
+    data.events.forEach((ev, i) => {
+      const absIdx = baseEventIdx + i;
       if (ev.type === 'user_input') {
-        addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '', compacted: !!ev.compacted, eventIndex });
+        // userIndex auto-increments from currentUserIndex (preserves backward compat for feedback keys)
+        addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '', compacted: !!ev.compacted, eventIndex: absIdx });
         asstContainer = null;
       } else if (ev.type === 'assistant' || ev.type === 'user') {
-        const c = handleEvent(ev, asstContainer, { replay: true, eventIndex });
+        const c = handleEvent(ev, asstContainer, { replay: true, eventIndex: absIdx });
         if (c) asstContainer = c;
       } else {
-        handleEvent(ev, asstContainer, { replay: true, eventIndex });
+        handleEvent(ev, asstContainer, { replay: true, eventIndex: absIdx });
       }
     });
     if (!data.events.length) chatInner.appendChild(welcome);
-    forceScrollBottom();
+
+    // Restore previous scroll position, or scroll to bottom
+    if (sessionScrollPositions[id] !== undefined) {
+      requestAnimationFrame(() => {
+        chatEl.scrollTop = sessionScrollPositions[id];
+        if (chatEl.scrollTop > 0) userScrolledUp = true;
+      });
+    } else {
+      forceScrollBottom();
+    }
     highlightActiveSession();
     closeMobileSidebar();
     restoreActiveAgentLoopForSession();
-  } catch (e) { console.warn(e); }
+
+    // Fire-and-forget async updates AFTER events are rendered (override still set here).
+    // These capture panel-local refs synchronously before any await, so they survive
+    // the finally block releasing the override.
+    refreshMemories();
+    refreshGitStatus();
+  } catch (e) { console.error('[loadSession] ERROR:', e, e.stack); } finally {
+    if (targetPanel) {
+      window.__panelOverride = null;
+      if (layoutManager) layoutManager._overridePanel = null;
+      console.log('[loadSession] released panel override');
+    }
+  }
 }
 
-// ===== inline rename (double-click title) =====
-titleLabel.addEventListener('dblclick', async () => {
-  if (!sessionId) return;
-  const newTitle = prompt('重命名会话：', titleLabel.textContent);
-  if (newTitle === null || !newTitle.trim()) return;
-  await fetch('/api/sessions/' + sessionId, {
-    method: 'PATCH', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ title: newTitle.trim() }),
-  });
-  titleLabel.textContent = newTitle.trim();
-  refreshSessions();
-});
+async function loadMoreEvents() {
+  const state = sessionLoadState;
+  if (state.isLoading || state.allLoaded || state.sessionId !== sessionId) return;
 
-// ===== suggest title =====
-suggestTitleBtn.addEventListener('click', async () => {
-  if (!sessionId) return;
-  suggestTitleBtn.textContent = '⏳';
+  state.isLoading = true;
+  const requestId = ++state.loadRequestId;
+
+  const newOffset = Math.max(0, state.minLoadedIdx - SCROLL_BATCH_SIZE);
+  const count = state.minLoadedIdx - newOffset;
+  if (count <= 0) { state.allLoaded = true; state.isLoading = false; return; }
+
   try {
-    const r = await fetch('/api/sessions/' + sessionId + '/suggest-title', { method:'POST' });
-    if (!r.ok) { alert('生成失败'); return; }
-    const d = await r.json();
-    titleLabel.textContent = d.title;
-    refreshSessions();
-  } catch (e) { alert('出错: ' + e.message); }
-  finally { suggestTitleBtn.textContent = '🪄'; }
-});
+    const r = await fetch('/api/sessions/' + sessionId + '?offset=' + newOffset + '&limit=' + count);
+    if (!r.ok || requestId !== state.loadRequestId) { state.isLoading = false; return; }
+    const data = await r.json();
+    if (requestId !== state.loadRequestId) { state.isLoading = false; return; }
 
-// ===== export =====
-exportBtn.addEventListener('click', () => {
-  if (!sessionId) { alert('当前没有会话'); return; }
-  window.location.href = '/api/sessions/' + sessionId + '/export';
-});
+    // Save current scroll dimensions
+    const oldScrollHeight = chatEl.scrollHeight;
+    const oldScrollTop = chatEl.scrollTop;
+
+    // Use DocumentFragment to temporarily move existing children out
+    const frag = document.createDocumentFragment();
+    while (chatInner.firstChild) {
+      frag.appendChild(chatInner.firstChild);
+    }
+
+    // Render new (older) events into empty chatInner
+    const savedUserIdx = currentUserIndex;
+    const savedLastUserIdx = lastUserIndex;
+    currentUserIndex = data.first_user_input_index || 0;
+    const baseEventIdx = newOffset;
+    let asstContainer = null;
+    data.events.forEach((ev, i) => {
+      const absIdx = baseEventIdx + i;
+      if (ev.type === 'user_input') {
+        // userIndex auto-increments from currentUserIndex (preserves backward compat)
+        addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '', compacted: !!ev.compacted, eventIndex: absIdx });
+        asstContainer = null;
+      } else if (ev.type === 'assistant' || ev.type === 'user') {
+        const c = handleEvent(ev, asstContainer, { replay: true, eventIndex: absIdx });
+        if (c) asstContainer = c;
+      } else {
+        handleEvent(ev, asstContainer, { replay: true, eventIndex: absIdx });
+      }
+    });
+
+    // Restore old children from fragment (preserves DOM state and event listeners)
+    while (frag.firstChild) {
+      chatInner.appendChild(frag.firstChild);
+    }
+    currentUserIndex = savedUserIdx;
+    lastUserIndex = savedLastUserIdx;
+
+    // Adjust scroll position: user was near top, new content added above
+    const newScrollHeight = chatEl.scrollHeight;
+    const addedHeight = newScrollHeight - oldScrollHeight;
+    chatEl.scrollTop = oldScrollTop + addedHeight;
+
+    // Update state
+    state.minLoadedIdx = newOffset;
+    state.allLoaded = newOffset <= 0;
+    state.isLoading = false;
+    state.firstUserInputIdx = data.first_user_input_index || 0;
+  } catch (e) {
+    state.isLoading = false;
+    console.warn(e);
+  }
+}
+
+async function loadMoreEventsForPanel(panelIdx) {
+  const p = layoutManager.panels[panelIdx];
+  if (!p) return;
+  const state = p.state.sessionLoadState;
+  const els = p.els;
+  const sessionIdVal = p.state.sessionId;
+  if (state.isLoading || state.allLoaded || state.sessionId !== sessionIdVal) return;
+
+  state.isLoading = true;
+  const requestId = ++state.loadRequestId;
+
+  const newOffset = Math.max(0, state.minLoadedIdx - SCROLL_BATCH_SIZE);
+  const count = state.minLoadedIdx - newOffset;
+  if (count <= 0) { state.allLoaded = true; state.isLoading = false; return; }
+
+  // Temporarily switch to target panel so addUserMessage/handleEvent render to it
+  const prevActive = layoutManager.activeIdx;
+  layoutManager.setActive(panelIdx);
+
+  try {
+    const r = await fetch('/api/sessions/' + sessionIdVal + '?offset=' + newOffset + '&limit=' + count);
+    if (!r.ok || requestId !== state.loadRequestId) { state.isLoading = false; layoutManager.setActive(prevActive); return; }
+    const data = await r.json();
+    if (requestId !== state.loadRequestId) { state.isLoading = false; layoutManager.setActive(prevActive); return; }
+
+    const oldScrollHeight = els.chatEl.scrollHeight;
+    const oldScrollTop = els.chatEl.scrollTop;
+
+    const frag = document.createDocumentFragment();
+    while (els.chatInner.firstChild) {
+      frag.appendChild(els.chatInner.firstChild);
+    }
+
+    const savedUserIdx = p.state.currentUserIndex;
+    const savedLastUserIdx = p.state.lastUserIndex;
+    p.state.currentUserIndex = data.first_user_input_index || 0;
+    const baseEventIdx = newOffset;
+    let asstContainer = null;
+    data.events.forEach((ev, i) => {
+      const absIdx = baseEventIdx + i;
+      if (ev.type === 'user_input') {
+        addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '', compacted: !!ev.compacted, eventIndex: absIdx });
+        asstContainer = null;
+      } else if (ev.type === 'assistant' || ev.type === 'user') {
+        const c = handleEvent(ev, asstContainer, { replay: true, eventIndex: absIdx });
+        if (c) asstContainer = c;
+      } else {
+        handleEvent(ev, asstContainer, { replay: true, eventIndex: absIdx });
+      }
+    });
+
+    while (frag.firstChild) {
+      els.chatInner.appendChild(frag.firstChild);
+    }
+    p.state.currentUserIndex = savedUserIdx;
+    p.state.lastUserIndex = savedLastUserIdx;
+
+    const newScrollHeight = els.chatEl.scrollHeight;
+    const addedHeight = newScrollHeight - oldScrollHeight;
+    els.chatEl.scrollTop = oldScrollTop + addedHeight;
+
+    state.minLoadedIdx = newOffset;
+    state.allLoaded = newOffset <= 0;
+    state.isLoading = false;
+    state.firstUserInputIdx = data.first_user_input_index || 0;
+  } catch (e) {
+    state.isLoading = false;
+    console.warn(e);
+  } finally {
+    layoutManager.setActive(prevActive);
+  }
+}
+
 
 // ===== cwds / git =====
 async function refreshCwds() {
+  // Capture panel-local refs to survive async proxy context switches
+  const panel = _activePanel();
+  const cl = panel ? panel.els.cwdList : cwdList;
   try {
     const r = await fetch('/api/cwds');
     if (!r.ok) return;
     const list = await r.json();
     savedCwdOptions = Array.isArray(list) ? list : [];
-    cwdList.innerHTML = list.map(p => `<option value="${escapeHtml(p)}"></option>`).join('');
+    if (cl) cl.innerHTML = list.map(p => `<option value="${escapeHtml(p)}"></option>`).join('');
     applyMobileQuestionMode();
   } catch {}
 }
 async function refreshGitStatus() {
-  const cwd = cwdInput.value.trim();
-  if (!cwd) { gitBar.classList.add('hidden'); return; }
+  // Capture panel-local refs to survive async proxy context switches
+  const panel = _activePanel();
+  const cwdEl = panel ? panel.els.cwdInput : cwdInput;
+  const gitEl = panel ? panel.els.gitBar : gitBar;
+  const cwd = cwdEl.value.trim();
+  if (!cwd) { if (gitEl) gitEl.classList.add('hidden'); return; }
   try {
     const r = await fetch('/api/git?cwd=' + encodeURIComponent(cwd));
-    if (!r.ok) { gitBar.classList.add('hidden'); return; }
+    if (!r.ok) { if (gitEl) gitEl.classList.add('hidden'); return; }
     const d = await r.json();
-    if (!d.available || !d.branch) { gitBar.classList.add('hidden'); return; }
-    gitBar.classList.remove('hidden');
-    gitBar.textContent = `⎇ ${d.branch}${d.dirty ? ' ±' + d.dirty : ''}`;
-  } catch { gitBar.classList.add('hidden'); }
+    if (!d.available || !d.branch) { if (gitEl) gitEl.classList.add('hidden'); return; }
+    if (gitEl) { gitEl.classList.remove('hidden'); gitEl.textContent = `\u2387 ${d.branch}${d.dirty ? ' \u00B1' + d.dirty : ''}`; }
+  } catch { if (gitEl) gitEl.classList.add('hidden'); }
 }
-cwdInput.addEventListener('change', refreshGitStatus);
 
 // ===== stats =====
 function renderFeedbackStats(feedback) {
@@ -7682,7 +9247,8 @@ async function refreshStats() {
     const tipFull = pricing.is_gateway
       ? `${tipBase}\n检测到第三方网关：${pricing.base_url}`
       : tipBase;
-    statsBar.textContent = `💰 ~$${d.total_cost_usd.toFixed(2)} · ${d.total_sessions}${gatewayTag}`;
+    const statsBarText = $('statsBarText');
+    if (statsBarText) statsBarText.textContent = `~$${d.total_cost_usd.toFixed(2)} · ${d.total_sessions}${gatewayTag}`;
     statsBar.title = tipFull;
     $('statCost').textContent = '~$' + d.total_cost_usd.toFixed(4);
     const noteEl = $('statCostNote');
@@ -8527,25 +10093,29 @@ urlAutoFetchEl.addEventListener('change', () => {
 });
 
 async function refreshMemories() {
+  // Capture panel-local state before any await to survive proxy context switches
+  const panel = _activePanel();
+  const cwd = (panel ? panel.els.cwdInput : cwdInput).value.trim() || '';
+  const sid = panel ? panel.state.sessionId : sessionId;
   try {
     const [r, activeResp] = await Promise.all([
       fetch('/api/memories'),
-      fetch(`/api/memories/active?cwd=${encodeURIComponent(cwdInput.value.trim() || '')}&session_id=${encodeURIComponent(sessionId || '')}`),
+      fetch(`/api/memories/active?cwd=${encodeURIComponent(cwd)}&session_id=${encodeURIComponent(sid || '')}`),
     ]);
     if (!r.ok) return;
     const list = await r.json();
     const activeList = activeResp.ok ? await activeResp.json() : [];
     activeMemoryCount.textContent = `${activeList.length} 条生效`;
-    renderMemoryBar(activeList);
+    renderMemoryBar(activeList, panel);
     if (list.length === 0) {
-      memoriesEditor.innerHTML = '<div class="text-xs text-gray-400 text-center py-2">暂无记忆</div>';
+      memoriesEditor.innerHTML = '<div class="text-xs text-ink-subtle text-center py-2">暂无记忆</div>';
       return;
     }
     memoriesEditor.innerHTML = list.map(m => `
-      <div class="flex gap-2 items-start border border-gray-200 dark:border-slate-700 rounded p-2">
+      <div class="flex gap-2 items-start border border-hairline dark:border-dark rounded p-2">
         <label class="pt-0.5"><input type="checkbox" data-mem-enabled="${m.id}" ${m.enabled ? 'checked' : ''}></label>
         <div class="flex-1 min-w-0">
-          <div class="text-xs text-gray-500">${escapeHtml(m.scope)}</div>
+          <div class="text-xs text-ink-muted">${escapeHtml(m.scope)}</div>
           <div class="text-sm whitespace-pre-wrap">${escapeHtml(m.content)}</div>
         </div>
         <button data-edit-memory="${m.id}" class="text-xs text-blue-600">编辑</button>
@@ -8594,16 +10164,18 @@ async function refreshMemories() {
   } catch (e) { console.warn(e); }
 }
 
-function renderMemoryBar(list = []) {
-  if (!memoryBar) return;
+function renderMemoryBar(list = [], _panel = null) {
+  const panel = _panel || _activePanel();
+  const mb = panel ? panel.els.memoryBar : memoryBar;
+  if (!mb) return;
   if (!list.length) {
-    memoryBar.classList.add('hidden');
-    memoryBar.textContent = '';
+    mb.classList.add('hidden');
+    mb.textContent = '';
     return;
   }
-  memoryBar.classList.remove('hidden');
-  memoryBar.textContent = `🧠 ${list.length}`;
-  memoryBar.title = list
+  mb.classList.remove('hidden');
+  mb.textContent = `\uD83E\uDDE0 ${list.length}`;
+  mb.title = list
     .slice(0, 10)
     .map(m => `${m.scope}: ${m.content}`)
     .join('\n');
@@ -8632,11 +10204,6 @@ modelSelect.addEventListener('change', () => LS.set('model', modelSelect.value))
 
 // ===== permission mode =====
 const ALL_TOOLS = ['Bash','Read','Write','Edit','MultiEdit','Grep','Glob','WebFetch','WebSearch','TodoWrite','Task','NotebookEdit'];
-permSelect.value = LS.get('permMode', 'free');
-permSelect.addEventListener('change', () => {
-  LS.set('permMode', permSelect.value);
-  if (permSelect.value === 'custom') openCustomToolsModal();
-});
 
 function openCustomToolsModal() {
   const currentList = getStoredCustomTools();
@@ -8673,10 +10240,10 @@ async function refreshPrompts() {
     const list = await r.json();
     promptsCache = list;
     if (list.length === 0) {
-      promptList.innerHTML = '<div class="text-xs text-gray-400 text-center py-2">无模板</div>';
+      promptList.innerHTML = '<div class="text-xs text-ink-subtle text-center py-2">无模板</div>';
     } else {
       promptList.innerHTML = list.map(p => `
-        <button class="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-orange-50 dark:hover:bg-orange-900/30 truncate" data-insert="${encodeURIComponent(p.content)}">${escapeHtml(p.name)}</button>
+        <button class="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-canvas-card dark:hover:bg-dark truncate" data-insert="${encodeURIComponent(p.content)}">${escapeHtml(p.name)}</button>
       `).join('');
       promptList.querySelectorAll('button[data-insert]').forEach(b => {
         b.addEventListener('click', () => {
@@ -8687,10 +10254,10 @@ async function refreshPrompts() {
       });
     }
     promptsEditor.innerHTML = list.map(p => `
-      <div class="flex gap-2 items-start border border-gray-200 dark:border-slate-700 rounded p-2">
+      <div class="flex gap-2 items-start border border-hairline dark:border-dark rounded p-2">
         <div class="flex-1 min-w-0">
-          <div class="font-medium text-sm">${escapeHtml(p.name)} ${p.slash_trigger ? `<span class="text-xs text-orange-500">/${escapeHtml(p.slash_trigger)}</span>` : ''}</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(p.content)}</div>
+          <div class="font-medium text-sm">${escapeHtml(p.name)} ${p.slash_trigger ? `<span class="text-xs text-coral">/${escapeHtml(p.slash_trigger)}</span>` : ''}</div>
+          <div class="text-xs text-ink-muted dark:text-ink-subtle truncate">${escapeHtml(p.content)}</div>
         </div>
         <button data-edit="${p.id}" class="text-xs text-blue-600">编辑</button>
         <button data-del-prompt="${p.id}" class="text-xs text-red-500">删除</button>
@@ -8782,10 +10349,45 @@ const PO_ICON_PATHS = {
   thumbsUp: '<path d="M7 10v12"/><path d="M15 5.9 14 10h5.8a2 2 0 0 1 2 2.4l-1.4 7a2 2 0 0 1-2 1.6H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2"/><path d="M7 10 11 2a3 3 0 0 1 4 3.9Z"/>',
   trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
   wand: '<path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m17.8 6.2 1.4-1.4"/><path d="m10.8 13.2-1.4 1.4"/><path d="m14.5 9.5-9 9"/>',
+  // Shared icons for iconSvg()
+  archive: '<path d="M4 9v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/><rect width="18" height="6" x="3" y="3" rx="1"/>',
+  arrowDown: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+  barChart3: '<path d="M3 3v18h18"/><path d="M18 16V9"/><path d="M13 16V5"/><path d="M8 16v-3"/>',
+  bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+  bookOpen: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7"/>',
+  brain: '<path d="M12 5a3 3 0 1 0-5.5 1.4 3.5 3.5 0 0 0-1.3 6.2A3 3 0 0 0 7 18h1a4 4 0 0 0 7.8-2H16a3.5 3.5 0 0 0 .9-6.8A3 3 0 0 0 12 5Z"/><path d="M9 13h6"/><path d="M10 16h4"/>',
+  clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+  dollarSign: '<line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  helpCircle: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  menu: '<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>',
+  moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+  moreHorizontal: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  panelRight: '<rect width="18" height="18" x="3" y="3" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>',
+  pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
+  pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.52 2.35l-3.12.68a1 1 0 0 0-.36 1.73L8 20l5.36-5.36a1 1 0 0 0-.36-1.73l-3.12-.68a2 2 0 0 1-1.52-2.35L12 4.5V2"/>',
+  plugZap: '<path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M2 22h20"/><path d="M17.7 3.7a2.4 2.4 0 0 0-3.4 0L12 6l3 3 2.7-2.3"/>',
+  refreshCw: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/>',
+  rewind: '<polyline points="11 17 4 12 11 7"/><polyline points="18 17 11 12 18 7"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42Z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+  terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.26 2.26 0 0 1-3.2-3.2l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.57 3.57z"/>',
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
 };
 
 function poIcon(name, className = 'po-icon') {
   return `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true">${PO_ICON_PATHS[name] || ''}</svg>`;
+}
+
+function iconSvg(name, className = 'icon') {
+  const paths = PO_ICON_PATHS[name];
+  if (!paths) return '';
+  return `<svg class="${className}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 }
 
 function poEmpty(icon, title, desc = '') {
@@ -9139,11 +10741,11 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ===== URL auto-detect (Gemini-style) =====
-const urlChipsEl = $('urlChips');
+window.urlChipsEl = $('urlChips');
 const URL_REGEX = /https?:\/\/[^\s<>"'`]+/g;
 const MAX_URL_CHARS = 8000;
 // url -> { status:'loading'|'ready'|'error', title?, content?, length?, truncated?, error? }
-const urlContext = new Map();
+window.urlContext = new Map();
 
 function extractUrls(text) {
   if (!text) return [];
@@ -9223,7 +10825,7 @@ async function fetchUrlInBackground(url) {
   renderUrlChips();
 }
 
-let urlDetectTimer = null;
+window.urlDetectTimer = null;
 function scheduleUrlDetect() {
   clearTimeout(urlDetectTimer);
   if (!settings.urlAutoFetch) {
@@ -9275,11 +10877,11 @@ function clearUrlContext() {
 }
 
 // ===== document upload =====
-const pendingDocs = []; // {name, content, length, truncated}
+window.pendingDocs = []; // {name, content, length, truncated};
 
 docAttachBtn.addEventListener('click', () => docInput.click());
 
-let _docUid = 0;
+window._docUid = 0;
 function nextDocUid() { _docUid += 1; return 'doc-' + _docUid; }
 
 async function uploadDocFile(file) {
@@ -9565,7 +11167,7 @@ if (dismissMobileBannerBtn) {
 }
 
 // ===== jump to bottom button =====
-let newContentCount = 0;
+window.newContentCount = 0;
 
 chatEl.addEventListener('scroll', () => {
   if (isNearBottom()) {
@@ -9575,6 +11177,11 @@ chatEl.addEventListener('scroll', () => {
   } else {
     userScrolledUp = true;
     jumpBottomBtn.classList.remove('hidden');
+  }
+
+  // Lazy-load older events when scrolling near the top
+  if (chatEl.scrollTop < 400 && !sessionLoadState.isLoading && !sessionLoadState.allLoaded && sessionId) {
+    loadMoreEvents();
   }
 });
 
@@ -9697,25 +11304,24 @@ window.addEventListener('resize', () => {
   }
 });
 
-// ===== header more (advanced toolbar) =====
-const headerMoreBtn = $('headerMoreBtn');
-const advancedBar = $('advancedBar');
-headerMoreBtn.addEventListener('click', () => {
-  advancedBar.classList.toggle('hidden');
-  headerMoreBtn.classList.toggle('toolbar-btn-active');
-});
 
 // ===== empty state cards =====
-document.querySelectorAll('.empty-card').forEach(card => {
-  card.addEventListener('click', () => {
-    const p = card.dataset.prompt;
-    if (!p) return;
-    input.value = p;
-    input.focus();
+// Empty-card click handler via event delegation (supports dynamically created panels)
+document.getElementById('panelContainer').addEventListener('click', (e) => {
+  const card = e.target.closest('.empty-card');
+  if (!card) return;
+  const p = card.dataset.prompt;
+  if (!p) return;
+  // Find the input within the same panel
+  const panel = card.closest('.panel');
+  const textarea = panel ? panel.querySelector('textarea[id^="input"]') : input;
+  if (textarea) {
+    textarea.value = p;
+    textarea.focus();
     updateTokenCount();
     autosizeTextarea();
-    input.setSelectionRange(p.length, p.length);
-  });
+    textarea.setSelectionRange(p.length, p.length);
+  }
 });
 
 // ===== sidebar tab styling =====

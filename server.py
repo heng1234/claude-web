@@ -166,14 +166,23 @@ class ClaudeCliResolutionError(RuntimeError):
 def resolve_claude_cli_command() -> Optional[str]:
     candidates = ["claude"]
     if os.name == "nt":
-        # npm on Windows may put both a Unix shim named "claude" and a usable
-        # batch shim named "claude.cmd" on PATH. Python can pick the Unix shim
-        # first, so prefer Windows-native launchers explicitly.
         candidates = ["claude.cmd", "claude.exe", "claude.bat", "claude"]
     for candidate in candidates:
         path = shutil.which(candidate)
         if path:
             return path
+    # Check known nvm/global npm installation paths that may not be on PATH
+    home = os.path.expanduser("~")
+    nvm_versions_dir = os.path.join(home, ".nvm", "versions", "node")
+    if os.path.isdir(nvm_versions_dir):
+        for ver in sorted(os.listdir(nvm_versions_dir), reverse=True):
+            p = os.path.join(nvm_versions_dir, ver, "bin", "claude")
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                return p
+    for d in [os.path.join(home, ".npm-global", "bin"), "/usr/local/bin", "/opt/homebrew/bin"]:
+        p = os.path.join(d, "claude")
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
     return None
 
 
@@ -533,6 +542,7 @@ def init_db() -> None:
         ensure_column(conn, "sessions", "remote_session_id", "TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "sessions", "remote_ready", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(conn, "sessions", "summary_cache", "TEXT")
+        ensure_column(conn, "sessions", "event_count", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(conn, "prompts", "slash_trigger", "TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "session_usage", "duration_ms", "REAL NOT NULL DEFAULT 0")
         conn.execute(
@@ -700,7 +710,7 @@ def upsert_session(session_id: str, title: str, cwd: str) -> None:
             )
 
 
-_SUMMARY_CACHE_LIMIT = 20000
+_SUMMARY_CACHE_LIMIT = 50000
 
 
 def trim_summary_cache(text: str) -> str:
@@ -785,6 +795,10 @@ def append_event(session_id: str, event: dict) -> None:
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
         with db_connect() as conn:
+            conn.execute(
+                "UPDATE sessions SET event_count = event_count + 1 WHERE id = ?",
+                (session_id,),
+            )
             update_session_summary_cache_for_event(conn, session_id, event)
             insert_tool_call_rows(conn, tool_call_rows_from_event(session_id, event))
 
@@ -931,6 +945,105 @@ def load_events(session_id: str) -> List[dict]:
     return events
 
 
+def build_event_offsets(path: Path) -> List[int]:
+    """Scan file and return byte offsets of each non-empty line."""
+    offsets: List[int] = []
+    with path.open("rb") as f:
+        while True:
+            offset = f.tell()
+            line = f.readline()
+            if not line:
+                break
+            if line.strip():
+                offsets.append(offset)
+    return offsets
+
+
+def load_events_range(session_id: str, offset: int, limit: int) -> List[dict]:
+    """Load a range of events by index [offset, offset+limit) using byte offsets."""
+    path = HISTORY_DIR / f"{session_id}.jsonl"
+    if not path.exists():
+        return []
+    offsets = build_event_offsets(path)
+    if offset >= len(offsets):
+        return []
+    end = min(offset + limit, len(offsets))
+    events: List[dict] = []
+    with path.open("r", encoding="utf-8") as f:
+        for i in range(offset, end):
+            f.seek(offsets[i])
+            line = f.readline().strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return events
+
+
+def search_in_events_file(session_id: str, q_lower: str) -> bool:
+    """Stream search JSONL file for a query, return True if found (early exit)."""
+    path = HISTORY_DIR / f"{session_id}.jsonl"
+    if not path.exists():
+        return False
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if q_lower in line.lower():
+                return True
+    return False
+
+
+def _count_user_input_before_offset(session_id: str, before_event_index: int) -> int:
+    """Count user_input events before the given event index using string match (fast, no JSON parse)."""
+    if before_event_index <= 0:
+        return 0
+    path = HISTORY_DIR / f"{session_id}.jsonl"
+    if not path.exists():
+        return 0
+    count = 0
+    seen = 0
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line_s = line.strip()
+            if not line_s:
+                continue
+            if seen >= before_event_index:
+                break
+            if '"type":"user_input"' in line_s or '"type": "user_input"' in line_s:
+                count += 1
+            seen += 1
+    return count
+
+
+def backfill_event_counts_once() -> None:
+    """Backfill event_count from existing JSONL files."""
+    try:
+        with db_connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM app_meta WHERE key = 'event_count_backfilled_v1'"
+            ).fetchone()
+            if row is not None:
+                return
+            for path in iter_history_paths():
+                session_id = path.stem
+                count = 0
+                with path.open("rb") as f:
+                    for line in f:
+                        if line.strip():
+                            count += 1
+                conn.execute(
+                    "UPDATE sessions SET event_count = ? WHERE id = ?",
+                    (count, session_id),
+                )
+            conn.execute(
+                "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('event_count_backfilled_v1', ?)",
+                (str(time.time()),),
+            )
+    except Exception:
+        return
+
+
 def iter_history_paths() -> Iterator[Path]:
     for path in HISTORY_DIR.glob("*.jsonl"):
         if ".before-compact-" in path.name or ".tmp." in path.name:
@@ -1010,6 +1123,7 @@ async def ensure_stats_backfilled() -> None:
             return
         await asyncio.to_thread(backfill_usage_duration_once)
         await asyncio.to_thread(backfill_tool_calls_once)
+        await asyncio.to_thread(backfill_event_counts_once)
         _stats_backfill_done = True
 
 
@@ -1020,7 +1134,10 @@ def save_events(session_id: str, events: List[dict]) -> None:
             if path.exists():
                 path.unlink()
             with db_connect() as conn:
-                conn.execute("UPDATE sessions SET summary_cache = ? WHERE id = ?", ("", session_id))
+                conn.execute(
+                    "UPDATE sessions SET summary_cache = ?, event_count = 0 WHERE id = ?",
+                    ("", session_id),
+                )
                 conn.execute("DELETE FROM tool_calls WHERE session_id = ?", (session_id,))
                 conn.execute("DELETE FROM message_feedback WHERE session_id = ?", (session_id,))
             return
@@ -1036,7 +1153,10 @@ def save_events(session_id: str, events: List[dict]) -> None:
             tmp_path.unlink(missing_ok=True)
             raise
         with db_connect() as conn:
-            conn.execute("UPDATE sessions SET summary_cache = ? WHERE id = ?", (summarize_cache_from_events(events), session_id))
+            conn.execute(
+                "UPDATE sessions SET summary_cache = ?, event_count = ? WHERE id = ?",
+                (summarize_cache_from_events(events), len(events), session_id),
+            )
             replace_session_tool_call_rows(conn, session_id, events)
 
 
@@ -3673,8 +3793,8 @@ def import_cli_sessions(session_ids: List[str], cwd_filter: str = "", paths: Opt
                     """
                     INSERT INTO sessions (
                         id, title, cwd, created_at, updated_at,
-                        remote_session_id, remote_ready, summary_cache, tags
-                    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+                        remote_session_id, remote_ready, summary_cache, tags, event_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
                     """,
                     (
                         local_id,
@@ -3685,6 +3805,7 @@ def import_cli_sessions(session_ids: List[str], cwd_filter: str = "", paths: Opt
                         parsed["session_id"],
                         summarize_cache_from_events(events),
                         "imported-cli",
+                        len(events),
                     ),
                 )
             else:
@@ -3834,6 +3955,8 @@ async def _chat_response(req: ChatRequest):
 
     is_new = not remote_ready
     work_dir = req.cwd or (row["cwd"] if row and row["cwd"] else os.path.expanduser("~"))
+    if not os.path.isdir(work_dir):
+        work_dir = str(_DATA_DIR)
     full_message = req.message
     display_text = req.display_message if req.display_message is not None else req.message
 
@@ -5473,6 +5596,7 @@ async def exec_code(request: Request, req: ExecCodeRequest):
 
 def _row_to_session(r: sqlite3.Row) -> dict:
     tags = [t for t in (r["tags"] or "").split(",") if t]
+    event_count = int(r["event_count"] or 0) if "event_count" in r.keys() else 0
     return {
         "id": r["id"],
         "title": r["title"] or "未命名会话",
@@ -5482,6 +5606,7 @@ def _row_to_session(r: sqlite3.Row) -> dict:
         "pinned": bool(r["pinned"]),
         "archived": bool(r["archived"]),
         "tags": tags,
+        "event_count": event_count,
     }
 
 
@@ -5490,7 +5615,7 @@ async def list_sessions(q: Optional[str] = None, archived: bool = False, tag: Op
     with db_connect() as conn:
         where = "archived = 1" if archived else "archived = 0"
         rows = conn.execute(
-            f"SELECT id, title, cwd, created_at, updated_at, pinned, archived, tags, summary_cache FROM sessions "
+            f"SELECT id, title, cwd, created_at, updated_at, pinned, archived, tags, summary_cache, event_count FROM sessions "
             f"WHERE {where} ORDER BY pinned DESC, updated_at DESC LIMIT 500"
         ).fetchall()
 
@@ -5516,8 +5641,7 @@ async def list_sessions(q: Optional[str] = None, archived: bool = False, tag: Op
                     filtered.append(item)
                     continue
                 if len(content) >= _SUMMARY_CACHE_LIMIT:
-                    full_content = summarize_text_from_events(load_events(item["id"])).lower()
-                    if q_lower in full_content:
+                    if search_in_events_file(item["id"], q_lower):
                         filtered.append(item)
             except Exception:
                 continue
@@ -5959,16 +6083,54 @@ async def prompt_optimizer_feedback(req: PromptOptimizerFeedbackRequest):
 
 
 @app.get("/api/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(
+    session_id: str,
+    limit: Optional[int] = Query(default=None, ge=1, le=200),
+    offset: Optional[int] = Query(default=None, ge=0),
+):
     with db_connect() as conn:
         row = conn.execute(
-            "SELECT id, title, cwd, created_at, updated_at, pinned, archived, tags FROM sessions WHERE id = ?",
+            "SELECT id, title, cwd, created_at, updated_at, pinned, archived, tags, event_count FROM sessions WHERE id = ?",
             (session_id,),
         ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="session not found")
     data = _row_to_session(row)
-    data["events"] = load_events(session_id)
+
+    total_count = int(row["event_count"] or 0)
+
+    if limit is not None or offset is not None:
+        # Range loading mode
+        # If event_count hasn't been backfilled yet, fall back to full load and fix the count
+        if total_count == 0:
+            events = load_events(session_id)
+            total_count = len(events)
+            if total_count > 0:
+                with db_connect() as fix_conn:
+                    fix_conn.execute(
+                        "UPDATE sessions SET event_count = ? WHERE id = ?",
+                        (total_count, session_id),
+                    )
+            limit_n = limit or 50
+            data["events"] = events[-min(limit_n, total_count):] if total_count > 0 else []
+            data["event_count"] = total_count
+            data["has_more"] = len(data["events"]) < total_count
+            first_loaded = max(0, total_count - len(data["events"]))
+            data["first_user_input_index"] = _count_user_input_before_offset(
+                session_id, first_loaded
+            ) if total_count > 0 else 0
+        else:
+            actual_offset = offset if offset is not None else max(0, total_count - (limit or 50))
+            actual_limit = min(limit or 200, total_count - actual_offset)
+            data["events"] = load_events_range(session_id, actual_offset, actual_limit)
+            data["event_count"] = total_count
+            data["has_more"] = actual_offset > 0
+            data["first_user_input_index"] = _count_user_input_before_offset(session_id, actual_offset)
+    else:
+        # Legacy mode: return all events (backward compatible)
+        data["events"] = load_events(session_id)
+        data["event_count"] = total_count
+
     data["feedback"] = load_feedback_map(session_id)
     data["compact_backups"] = [
         {"name": p.name, "created_at": p.stat().st_mtime, "size": p.stat().st_size}
