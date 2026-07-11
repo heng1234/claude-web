@@ -311,10 +311,43 @@ tailwind.config = {
     cursor: pointer;
     transition: background .12s;
     border-left: 2px solid transparent;
+    background: var(--surface);
   }
   .session-item:hover { background: var(--border); }
-  .session-item.active { background: var(--accent-soft-2); border-left-color: var(--accent); }
-  .dark .session-item.active { background: var(--accent-soft); }
+  .session-item.active { background: var(--accent-soft-2); border-left-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft); }
+  .dark .session-item.active { background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-hover); }
+
+  /* ===== Sidebar action button tooltips ===== */
+  [data-tooltip] { position: relative; }
+  [data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    right: calc(100% + 6px);
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 3px 8px;
+    background: var(--text);
+    color: var(--bg);
+    font-size: 11px;
+    line-height: 1.4;
+    border-radius: 4px;
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
+    font-weight: 400;
+  }
+  /* CLI card tooltip: appear below the card */
+  .cli-card[data-tooltip]:hover::after {
+    right: auto; left: 0; top: calc(100% + 2px);
+    transform: none;
+    max-width: 260px;
+    white-space: normal;
+    word-break: break-all;
+    background: rgba(0,0,0,0.72); color: #fff;
+  }
+  .dark .cli-card[data-tooltip]:hover::after {
+    background: rgba(220,220,220,0.88); color: #1a1a1a;
+  }
 
   /* ===== Buttons ===== */
   .btn {
@@ -1769,8 +1802,13 @@ tailwind.config = {
 
   /* ===== Mobile sidebar ===== */
   .sidebar-toggle { display: none; }
-  .sidebar-close { display: none; }
+  .sidebar-close { display: inline-flex; }
   .sidebar-scrim { display: none; }
+  /* Desktop sidebar collapse */
+  @media (min-width: 769px) {
+    #sidebar:not(.open) { display: none; }
+    #sidebar:not(.open) ~ #mainContent .sidebar-toggle { display: inline-flex; }
+  }
   @media (max-width: 900px) {
     header {
       min-height: 56px;
@@ -1779,13 +1817,8 @@ tailwind.config = {
       padding-top: max(7px, env(safe-area-inset-top)) !important;
     }
     header > .flex:last-child { min-width: 0; flex: 0 0 auto; gap: 2px !important; }
-    #configCenterBtn { display: none !important; }
-    #modelSelect {
-      max-width: 92px;
-      min-height: 44px;
-      padding: 0 4px;
-      font-size: 11px;
-    }
+    /* Per-panel model select on mobile */
+    .panel-model-select { max-width: 80px; font-size: 11px; }
     /* Per-panel info bar on mobile */
     .panel-info-bar {
       padding: 3px 10px !important;
@@ -2107,6 +2140,15 @@ tailwind.config = {
   .tab-btn.tab-active { color: var(--text) !important; }
   .tab-btn:hover { color: var(--text) !important; }
 
+  /* CLI sort buttons */
+  .cli-sort-btn {
+    font-family: inherit; font-size: inherit;
+    background: transparent; border: none; cursor: pointer;
+    color: var(--text-muted); padding: 0;
+    transition: color .15s;
+  }
+  .cli-sort-btn:hover { color: var(--accent); }
+
   /* Select cleanup (header) */
   header select, .panel-advanced-bar select {
     cursor: pointer;
@@ -2116,7 +2158,7 @@ tailwind.config = {
   /* ===== Split-View Layout ===== */
   #panelContainer { display: flex; flex-direction: row; overflow: hidden; flex: 1; }
   .panel { display: flex; flex-direction: column; min-width: 0; }
-  .panel-body { display: flex !important; flex-direction: column !important; flex: 1; min-height: 0; }
+  .panel-body { display: flex !important; flex-direction: column !important; flex: 1; min-height: 0; position: relative; }
   .panel-body main { display: block; flex: 1 1 0%; min-height: 0; }
   /* Ensure chat inner content stacks vertically */
   .panel [id^="chatInner"] { display: block; }
@@ -2281,7 +2323,7 @@ tailwind.config = {
 <body class="h-screen flex">
 
 <!-- Sidebar -->
-<aside id="sidebar" class="w-64 flex flex-col flex-shrink-0" style="background:var(--surface-2);">
+<aside id="sidebar" class="w-80 flex flex-col flex-shrink-0" style="background:var(--surface-2);">
   <div class="px-3 pt-3 pb-2 flex items-center justify-between">
     <div class="flex items-center gap-2 min-w-0">
       <div class="avatar">C</div>
@@ -2290,7 +2332,7 @@ tailwind.config = {
     <div class="flex items-center gap-1">
       <button id="alertToggleBtn" class="sb-icon-btn" title="回复完成时提醒"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></button>
       <button id="themeBtn" class="sb-icon-btn" title="切换主题"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
-      <button id="closeSidebar" class="sb-icon-btn sidebar-close" title="关闭会话列表"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button id="closeSidebar" class="sb-icon-btn sidebar-close" title="折叠侧边栏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg></button>
     </div>
   </div>
 
@@ -2313,6 +2355,11 @@ tailwind.config = {
     <button id="viewCli" class="tab-btn transition-colors">CLI</button>
   </div>
   <div id="tagFilter" class="px-3 text-xs hidden"></div>
+  <div id="cliSortBar" class="px-3 py-1 text-xs hidden flex items-center gap-2" style="color:var(--text-subtle);">
+    <span>排序:</span>
+    <button id="cliSortProject" class="cli-sort-btn" data-sort="project" style="color:var(--accent); font-weight:600;">项目</button>
+    <button id="cliSortTime" class="cli-sort-btn" data-sort="time">时间</button>
+  </div>
 
   <div class="flex-1 overflow-y-auto px-2 py-1" id="sessionList">
     <div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载中...</div>
@@ -2326,10 +2373,12 @@ tailwind.config = {
     <div id="promptList" class="max-h-36 overflow-y-auto space-y-0.5 py-1"></div>
   </div>
 
-  <div class="px-3 py-2.5 text-[12px] flex items-center justify-between gap-2" style="border-top:1px solid var(--border); color:var(--text-muted);">
+  <div class="px-3 py-2.5 text-[12px] flex items-center justify-between" style="border-top:1px solid var(--border); color:var(--text-muted);">
     <button id="statsBar" class="sidebar-footer-action flex items-center gap-1" style="color:var(--text);" title="查看统计（估算价，仅供参考）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> <span id="statsBarText">~$0.00</span></button>
-    <button id="mcpBtn" class="sidebar-footer-action flex items-center gap-1" style="color:var(--text);" title="MCP 管理"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M2 22h20"/><path d="M17.7 3.7a2.4 2.4 0 0 0-3.4 0L12 6l3 3 2.7-2.3"/></svg></button>
+    <div class="flex items-center gap-2">
+    <button id="mcpBtn" class="sidebar-footer-action flex items-center gap-1" style="color:var(--text);" title="MCP 管理"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v6"/><path d="M15 2v6"/><path d="M5 8h14"/><path d="M6 8v3a6 6 0 0 0 12 0V8"/><path d="M12 17v5"/></svg></button>
     <button id="settingsBtn" class="sidebar-footer-action flex items-center gap-1" style="color:var(--text);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    </div>
   </div>
 </aside>
 <div id="sidebarScrim" class="sidebar-scrim" aria-hidden="true"></div>
@@ -2341,14 +2390,7 @@ tailwind.config = {
       <button id="toggleSidebar" class="sidebar-toggle px-1" style="color:var(--text-muted);" aria-label="打开会话列表" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg></button>
     </div>
     <div class="flex items-center gap-1 flex-shrink-0">
-      <select id="modelSelect" class="text-[12px] px-2.5 py-1" title="模型" style="border:1px solid transparent; background:transparent;">
-        <option value="">默认模型</option>
-        <option value="opus">Opus</option>
-        <option value="sonnet">Sonnet</option>
-        <option value="haiku">Haiku</option>
-      </select>
       <button id="splitViewBtn" class="sb-icon-btn hidden md:inline-flex" title="分屏模式 (⇧⌘S)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg></button>
-      <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
       <button id="helpBtn" class="sb-icon-btn relative" title="帮助 / 快捷键 / 更新日志"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span id="helpBadge" class="hidden absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style="background:#ef4444;"></span></button>
     </div>
   </header>
@@ -3274,9 +3316,16 @@ class ConversationPanel {
           <span id="tokenBar${suffix}" class="hidden panel-info-tokens"></span>
         </div>
         <div class="panel-info-right">
+          <select id="modelSelect${suffix}" class="text-[12px] px-2.5 py-1 panel-model-select" title="模型" style="border:1px solid transparent; background:transparent;">
+            <option value="">默认</option>
+            <option value="opus">Opus</option>
+            <option value="sonnet">Sonnet</option>
+            <option value="haiku">Haiku</option>
+          </select>
           <button id="reopenArtifactBtn${suffix}" class="hidden panel-info-btn" title="重新打开 Artifact 面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg><span id="reopenArtifactCount${suffix}" class="panel-info-artifact-count"></span></button>
-          <button id="exportBtn${suffix}" class="panel-info-btn" title="导出 Markdown"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
           <button id="headerMoreBtn${suffix}" class="panel-info-btn" title="工作目录 / 权限策略"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+          <button id="configCenterBtn${suffix}" class="panel-info-btn" title="配置中心 · Hooks / Skills / MCP / Permissions"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <button id="exportBtn${suffix}" class="panel-info-btn" title="导出 Markdown"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
           <button id="closePanelBtn${suffix}" class="panel-info-btn panel-close-btn" title="关闭面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
       </div>
@@ -3323,10 +3372,11 @@ class ConversationPanel {
             <div class="mobile-shortcuts-hint text-xs mt-8" style="color:var(--text-subtle);">快捷键：⌘K 搜索 · ⌘N 新会话 · Esc 关闭</div>
           </div>
         </div>
-      <button id="jumpBottomBtn${suffix}" class="hidden absolute bottom-4 right-6 btn btn-primary text-sm z-20" style="border-radius:9999px; padding:8px 14px; box-shadow:var(--shadow-lg);">
+      </main>
+
+      <button id="jumpBottomBtn${suffix}" class="hidden absolute bottom-20 right-6 btn btn-primary text-sm z-20" style="border-radius:9999px; padding:8px 14px; box-shadow:var(--shadow-lg);">
         <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></span><span>最新</span><span id="jumpBottomBadge${suffix}" class="hidden text-xs rounded-full px-1.5" style="background:white; color:var(--accent);">0</span>
       </button>
-      </main>
 
       <div id="urlChips${suffix}" class="hidden px-4 pt-3 pb-1 max-w-3xl mx-auto w-full flex flex-wrap gap-2" style="background:var(--surface);"></div>
       <div id="docChips${suffix}" class="hidden px-4 pt-3 pb-1 max-w-3xl mx-auto w-full flex flex-wrap gap-2" style="background:var(--surface);"></div>
@@ -3449,6 +3499,8 @@ class ConversationPanel {
       advancedBar: $id('advancedBar' + suffix),
       permSelect: $id('permSelect' + suffix),
       headerMoreBtn: $id('headerMoreBtn' + suffix),
+      modelSelect: $id('modelSelect' + suffix),
+      configCenterBtn: $id('configCenterBtn' + suffix),
       closePanelBtn: $id('closePanelBtn' + suffix),
     };
   }
@@ -3456,13 +3508,15 @@ class ConversationPanel {
   bindEvents() {
     const e = this.els;
     const panelIdx = this.index;
-    // Scroll handler for lazy loading
+    // Scroll handler for lazy loading + jump-to-bottom button
     const onScroll = () => {
       const s = this.state;
       if (!s.sessionId) return;
       const nearBottom = e.chatEl.scrollHeight - e.chatEl.scrollTop - e.chatEl.clientHeight < 80;
       s.userScrolledUp = !nearBottom;
       s.newContentCount = nearBottom ? 0 : s.newContentCount;
+      // Show/hide jump to bottom button
+      e.jumpBottomBtn.classList.toggle('hidden', nearBottom);
       if (e.chatEl.scrollTop < 400 && !s.sessionLoadState.isLoading && !s.sessionLoadState.allLoaded && s.sessionId) {
         loadMoreEventsForPanel(panelIdx);
       }
@@ -3494,7 +3548,12 @@ class ConversationPanel {
 
     // Jump to bottom
     if (e.jumpBottomBtn) {
-      const onJump = () => this.forceScrollBottom();
+      const onJump = () => {
+        this.forceScrollBottom();
+        e.jumpBottomBtn.classList.add('hidden');
+        e.jumpBottomBadge.classList.add('hidden');
+        this.state.newContentCount = 0;
+      };
       e.jumpBottomBtn.addEventListener('click', onJump);
       this._eventHandlers.push({ el: e.jumpBottomBtn, type: 'click', fn: onJump });
     }
@@ -3646,6 +3705,26 @@ class ConversationPanel {
       this._eventHandlers.push({ el: e.permSelect, type: 'change', fn: onPermChange });
     }
 
+    // Per-panel: model select
+    if (e.modelSelect) {
+      e.modelSelect.value = LS.get('model', '');
+      const onModelChange = () => LS.set('model', e.modelSelect.value);
+      e.modelSelect.addEventListener('change', onModelChange);
+      this._eventHandlers.push({ el: e.modelSelect, type: 'change', fn: onModelChange });
+    }
+
+    // Per-panel: config center button
+    if (e.configCenterBtn) {
+      const onConfigClick = async () => {
+        if (mobileQuestionMode) { toast('手机问答模式不能打开配置中心'); return; }
+        configState.scope = configScopeSel.value || 'user';
+        openModal(configCenter);
+        await cfgReloadAll();
+      };
+      e.configCenterBtn.addEventListener('click', onConfigClick);
+      this._eventHandlers.push({ el: e.configCenterBtn, type: 'click', fn: onConfigClick });
+    }
+
     // Direct click on panel element to activate this panel (split-view)
     if (this.el && this.index !== 0) {
       const onPanelClick = (ev) => {
@@ -3687,8 +3766,12 @@ class ConversationPanel {
     const s = this.state, e = this.els;
     if (!s.userScrolledUp) {
       e.chatEl.scrollTop = e.chatEl.scrollHeight;
-    } else if (typeof bumpNewContent === 'function') {
-      bumpNewContent();
+    } else {
+      // Bump new content count per-panel
+      s.newContentCount++;
+      e.jumpBottomBadge.textContent = String(s.newContentCount);
+      e.jumpBottomBadge.classList.remove('hidden');
+      e.jumpBottomBtn.classList.remove('hidden');
     }
   }
 
@@ -4016,7 +4099,7 @@ const _PANEL_DOM_REFS = [
   'titleLabel', 'sessionLabelText', 'sessionLabel',
   'cwdInput', 'cwdList', 'tokenBar', 'suggestTitleBtn',
   'gitBar', 'memoryBar', 'exportBtn', 'reopenArtifactBtn', 'reopenArtifactCount',
-  'advancedBar', 'permSelect', 'headerMoreBtn', 'closePanelBtn',
+  'advancedBar', 'permSelect', 'headerMoreBtn', 'modelSelect', 'configCenterBtn', 'closePanelBtn',
   'agentLoopStatus', 'agentLoopStatusText', 'agentLoopStopBtn',
   'welcome', 'attachBtn', 'fileInput', 'docAttachBtn', 'docInput',
   'webSearchBtn', 'agentLoopBtn', 'promptOptimizeBtn',
@@ -4197,6 +4280,8 @@ const sessionPermissionOverrides = LS.get(SESSION_PERMISSION_OVERRIDES_KEY, {});
 
 // ===== dom refs =====
 const $ = (id) => document.getElementById(id);
+let cliSort = 'project';
+const cliSortBar = $('cliSortBar'), cliSortProject = $('cliSortProject'), cliSortTime = $('cliSortTime');
 window.chatEl = $('chat'); window.chatInner = $('chatInner'); window.form = $('form'); window.input = $('input'); window.sendBtn = $('send'); window.stopBtn = $('stopBtn');
 window.sessionLabel = $('sessionIdText'); window.titleLabel = $('titleLabel');
 window.cwdInput = $('cwdInput'); window.cwdList = $('cwdList');
@@ -4250,7 +4335,7 @@ const artifactFullscreenBtn = $('artifactFullscreenBtn');
 const artifactDownloadBtn = $('artifactDownloadBtn');
 const artifactCopyBtn = $('artifactCopyBtn');
 const searchInput = $('searchInput');
-const modelSelect = $('modelSelect');
+window.modelSelect = $('modelSelect');
 window.permSelect = $('permSelect');
 const mobileModeBanner = $('mobileModeBanner');
 const dismissMobileBannerBtn = $('dismissMobileBanner');
@@ -4336,6 +4421,12 @@ window.sessionLabelText = $('sessionLabelText');
 window.suggestTitleBtn = $('suggestTitleBtn');
 const toggleSidebar = $('toggleSidebar'), sidebar = $('sidebar');
 const closeSidebarBtn = $('closeSidebar'), sidebarScrim = $('sidebarScrim');
+// Desktop: sidebar starts open by default
+if (window.innerWidth > 768 && sidebar) {
+  sidebar.classList.add('open');
+  document.documentElement.classList.add('sidebar-open');
+  document.body.classList.add('sidebar-open');
+}
 
 // ===== Install panel proxy (must be after all var declarations and DOM refs) =====
 // Legacy proxy - kept for backward compat during migration.
@@ -4580,11 +4671,14 @@ function unlockMobileControl(el) {
 function applyMobileQuestionMode() {
   document.documentElement.classList.toggle('mobile-question-mode', mobileQuestionMode);
   if (mobileModeBanner) mobileModeBanner.classList.toggle('active', mobileQuestionMode && !mobileBannerDismissed);
-  [configCenterBtn, mcpBtn].forEach(el => {
-    if (!el) return;
+  document.querySelectorAll('[id^="configCenterBtn"]').forEach(el => {
     el.classList.toggle('mobile-mode-hidden', mobileQuestionMode);
     el.setAttribute('aria-hidden', mobileQuestionMode ? 'true' : 'false');
   });
+  if (mcpBtn) {
+    mcpBtn.classList.toggle('mobile-mode-hidden', mobileQuestionMode);
+    mcpBtn.setAttribute('aria-hidden', mobileQuestionMode ? 'true' : 'false');
+  }
   if (permSelect) {
     [...permSelect.options].forEach(opt => {
       const unsafe = ['acceptEdits', 'bypassPermissions', 'custom'].includes(opt.value);
@@ -8602,12 +8696,13 @@ searchInput.addEventListener('input', () => {
   searchTimer = setTimeout(() => refreshSessions(), 300);
 });
 
-viewActiveBtn.addEventListener('click', () => { archivedView = false; cliView = false; milestoneView = false; updateViewTabs(); refreshTags(); refreshSessions(); });
-viewArchivedBtn.addEventListener('click', () => { archivedView = true; cliView = false; milestoneView = false; updateViewTabs(); refreshTags(); refreshSessions(); });
+viewActiveBtn.addEventListener('click', () => { archivedView = false; cliView = false; milestoneView = false; cliSortBar.classList.add('hidden'); updateViewTabs(); refreshTags(); refreshSessions(); });
+viewArchivedBtn.addEventListener('click', () => { archivedView = true; cliView = false; milestoneView = false; cliSortBar.classList.add('hidden'); updateViewTabs(); refreshTags(); refreshSessions(); });
 viewMilestonesBtn.addEventListener('click', () => {
   milestoneView = true;
   archivedView = false;
   cliView = false;
+  cliSortBar.classList.add('hidden');
   sessionListRequestId++;
   updateViewTabs();
   renderMilestones();
@@ -8621,10 +8716,20 @@ viewCliBtn.addEventListener('click', () => {
   archivedView = false;
   milestoneView = false;
   tagFilter.classList.add('hidden');
+  cliSortBar.classList.remove('hidden');
+  updateCliSortBtns();
   sessionListRequestId++;
   updateViewTabs();
   renderCliSessionList();
 });
+
+// CLI sort bar
+function updateCliSortBtns() {
+  if (cliSortProject) { cliSortProject.style.color = cliSort === 'project' ? 'var(--accent)' : 'var(--text-muted)'; cliSortProject.style.fontWeight = cliSort === 'project' ? '600' : '400'; }
+  if (cliSortTime) { cliSortTime.style.color = cliSort === 'time' ? 'var(--accent)' : 'var(--text-muted)'; cliSortTime.style.fontWeight = cliSort === 'time' ? '600' : '400'; }
+}
+if (cliSortProject) cliSortProject.addEventListener('click', () => { cliSort = 'project'; updateCliSortBtns(); renderCliSessionList(); });
+if (cliSortTime) cliSortTime.addEventListener('click', () => { cliSort = 'time'; updateCliSortBtns(); renderCliSessionList(); });
 
 function updateViewTabs() {
   updateTabStyles();
@@ -8684,15 +8789,16 @@ async function refreshSessions() {
             </div>
             <div class="text-xs text-ink-subtle mt-0.5 flex flex-wrap gap-1 items-center">
               <span>${formatTime(s.updated_at)}</span>
+              ${s.cwd ? `<span class="tag-chip" title="${escapeHtml(s.cwd)}">${escapeHtml(s.cwd.split('/').filter(Boolean).pop() || s.cwd)}</span>` : ''}
               ${s.tags.map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}
             </div>
           </div>
           <div class="flex flex-col items-end gap-0.5 opacity-0 group-hover:opacity-100 text-ink-subtle">
-            <button data-pin="${s.id}" data-pinned="${s.pinned}" title="${s.pinned?'取消置顶':'置顶'}" class="text-xs" style="color:var(--accent);">${iconSvg('pin')}</button>
+            <button data-pin="${s.id}" data-pinned="${s.pinned}" data-tooltip="${s.pinned?'取消置顶':'置顶'}" class="text-xs" style="color:var(--accent);">${iconSvg('pin')}</button>
             ${mobileQuestionMode ? '' : `
-              <button data-archive="${s.id}" data-archived="${s.archived}" title="${s.archived?'取消归档':'归档'}" class="text-xs" style="color:var(--accent);">${iconSvg('archive')}</button>
-              <button data-tag-edit="${s.id}" data-tags="${escapeHtml(s.tags.join(','))}" title="标签" class="text-xs" style="color:var(--accent);">${iconSvg('tag')}</button>
-              <button data-del="${s.id}" class="text-xs hover:text-red-500" title="删除">${iconSvg('trash')}</button>
+              <button data-archive="${s.id}" data-archived="${s.archived}" data-tooltip="${s.archived?'取消归档':'归档'}" class="text-xs" style="color:var(--accent);">${iconSvg('archive')}</button>
+              <button data-tag-edit="${s.id}" data-tags="${escapeHtml(s.tags.join(','))}" data-tooltip="标签" class="text-xs" style="color:var(--accent);">${iconSvg('tag')}</button>
+              <button data-del="${s.id}" class="text-xs hover:text-red-500" data-tooltip="删除">${iconSvg('trash')}</button>
             `}
           </div>
         </div>
@@ -10199,8 +10305,7 @@ addMemoryBtn.addEventListener('click', async () => {
 document.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
 
 // ===== model =====
-modelSelect.value = LS.get('model', '');
-modelSelect.addEventListener('change', () => LS.set('model', modelSelect.value));
+// NOTE: model selection is now per-panel — see ConversationPanel.bindEvents()
 
 // ===== permission mode =====
 const ALL_TOOLS = ['Bash','Read','Write','Edit','MultiEdit','Grep','Glob','WebFetch','WebSearch','TodoWrite','Task','NotebookEdit'];
@@ -10347,6 +10452,7 @@ const PO_ICON_PATHS = {
   sparkles: '<path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3Z"/><path d="M19 14v4"/><path d="M21 16h-4"/><path d="M5 17v2"/><path d="M6 18H4"/>',
   star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>',
   thumbsUp: '<path d="M7 10v12"/><path d="M15 5.9 14 10h5.8a2 2 0 0 1 2 2.4l-1.4 7a2 2 0 0 1-2 1.6H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2"/><path d="M7 10 11 2a3 3 0 0 1 4 3.9Z"/>',
+  thumbsDown: '<path d="M17 14V2"/><path d="M9 18.1 10 14H4.2a2 2 0 0 1-2-2.4l1.4-7A2 2 0 0 1 5.6 1H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2"/><path d="M17 14 13 22a3 3 0 0 1-4-3.9Z"/>',
   trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
   wand: '<path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m17.8 6.2 1.4-1.4"/><path d="m10.8 13.2-1.4 1.4"/><path d="m14.5 9.5-9 9"/>',
   // Shared icons for iconSvg()
@@ -10366,8 +10472,8 @@ const PO_ICON_PATHS = {
   moreHorizontal: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
   panelRight: '<rect width="18" height="18" x="3" y="3" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>',
   pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
-  pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.52 2.35l-3.12.68a1 1 0 0 0-.36 1.73L8 20l5.36-5.36a1 1 0 0 0-.36-1.73l-3.12-.68a2 2 0 0 1-1.52-2.35L12 4.5V2"/>',
-  plugZap: '<path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M2 22h20"/><path d="M17.7 3.7a2.4 2.4 0 0 0-3.4 0L12 6l3 3 2.7-2.3"/>',
+  pin: '<path d="M8 7h8"/><path d="M10 7v6"/><path d="M14 7v6"/><path d="M8 13h8"/><path d="M12 13v8"/>',
+  plug: '<path d="M9 2v6"/><path d="M15 2v6"/><path d="M5 8h14"/><path d="M6 8v3a6 6 0 0 0 12 0V8"/><path d="M12 17v5"/>',
   refreshCw: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/>',
   rewind: '<polyline points="11 17 4 12 11 7"/><polyline points="18 17 11 12 18 7"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
@@ -11169,28 +11275,8 @@ if (dismissMobileBannerBtn) {
 // ===== jump to bottom button =====
 window.newContentCount = 0;
 
-chatEl.addEventListener('scroll', () => {
-  if (isNearBottom()) {
-    userScrolledUp = false;
-    jumpBottomBtn.classList.add('hidden');
-    newContentCount = 0;
-  } else {
-    userScrolledUp = true;
-    jumpBottomBtn.classList.remove('hidden');
-  }
-
-  // Lazy-load older events when scrolling near the top
-  if (chatEl.scrollTop < 400 && !sessionLoadState.isLoading && !sessionLoadState.allLoaded && sessionId) {
-    loadMoreEvents();
-  }
-});
-
-jumpBottomBtn.addEventListener('click', () => {
-  forceScrollBottom();
-  jumpBottomBtn.classList.add('hidden');
-  newContentCount = 0;
-  jumpBottomBadge.classList.add('hidden');
-});
+// NOTE: jump-to-bottom scroll/click handling is now per-panel (see ConversationPanel.bindEvents()).
+// The global bumpNewContent() remains for legacy code that calls scrollBottom() via window proxy.
 
 function bumpNewContent() {
   if (userScrolledUp) {
@@ -11286,12 +11372,13 @@ function setSidebarOpen(open) {
     if (lockedTop) window.scrollTo(0, sidebarScrollLockY);
   }
   if (toggleSidebar) toggleSidebar.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (closeSidebarBtn) closeSidebarBtn.title = open ? '折叠侧边栏' : '展开侧边栏';
 }
 function closeMobileSidebar() {
   if (window.innerWidth <= 768) setSidebarOpen(false);
 }
 if (toggleSidebar) toggleSidebar.addEventListener('click', () => setSidebarOpen(!sidebar.classList.contains('open')));
-if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', () => setSidebarOpen(false));
+if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', () => setSidebarOpen(!sidebar.classList.contains('open')));
 if (sidebarScrim) sidebarScrim.addEventListener('click', () => setSidebarOpen(false));
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && sidebar?.classList.contains('open') && window.innerWidth <= 768) {
@@ -11299,8 +11386,24 @@ document.addEventListener('keydown', (e) => {
   }
 });
 window.addEventListener('resize', () => {
-  if (window.innerWidth > 768 && sidebar?.classList.contains('open')) {
-    setSidebarOpen(false);
+  if (window.innerWidth > 768) {
+    // Clean up mobile scroll lock when transitioning to desktop
+    if (document.body.style.position === 'fixed') {
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      document.body.style.width = '';
+      if (sidebarScrollLockY) window.scrollTo(0, sidebarScrollLockY);
+    }
+    // Restore desktop sidebar visibility
+    if (sidebar) {
+      sidebar.classList.add('open');
+      document.documentElement.classList.add('sidebar-open');
+      document.body.classList.add('sidebar-open');
+    }
+    if (toggleSidebar) toggleSidebar.setAttribute('aria-expanded', 'true');
+    if (closeSidebarBtn) closeSidebarBtn.title = '折叠侧边栏';
   }
 });
 
@@ -11339,7 +11442,7 @@ async function renderCliSessionList() {
   const requestId = ++cliSessionListRequestId;
   sessionList.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载中...</div>';
   try {
-    const data = await fetch('/api/cli-sessions/scan').then(r => r.json());
+    const data = await fetch(`/api/cli-sessions/scan?sort=${cliSort}`).then(r => r.json());
     if (!cliView || requestId !== cliSessionListRequestId) return;
     const sessions = data.sessions || [];
     if (!sessions.length) {
@@ -11348,17 +11451,24 @@ async function renderCliSessionList() {
     }
     sessionList.innerHTML = sessions.map(s => {
       const alreadyImported = s.already_imported;
-      const date = s.updated_at ? new Date(s.updated_at * 1000).toLocaleDateString('zh-CN', {month:'numeric',day:'numeric'}) : '';
+      const date = s.updated_at ? new Date(s.updated_at * 1000).toLocaleString('zh-CN', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
       const title = (s.title || s.first_message || s.session_id || '').trim();
       const summary = (s.summary || s.first_message || '').trim();
       const project = s.cwd ? s.cwd.split('/').filter(Boolean).pop() : '';
-      const meta = [date, project, `${s.message_count || 0} 条消息`].filter(Boolean).join(' · ');
+      const projectPath = s.cwd || '';
+      const metaParts = [date, project, `${s.message_count || 0} 条消息`].filter(Boolean);
+      const metaHtml = metaParts.map((part, i) => {
+        if (i === 1 && project && projectPath) {
+          return `<span class="tag-chip" title="${escapeHtml(projectPath)}">${escapeHtml(project)}</span>`;
+        }
+        return escapeHtml(part);
+      }).join(' <span style="color:var(--text-subtle);">·</span> ');
       return `<div class="px-2 py-1.5 group" data-cli-id="${s.session_id}">
-        <div class="flex items-start justify-between gap-1 rounded-lg px-2 py-2 cursor-default" style="background:var(--surface);">
+        <div class="flex items-start justify-between gap-1 rounded-lg px-2 py-2 cursor-default cli-card" style="background:var(--surface);" ${projectPath ? `data-tooltip="${escapeHtml(projectPath)}"` : ''}>
           <div class="flex-1 min-w-0">
             <div class="text-[13px] font-medium truncate" style="color:var(--text);" title="${escapeHtml(title)}">${escapeHtml(title || s.session_id.slice(0,8))}</div>
             <div class="text-[12px] mt-0.5 truncate" style="color:var(--text-muted);" title="${escapeHtml(summary)}">${escapeHtml(summary || '暂无简介')}</div>
-            <div class="text-[11px] mt-0.5 truncate" style="color:var(--text-subtle);" title="${escapeHtml(s.cwd || '')}">${escapeHtml(meta)}</div>
+            <div class="text-[11px] mt-0.5" style="color:var(--text-subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(projectPath)}">${metaHtml}</div>
           </div>
           <button class="cli-import-one shrink-0 text-[11px] px-2 py-0.5 rounded transition-colors" data-sid="${s.session_id}"
             style="background:${alreadyImported ? 'transparent' : 'var(--accent,#f97316)'}; color:${alreadyImported ? 'var(--text-subtle)' : '#fff'}; border:1px solid ${alreadyImported ? 'var(--border)' : 'transparent'};"
@@ -11548,7 +11658,7 @@ mcpAddBtn.addEventListener('click', async () => {
 const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'UserPromptSubmit', 'SubagentStop', 'Notification'];
 
 const configCenter = $('configCenter');
-const configCenterBtn = $('configCenterBtn');
+window.configCenterBtn = $('configCenterBtn');
 const configScopeSel = $('configScope');
 const configPathHint = $('configPathHint');
 const configBodyHooks = $('configBodyHooks');
@@ -12052,15 +12162,7 @@ window.addEventListener('beforeunload', (e) => {
   }
 });
 
-configCenterBtn.addEventListener('click', async () => {
-  if (mobileQuestionMode) {
-    toast('手机问答模式不能打开配置中心');
-    return;
-  }
-  configState.scope = configScopeSel.value || 'user';
-  openModal(configCenter);
-  await cfgReloadAll();
-});
+// NOTE: configCenterBtn click is now per-panel — see ConversationPanel.bindEvents()
 
 // ===== init =====
 restoreDraft();

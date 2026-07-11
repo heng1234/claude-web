@@ -3690,7 +3690,7 @@ def _path_matches_cwd(path_value: str, cwd_filter: str) -> bool:
         return path_value == cwd_filter
 
 
-def scan_cli_sessions(cwd_filter: str = "") -> List[dict]:
+def scan_cli_sessions(cwd_filter: str = "", sort: str = "project") -> List[dict]:
     imported_remote_ids: Set[str] = set()
     with db_connect() as conn:
         rows = conn.execute("SELECT id, remote_session_id FROM sessions").fetchall()
@@ -3710,6 +3710,11 @@ def scan_cli_sessions(cwd_filter: str = "") -> List[dict]:
         item["already_imported"] = item["session_id"] in imported_remote_ids
         item.pop("events", None)
         items.append(item)
+    # Sort: "project" = by cwd path then time, "time" = by updated_at desc
+    if sort == "time":
+        items.sort(key=lambda x: -(x.get("updated_at") or 0))
+    else:
+        items.sort(key=lambda x: ((x.get("cwd") or "").lower(), -(x.get("updated_at") or 0)))
     return items
 
 
@@ -5682,11 +5687,11 @@ async def search_sessions(q: str = Query(default=""), limit: int = Query(default
 
 
 @app.get("/api/cli-sessions/scan")
-async def scan_cli_sessions_api(cwd: str = Query(default="")):
+async def scan_cli_sessions_api(cwd: str = Query(default=""), sort: str = Query(default="project")):
     return {
         "root": str(_CLAUDE_PROJECTS_DIR),
         "exists": _CLAUDE_PROJECTS_DIR.exists(),
-        "sessions": scan_cli_sessions(cwd),
+        "sessions": scan_cli_sessions(cwd, sort=sort),
     }
 
 
