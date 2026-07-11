@@ -4189,7 +4189,7 @@
     border-radius: 0 0 18px 18px;
     background: #f4f3f1 !important;
   }
-  body:not(.cw-empty) .cw-composer-code-context {
+  body.code-mode:not(.cw-empty) .cw-composer-code-context {
     display: flex !important;
     align-items: center;
     flex-wrap: wrap;
@@ -4200,6 +4200,9 @@
     background: transparent !important;
     border-top: 0 !important;
     border-radius: 0 !important;
+  }
+  body:not(.code-mode) .cw-composer-code-context {
+    display: none !important;
   }
   .cw-context-chip {
     min-height: 24px !important;
@@ -5353,6 +5356,36 @@
   }
 
   @media (max-width: 768px) {
+    body.cw-search-open .cw-search-row {
+      position: fixed !important;
+      top: max(72px, calc(env(safe-area-inset-top) + 64px)) !important;
+      right: 12px !important;
+      left: 12px !important;
+      width: auto !important;
+      max-width: none !important;
+      transform: none !important;
+      border-radius: 16px !important;
+    }
+    body.cw-search-open .cw-search-overlay-backdrop {
+      z-index: 88;
+      background: rgba(246, 245, 243, .72);
+      backdrop-filter: blur(3px);
+    }
+    .cw-search-shell { max-height: calc(100dvh - 92px); }
+    .cw-search-field-line {
+      grid-template-columns: 30px minmax(0, 1fr) 32px;
+      min-height: 54px;
+      padding: 0 10px;
+    }
+    .cw-search-results {
+      max-height: calc(100dvh - 158px);
+      padding: 8px;
+    }
+    .cw-search-result {
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      min-height: 44px;
+      padding: 0 10px;
+    }
     .cw-settings-submenu,
     .cw-settings-submenu.open-left {
       right: 0;
@@ -6918,6 +6951,12 @@ const sidebarSearchRow = searchInput ? searchInput.closest('.cw-search-row') : n
 const cwSearchOverlayBackdrop = $('cwSearchOverlayBackdrop');
 const cwSearchOverlayResults = $('cwSearchOverlayResults');
 const cwSearchCloseBtn = $('cwSearchCloseBtn');
+if (cwSearchOverlayBackdrop && cwSearchOverlayBackdrop.parentElement !== document.body) {
+  document.body.appendChild(cwSearchOverlayBackdrop);
+}
+if (sidebarSearchRow && sidebarSearchRow.parentElement !== document.body) {
+  document.body.appendChild(sidebarSearchRow);
+}
 const permSelect = $('permSelect');
 const PERMISSION_MODE_LABELS = Object.freeze({
   free: '默认模式',
