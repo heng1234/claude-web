@@ -73,6 +73,7 @@ _LOCAL_CLIENT_NETWORKS = tuple(
         "10.0.0.0/8",
         "172.16.0.0/12",
         "192.168.0.0/16",
+        "100.64.0.0/10",
         "169.254.0.0/16",
         "198.18.0.0/15",
         "::1/128",
@@ -2120,17 +2121,28 @@ def _normalize_client_host(value: str) -> str:
     return raw
 
 
+def _client_host_ip(host: str):
+    normalized = (host or "").strip().strip("[]").lower()
+    if not normalized:
+        return None
+    try:
+        address = ipaddress.ip_address(normalized)
+    except ValueError:
+        return None
+    mapped = getattr(address, "ipv4_mapped", None)
+    return mapped or address
+
+
 def _is_local_client_host(host: str) -> bool:
     if not host:
         return True
     normalized = host.strip().strip("[]").lower()
     if normalized in {"localhost", "127.0.0.1", "::1"}:
         return True
-    try:
-        address = ipaddress.ip_address(normalized)
-        return any(address in network for network in _LOCAL_CLIENT_NETWORKS)
-    except ValueError:
+    address = _client_host_ip(normalized)
+    if address is None:
         return False
+    return any(address in network for network in _LOCAL_CLIENT_NETWORKS)
 
 
 def _request_client_host(request: Request) -> str:
@@ -2141,12 +2153,16 @@ def _request_client_host(request: Request) -> str:
         return direct
     forwarded_for = (request.headers.get("x-forwarded-for") or "").split(",", 1)[0].strip()
     if forwarded_for:
-        return _normalize_client_host(forwarded_for)
+        forwarded_host = _normalize_client_host(forwarded_for)
+        if _client_host_ip(forwarded_host) is not None or forwarded_host.lower() == "localhost":
+            return forwarded_host
     forwarded = (request.headers.get("forwarded") or "").split(",", 1)[0]
     for part in forwarded.split(";"):
         key, _, value = part.strip().partition("=")
         if key.lower() == "for" and value:
-            return _normalize_client_host(value)
+            forwarded_host = _normalize_client_host(value)
+            if _client_host_ip(forwarded_host) is not None or forwarded_host.lower() == "localhost":
+                return forwarded_host
     return direct
 
 
