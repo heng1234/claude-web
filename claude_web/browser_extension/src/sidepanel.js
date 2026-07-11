@@ -276,7 +276,7 @@ function pageContextText(result) {
 }
 
 async function captureCurrentPage() {
-  if (currentController) return;
+  if (currentController) return false;
   setStatus("正在读取当前页面...");
   try {
     const tab = await getActiveTab();
@@ -306,10 +306,31 @@ async function captureCurrentPage() {
       windowId: tab.windowId ?? null,
       createdAt: Date.now(),
     });
+    return true;
   } catch (error) {
     setStatus(`读取失败：${error.message || error}`);
     setLastError(error);
+    return false;
   }
+}
+
+async function startQuickPageAsk(question) {
+  const ready = await captureCurrentPage();
+  if (!ready || !currentAsk) return;
+  $("customQuestion").value = question;
+  resizeQuestionBox();
+  await sendAsk();
+}
+
+async function startNewAsk() {
+  const key = tabStateKey(currentAsk || activeTabContext);
+  if (key) {
+    const stored = await chrome.storage.local.get(TAB_STATES_KEY);
+    const states = stored[TAB_STATES_KEY] || {};
+    delete states[key];
+    await chrome.storage.local.set({ [TAB_STATES_KEY]: states });
+  }
+  resetPanel("选中网页内容后右键提问，或读取当前页");
 }
 
 function renderAsk(ask) {
@@ -590,6 +611,10 @@ $("emptyOptionsBtn").addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
 $("emptyCapturePageBtn").addEventListener("click", captureCurrentPage);
+$("newAskBtn").addEventListener("click", startNewAsk);
+document.querySelectorAll("[data-quick-question]").forEach((button) => {
+  button.addEventListener("click", () => startQuickPageAsk(button.dataset.quickQuestion || ""));
+});
 $("toggleContextBtn").addEventListener("click", toggleContext);
 $("toggleContextTextBtn").addEventListener("click", toggleContext);
 $("customQuestion").addEventListener("keydown", (event) => {
