@@ -15,9 +15,14 @@
           <p id="subtitle">选中网页内容后右键提问</p>
         </div>
       </div>
-      <button id="openOptionsBtn" class="icon-button" type="button" title="设置" aria-label="设置">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6Z"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.5-2.5 1a8 8 0 0 0-2.6-1.5L14 2h-4l-.4 3a8 8 0 0 0-2.5 1.5l-2.6-1-2 3.5 2.1 1.5a7.8 7.8 0 0 0 0 3L2.5 15l2 3.5 2.6-1a8 8 0 0 0 2.5 1.5l.4 3h4l.3-3a8 8 0 0 0 2.6-1.5l2.5 1 2-3.5-2-1.5Z"/></svg>
-      </button>
+      <div class="topbar-actions">
+        <button id="newAskBtn" class="icon-button" type="button" title="新提问" aria-label="新提问">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <button id="openOptionsBtn" class="icon-button" type="button" title="设置" aria-label="设置">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6Z"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.5-2.5 1a8 8 0 0 0-2.6-1.5L14 2h-4l-.4 3a8 8 0 0 0-2.5 1.5l-2.6-1-2 3.5 2.1 1.5a7.8 7.8 0 0 0 0 3L2.5 15l2 3.5 2.6-1a8 8 0 0 0 2.5 1.5l.4 3h4l.3-3a8 8 0 0 0 2.6-1.5l2.5 1 2-3.5-2-1.5Z"/></svg>
+        </button>
+      </div>
     </header>
 
     <section id="emptyState" class="empty panel-width">
@@ -26,6 +31,11 @@
       <div class="empty-actions">
         <button id="emptyCapturePageBtn" type="button">读取当前页</button>
         <button id="emptyOptionsBtn" type="button">配置本地连接</button>
+      </div>
+      <div class="quick-actions" aria-label="快捷提问">
+        <button type="button" data-quick-question="总结当前页面，提炼核心结论和关键数据。">总结页面</button>
+        <button type="button" data-quick-question="解释当前页面的主要内容，并指出最需要注意的部分。">解释重点</button>
+        <button type="button" data-quick-question="把当前页面整理成一份结构清晰、可执行的清单。">整理清单</button>
       </div>
       <p id="lastError" class="error hidden"></p>
     </section>

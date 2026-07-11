@@ -4910,6 +4910,319 @@
       display: none !important;
     }
   }
+
+  /* 2026 workspace polish: legible code, visible progress, diffs and mobile rhythm */
+  #headerMoreBtn {
+    display: none !important;
+  }
+  body.code-mode .user-msg-actions {
+    display: none !important;
+  }
+  body:not(.code-mode) .user-msg-actions {
+    left: auto !important;
+    right: calc(100% + 8px) !important;
+    top: 6px !important;
+    flex-direction: row !important;
+    gap: 2px !important;
+    padding: 3px !important;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    box-shadow: 0 4px 16px rgba(35, 30, 26, .06);
+    backdrop-filter: blur(10px);
+  }
+  body:not(.code-mode) .user-msg-actions button {
+    display: grid;
+    width: 25px;
+    height: 25px;
+    place-items: center;
+    border-radius: 7px;
+    filter: grayscale(1);
+    opacity: .72;
+  }
+  body:not(.code-mode) .user-msg-actions button:hover {
+    background: var(--surface-2);
+    filter: none;
+    opacity: 1;
+  }
+  body.code-mode .prose-custom pre,
+  body.code-mode .prose-custom pre code,
+  body.code-mode .prose-custom pre code.hljs {
+    border-color: #ded9d3 !important;
+    background: #f5f4f2 !important;
+    color: #302e2b !important;
+    text-shadow: none !important;
+  }
+  body.code-mode .prose-custom pre .hljs-comment,
+  body.code-mode .prose-custom pre .hljs-quote { color: #77716b !important; }
+  body.code-mode .prose-custom pre .hljs-keyword,
+  body.code-mode .prose-custom pre .hljs-selector-tag,
+  body.code-mode .prose-custom pre .hljs-literal { color: #9f3c35 !important; }
+  body.code-mode .prose-custom pre .hljs-string,
+  body.code-mode .prose-custom pre .hljs-attr { color: #52733d !important; }
+  body.code-mode .prose-custom pre .hljs-number,
+  body.code-mode .prose-custom pre .hljs-built_in { color: #8d5f19 !important; }
+  body.code-mode .prose-custom pre .hljs-title,
+  body.code-mode .prose-custom pre .hljs-function { color: #315f8d !important; }
+  :root.dark body.code-mode .prose-custom pre,
+  :root.dark body.code-mode .prose-custom pre code,
+  :root.dark body.code-mode .prose-custom pre code.hljs {
+    border-color: #393633 !important;
+    background: #1e1d1b !important;
+    color: #ede9e4 !important;
+  }
+  :root.dark body.code-mode .prose-custom pre .hljs-comment,
+  :root.dark body.code-mode .prose-custom pre .hljs-quote { color: #a8a099 !important; }
+  :root.dark body.code-mode .prose-custom pre .hljs-keyword,
+  :root.dark body.code-mode .prose-custom pre .hljs-selector-tag,
+  :root.dark body.code-mode .prose-custom pre .hljs-literal { color: #f08a7d !important; }
+  :root.dark body.code-mode .prose-custom pre .hljs-string,
+  :root.dark body.code-mode .prose-custom pre .hljs-attr { color: #a5c78e !important; }
+  :root.dark body.code-mode .prose-custom pre .hljs-number,
+  :root.dark body.code-mode .prose-custom pre .hljs-built_in { color: #e8bd76 !important; }
+  :root.dark body.code-mode .prose-custom pre .hljs-title,
+  :root.dark body.code-mode .prose-custom pre .hljs-function { color: #8dbce8 !important; }
+
+  body.code-mode .tool-strip-progress,
+  body.code-mode .tool-strip-summary {
+    width: min(100%, 720px);
+  }
+  body.code-mode .tool-strip-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 24px;
+    padding: 0 0 0 16px;
+  }
+  body.code-mode .tool-strip-progress-bar {
+    width: 88px;
+    height: 5px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e5e2de;
+  }
+  body.code-mode .tool-strip-progress-bar-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: #4c8fc7;
+    transition: width .28s ease;
+  }
+  body.code-mode .tool-strip-wrap.is-running .tool-strip-progress-bar-fill {
+    background: repeating-linear-gradient(110deg,#4c8fc7 0 9px,#72a9d4 9px 17px);
+    background-size: 34px 100%;
+    animation: cw-progress-flow .8s linear infinite;
+  }
+  body.code-mode .tool-strip-wrap.all-done .tool-strip-progress-bar-fill { background: #55a477; }
+  @keyframes cw-progress-flow { to { background-position: 34px 0; } }
+  :root.dark body.code-mode .tool-strip-progress-bar { background: #3a3835; }
+
+  .cw-changed-files {
+    width: min(100%, 720px);
+    margin-top: 14px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+  }
+  .cw-changed-files-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12.5px;
+  }
+  .cw-changed-files-head > span:last-child {
+    min-width: 22px;
+    margin-left: auto;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .cw-changed-files-icon,
+  .cw-changed-files-icon svg { width: 17px; height: 17px; }
+  .cw-changed-files-icon svg { stroke-width: 1.8; }
+  .cw-changed-file {
+    display: grid;
+    grid-template-columns: 46px minmax(0,1fr) 16px;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 38px;
+    padding: 0 12px;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .cw-changed-file:last-child { border-bottom: 0; }
+  .cw-changed-file:hover { background: var(--surface-2); }
+  .cw-changed-file code {
+    overflow: hidden;
+    color: inherit;
+    background: transparent;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  .cw-changed-file > svg { width: 15px; height: 15px; stroke-width: 1.8; color: var(--text-subtle); }
+  .cw-changed-file-status {
+    padding: 2px 5px;
+    border-radius: 6px;
+    background: #eef4eb;
+    color: #4e7444;
+    font-size: 10.5px;
+    text-align: center;
+  }
+  .git-diff-modal-box {
+    display: flex;
+    width: min(980px, calc(100vw - 36px));
+    height: min(760px, calc(100dvh - 40px));
+    max-width: 980px !important;
+    flex-direction: column;
+    padding: 0 !important;
+    overflow: hidden;
+  }
+  .git-diff-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .git-diff-path { overflow:hidden; color:var(--text-muted); font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; text-overflow:ellipsis; white-space:nowrap; }
+  .git-diff-content {
+    flex: 1;
+    margin: 0;
+    overflow: auto;
+    padding: 14px 0;
+    border: 0;
+    border-radius: 0;
+    background: #1d1f21;
+    color: #dedbd7;
+    font: 12px/1.58 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+    white-space: pre;
+  }
+  .git-diff-line { display:block; min-height:19px; padding:0 14px; }
+  .git-diff-line.add { background:rgba(49,133,78,.20); color:#b8e0c3; }
+  .git-diff-line.remove { background:rgba(181,66,63,.20); color:#f0b7b4; }
+  .git-diff-line.hunk { color:#a7bfe8; background:rgba(77,105,156,.16); }
+  .git-diff-line.meta { color:#d8b879; }
+
+  .cli-list-intro {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px 9px;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .cli-list-intro strong { color: var(--text); font-size: 12px; }
+  .cli-load-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: calc(100% - 16px);
+    min-height: 34px;
+    margin: 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--surface) 75%, transparent);
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .cli-load-more span { color: var(--text-subtle); font-size: 10.5px; }
+  .cli-list-end { padding:12px; color:var(--text-subtle); font-size:11px; text-align:center; }
+  .settings-usage-grid {
+    display: grid;
+    grid-template-columns: repeat(4,minmax(0,1fr));
+    gap: 10px;
+  }
+  .settings-usage-grid > div {
+    display: grid;
+    gap: 4px;
+    padding: 13px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-2);
+  }
+  .settings-usage-grid span { color:var(--text-muted); font-size:11px; }
+  .settings-usage-grid strong { color:var(--text); font-size:18px; }
+
+  @media (max-width: 768px) {
+    html, body { height: 100dvh; min-height: 100dvh; }
+    body { overflow: hidden; }
+    #mainPane > header {
+      min-height: 48px;
+      padding: max(7px, env(safe-area-inset-top)) 10px 7px !important;
+    }
+    #configCenterBtn,
+    #helpBtn { display:none !important; }
+    #titleLabel { max-width: 46vw; font-size: 13.5px !important; }
+    #chat { overscroll-behavior: contain; }
+    #chatInner {
+      width: 100% !important;
+      padding: 18px 14px 154px !important;
+    }
+    body.cw-empty #chatInner { padding-top: 11vh !important; }
+    .user-msg-bubble { max-width: 88% !important; }
+    .bubble-user { border-radius: 17px !important; font-size:14px; line-height:1.55; }
+    .asst-wrap { gap: 0 !important; }
+    .asst-wrap .asst-avatar { display:none !important; }
+    .bubble-asst { font-size:14px !important; line-height:1.68 !important; }
+    .bubble-asst pre { margin-left:-4px; margin-right:-4px; border-radius:11px !important; font-size:11.5px !important; }
+    #form {
+      padding: 0 10px calc(8px + env(safe-area-inset-bottom)) !important;
+    }
+    #composer {
+      min-height: 112px !important;
+      border-radius: 18px !important;
+      box-shadow: 0 12px 34px rgba(31,27,24,.12) !important;
+    }
+    #input { min-height:52px !important; padding:13px 13px 7px !important; font-size:15px !important; }
+    #composer > .composer-actions { padding: 7px 8px 8px !important; }
+    #sidebar {
+      width: min(86vw, 320px) !important;
+      padding-top: env(safe-area-inset-top);
+      box-shadow: 18px 0 48px rgba(18,16,14,.18);
+    }
+    .modal-backdrop { align-items:flex-end !important; padding:0 !important; }
+    .modal-backdrop > .modal-box,
+    .settings-modal-box {
+      width:100% !important;
+      max-width:none !important;
+      max-height:94dvh !important;
+      border-radius:20px 20px 0 0 !important;
+    }
+    .settings-modal-box { height:94dvh !important; }
+    .settings-shell { grid-template-columns:1fr !important; }
+    .settings-nav {
+      display:flex !important;
+      overflow-x:auto;
+      padding:8px !important;
+      border-right:0 !important;
+      border-bottom:1px solid var(--border);
+    }
+    .settings-tab { flex:0 0 auto; min-height:36px !important; padding:0 12px !important; }
+    .settings-body { padding:14px !important; }
+    .settings-token-row { align-items:stretch; flex-direction:column; }
+    .settings-token-row .settings-field { width:100% !important; }
+    .settings-usage-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .cw-changed-files { width:100%; }
+    .cw-changed-file { grid-template-columns:42px minmax(0,1fr) 14px; padding:0 10px; }
+    .git-diff-modal-box { height:92dvh !important; border-radius:18px 18px 0 0 !important; }
+    .git-diff-content { font-size:11px; }
+    .tool-strip-summary-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    body:not(.code-mode) .user-msg-actions { display:none !important; }
+    #composerQuickActions { display:none !important; }
+  }
 </style>
 </head>
 <body class="h-screen flex">
@@ -4962,6 +5275,10 @@
     <button type="button" class="cw-nav-row" id="cwRecordsNav" data-cw-view="records">
       <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
       <span>记录</span>
+    </button>
+    <button type="button" class="cw-nav-row" id="cwCliNav" data-cw-view="cli">
+      <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l-3 4 3 4M11 16h6"/><rect x="3" y="4" width="18" height="16" rx="3"/></svg></span>
+      <span>CLI 导入</span>
     </button>
     <button type="button" class="cw-nav-row" id="cwCodeNav" data-cw-view="code">
       <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg></span>
@@ -5403,6 +5720,7 @@
         <button type="button" class="settings-tab" data-settings-tab="notifications" role="tab" aria-selected="false" aria-controls="settingsPanelNotifications"><span class="label">通知</span></button>
         <button type="button" class="settings-tab" data-settings-tab="mobile" role="tab" aria-selected="false" aria-controls="settingsPanelMobile"><span class="label">手机访问</span></button>
         <button type="button" class="settings-tab" data-settings-tab="extension" role="tab" aria-selected="false" aria-controls="settingsPanelExtension"><span class="label">浏览器插件</span></button>
+        <button type="button" class="settings-tab" data-settings-tab="usage" role="tab" aria-selected="false" aria-controls="settingsPanelUsage"><span class="label">费用统计</span></button>
         <button type="button" class="settings-tab" data-settings-tab="memory" role="tab" aria-selected="false" aria-controls="settingsPanelMemory"><span class="label">记忆</span></button>
       </nav>
       <div class="settings-body">
@@ -5479,7 +5797,7 @@
         <section id="settingsPanelMobile" class="settings-panel" data-settings-panel="mobile" role="tabpanel" hidden>
           <div class="settings-panel-head">
             <div class="settings-panel-title">手机访问</div>
-            <div class="settings-panel-desc">同 WiFi 下用本机局域网地址访问，并用访问码绑定设备。</div>
+            <div class="settings-panel-desc">本机和可信局域网访问无需验证码；只有公网或远程来源需要验证。</div>
           </div>
           <div class="settings-section">
             <div class="flex items-center justify-between gap-3">
@@ -5505,7 +5823,7 @@
                 </div>
               </div>
               <div id="mobileAccessCandidateUrls" class="settings-hint"></div>
-              <div class="mt-1">出门远程使用时，可选 ZeroTier 等私有网络工具；不建议把服务直接暴露到公网。</div>
+              <div class="mt-1">本机、同 WiFi 和 ZeroTier 等可信私有网段会直接放行；公网来源才会进入远程验证页面。</div>
             </div>
           </div>
           <div class="settings-section">
@@ -5529,6 +5847,31 @@
               <button id="generateMobileAccessCodeBtn" type="button" class="settings-btn primary">生成访问码</button>
             </div>
             <div class="settings-hint">最长 30 天；选择「直到手动撤销」时，请只在可信设备上使用。</div>
+          </div>
+          <div class="settings-section">
+            <div class="flex items-center justify-between gap-3 mb-2">
+              <div>
+                <label class="settings-label" style="margin-bottom:2px;">Authenticator 动态验证</label>
+                <div id="mobileTotpStatus" class="settings-hint" style="margin-top:0;">未启用 · 远程访问使用一次性访问码</div>
+              </div>
+              <button id="mobileTotpSetupBtn" type="button" class="settings-btn">开始设置</button>
+            </div>
+            <div id="mobileTotpSetupBox" class="hidden">
+              <div class="settings-note">
+                <strong>在 Google Authenticator、Microsoft Authenticator 或 1Password 中添加</strong>
+                <div class="mt-1">复制密钥或完整 otpauth 地址到验证器，然后输入当前 6 位验证码确认。</div>
+              </div>
+              <div class="settings-token-row mt-2">
+                <input id="mobileTotpSecret" readonly class="settings-field grow" aria-label="Authenticator 密钥" />
+                <button id="copyMobileTotpSecretBtn" type="button" class="settings-btn">复制密钥</button>
+              </div>
+              <input id="mobileTotpUri" readonly class="settings-field mt-2" aria-label="Authenticator 配置地址" />
+              <div class="settings-actions mt-2">
+                <input id="mobileTotpCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="输入 6 位验证码" class="settings-field" style="max-width:180px; letter-spacing:.12em;" />
+                <button id="mobileTotpEnableBtn" type="button" class="settings-btn primary">验证并启用</button>
+              </div>
+            </div>
+            <div id="mobileTotpSecurityNote" class="settings-hint mt-2">Authenticator 只用于公网或远程来源；本机和可信局域网访问不要求验证码。公网访问仍必须使用 HTTPS、反向代理和登录限速。</div>
           </div>
           <div id="mobileAccessCodeBox" class="settings-section hidden">
             <label class="settings-label">当前访问码</label>
@@ -5586,6 +5929,26 @@
               <div class="mt-2 break-all">插件目录：<code id="extensionPathText">检测中...</code></div>
               <div class="mt-1">服务地址默认：<code id="extensionDefaultUrl">http://127.0.0.1:8765</code></div>
               <div class="mt-1">pip 用户也可以运行：<code>claude-web --extension-path</code></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="settingsPanelUsage" class="settings-panel" data-settings-panel="usage" role="tabpanel" hidden>
+          <div class="settings-panel-head">
+            <div class="settings-panel-title">费用统计</div>
+            <div class="settings-panel-desc">查看本地会话的估算费用与使用量；订阅或第三方网关的实际账单可能不同。</div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-usage-grid">
+              <div><span>估算费用</span><strong id="settingsUsageCost">~$0.00</strong></div>
+              <div><span>会话</span><strong id="settingsUsageSessions">0</strong></div>
+              <div><span>轮次</span><strong id="settingsUsageTurns">0</strong></div>
+              <div><span>总耗时</span><strong id="settingsUsageDuration">0s</strong></div>
+            </div>
+            <div id="settingsUsageNote" class="settings-hint mt-2"></div>
+            <div class="settings-actions mt-3">
+              <button id="openDetailedStatsBtn" type="button" class="settings-btn primary">查看趋势与工具明细</button>
+              <button id="refreshUsageStatsBtn" type="button" class="settings-btn">刷新</button>
             </div>
           </div>
         </section>
@@ -5847,6 +6210,19 @@
 </div>
 
 <!-- Stats modal -->
+<div id="gitDiffModal" class="modal-backdrop hidden">
+  <div class="modal-box lg git-diff-modal-box">
+    <div class="git-diff-modal-head">
+      <div class="min-w-0">
+        <div class="text-sm font-semibold">文件修改</div>
+        <div id="gitDiffPath" class="git-diff-path"></div>
+      </div>
+      <button data-close class="sb-icon-btn" aria-label="关闭文件差异">×</button>
+    </div>
+    <pre id="gitDiffContent" class="git-diff-content">正在加载...</pre>
+  </div>
+</div>
+
 <div id="statsModal" class="modal-backdrop hidden">
   <div class="modal-box lg p-5">
     <div class="flex items-center justify-between mb-4">
@@ -6104,13 +6480,15 @@
 
 <script>
 // ===== libs =====
-marked.setOptions({
-  breaks: true,
-  highlight: (code, lang) => {
-    try { return hljs.highlight(code, { language: lang || 'plaintext', ignoreIllegals: true }).value; }
-    catch { return code; }
-  }
-});
+if (window.marked) {
+  marked.setOptions({
+    breaks: true,
+    highlight: (code, lang) => {
+      try { return window.hljs ? hljs.highlight(code, { language: lang || 'plaintext', ignoreIllegals: true }).value : code; }
+      catch { return code; }
+    }
+  });
+}
 if (window.mermaid) mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
 
 const LS = {
@@ -6158,6 +6536,8 @@ let codeMode = false;
 let activeTagFilter = null;
 let sessionListRequestId = 0;
 let cliSessionListRequestId = 0;
+let cliVisibleCount = 10;
+let cliSessionCache = [];
 let dailyChart = null, toolsChart = null;
 let sessionFeedback = {};
 let feedbackPopover = null;
@@ -6346,6 +6726,14 @@ const copyMobileAccessCodeBtn = $('copyMobileAccessCodeBtn');
 const mobileAccessCodeMeta = $('mobileAccessCodeMeta');
 const mobileAccessSessionsEl = $('mobileAccessSessions');
 const revokeAllMobileAccessBtn = $('revokeAllMobileAccessBtn');
+const mobileTotpStatus = $('mobileTotpStatus');
+const mobileTotpSetupBtn = $('mobileTotpSetupBtn');
+const mobileTotpSetupBox = $('mobileTotpSetupBox');
+const mobileTotpSecret = $('mobileTotpSecret');
+const mobileTotpUri = $('mobileTotpUri');
+const mobileTotpCode = $('mobileTotpCode');
+const copyMobileTotpSecretBtn = $('copyMobileTotpSecretBtn');
+const mobileTotpEnableBtn = $('mobileTotpEnableBtn');
 const extensionStatusText = $('extensionStatusText');
 const generateExtensionTokenBtn = $('generateExtensionTokenBtn');
 const extensionTokenBox = $('extensionTokenBox');
@@ -6368,6 +6756,11 @@ const poCandidateList = $('poCandidateList'), poSampleList = $('poSampleList');
 const poCurrentPrompt = $('poCurrentPrompt'), poRewriteTask = $('poRewriteTask'), poRewriteBtn = $('poRewriteBtn'), poUseInputBtn = $('poUseInputBtn'), poPrivacyHint = $('poPrivacyHint');
 const poRewriteExplanation = $('poRewriteExplanation'), poVariantList = $('poVariantList'), poRuleList = $('poRuleList'), poSimilarList = $('poSimilarList');
 const statsBar = $('statsBar'), statsModal = $('statsModal');
+const settingsUsageCost = $('settingsUsageCost'), settingsUsageSessions = $('settingsUsageSessions');
+const settingsUsageTurns = $('settingsUsageTurns'), settingsUsageDuration = $('settingsUsageDuration');
+const settingsUsageNote = $('settingsUsageNote');
+const openDetailedStatsBtn = $('openDetailedStatsBtn'), refreshUsageStatsBtn = $('refreshUsageStatsBtn');
+const gitDiffModal = $('gitDiffModal'), gitDiffPath = $('gitDiffPath'), gitDiffContent = $('gitDiffContent');
 const memoryBar = $('memoryBar');
 const tokenBar = $('tokenBar');
 const tokenCounter = $('tokenCounter');
@@ -6380,6 +6773,7 @@ const sessionLabelText = $('sessionLabelText');
 const suggestTitleBtn = $('suggestTitleBtn');
 const toggleSidebar = $('toggleSidebar'), sidebar = $('sidebar');
 const closeSidebarBtn = $('closeSidebar'), sidebarScrim = $('sidebarScrim');
+const cwCliNav = $('cwCliNav');
 
 // ===== utilities =====
 let userScrolledUp = false;
@@ -6510,6 +6904,8 @@ function applyMobileQuestionMode() {
     notificationMasterEnabled,
     saveNotificationsBtn,
     generateMobileAccessCodeBtn,
+    mobileTotpSetupBtn,
+    mobileTotpEnableBtn,
     revokeAllMobileAccessBtn,
     generateExtensionTokenBtn,
     addMemoryBtn,
@@ -7758,12 +8154,14 @@ function updateStripProgress(strip) {
   const total = chips.length;
   const done = chips.filter(c => !c.classList.contains('pending')).length;
   const pct = total ? (done / total) * 100 : 0;
+  wrap.classList.toggle('all-done', total > 0 && done === total);
+  wrap.classList.toggle('is-running', total > 0 && done < total);
 
   const COLLAPSE_THRESHOLD = 4;
   let progress = wrap.querySelector(':scope > .tool-strip-progress');
   let summary = wrap.querySelector(':scope > .tool-strip-summary');
 
-  if (total <= 1) {
+  if (total === 0) {
     if (progress) progress.remove();
     if (summary) summary.remove();
     wrap.classList.remove('collapsed');
@@ -7778,12 +8176,18 @@ function updateStripProgress(strip) {
       progress.className = 'tool-strip-progress';
       progress.innerHTML = `
         <span class="tool-strip-progress-text"></span>
-        <span class="tool-strip-progress-bar"><span class="tool-strip-progress-bar-fill"></span></span>
+        <span class="tool-strip-progress-bar" role="progressbar" aria-label="执行进度"><span class="tool-strip-progress-bar-fill"></span></span>
       `;
       wrap.insertBefore(progress, strip);
     }
     const fill = progress.querySelector('.tool-strip-progress-bar-fill');
     if (fill) fill.style.width = `${pct}%`;
+    const bar = progress.querySelector('.tool-strip-progress-bar');
+    if (bar) {
+      bar.setAttribute('aria-valuemin', '0');
+      bar.setAttribute('aria-valuemax', String(total));
+      bar.setAttribute('aria-valuenow', String(done));
+    }
     const txt = progress.querySelector('.tool-strip-progress-text');
     if (txt) txt.textContent = `${done}/${total}`;
     return;
@@ -7798,7 +8202,7 @@ function updateStripProgress(strip) {
     summary.innerHTML = `
       <span class="tool-strip-summary-icon">🔧</span>
       <span class="tool-strip-summary-text"></span>
-      <span class="tool-strip-progress-bar"><span class="tool-strip-progress-bar-fill"></span></span>
+      <span class="tool-strip-progress-bar" role="progressbar" aria-label="执行进度"><span class="tool-strip-progress-bar-fill"></span></span>
       <span class="tool-strip-summary-count"></span>
       <span class="tool-strip-summary-chevron"></span>
     `;
@@ -7829,6 +8233,12 @@ function updateStripProgress(strip) {
   if (countEl) countEl.textContent = `${done}/${total}`;
   const fill = summary.querySelector('.tool-strip-progress-bar-fill');
   if (fill) fill.style.width = `${pct}%`;
+  const bar = summary.querySelector('.tool-strip-progress-bar');
+  if (bar) {
+    bar.setAttribute('aria-valuemin', '0');
+    bar.setAttribute('aria-valuemax', String(total));
+    bar.setAttribute('aria-valuenow', String(done));
+  }
   const chev = summary.querySelector('.tool-strip-summary-chevron');
   if (chev) chev.textContent = wrap.classList.contains('collapsed') ? '▾' : '▴';
 }
@@ -9023,6 +9433,7 @@ function handleEvent(obj, container, options = {}) {
     addSystemInfo(`完成${dur}${cost}${tokensSuffix}`);
     accumulateSessionTokens(obj.usage);
     refreshStats();
+    if (!replay && codeMode) renderChangedFilesSummary(container);
     const denials = obj.permission_denials;
     if (Array.isArray(denials) && denials.length > 0) {
       const toolNames = [...new Set(denials.map(d => d.tool_name).filter(Boolean))];
@@ -11204,6 +11615,7 @@ async function loadSession(id) {
         handleEvent(ev, asstContainer, { replay: true, eventIndex });
       }
     });
+    if (codeMode && asstContainer) renderChangedFilesSummary(asstContainer);
     if (!data.events.length) chatInner.appendChild(welcome);
     forceScrollBottom();
     highlightActiveSession();
@@ -11276,6 +11688,76 @@ async function refreshGitStatus() {
 cwdInput.addEventListener('change', refreshGitStatus);
 cwdInput.addEventListener('input', updateWorkspaceLabels);
 
+function gitStatusLabel(status) {
+  if (status.includes('?')) return '新增';
+  if (status.includes('D')) return '删除';
+  if (status.includes('R')) return '重命名';
+  if (status.includes('A')) return '新增';
+  return '修改';
+}
+
+function renderGitDiffHtml(diff) {
+  return String(diff || '').split('\n').map(line => {
+    let cls = 'context';
+    if (line.startsWith('+') && !line.startsWith('+++')) cls = 'add';
+    else if (line.startsWith('-') && !line.startsWith('---')) cls = 'remove';
+    else if (line.startsWith('@@')) cls = 'hunk';
+    else if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) cls = 'meta';
+    return `<span class="git-diff-line ${cls}">${escapeHtml(line)}</span>`;
+  }).join('\n');
+}
+
+async function openGitFileDiff(path) {
+  const cwd = cwdInput.value.trim();
+  if (!cwd || !path || !gitDiffModal) return;
+  if (gitDiffPath) gitDiffPath.textContent = path;
+  if (gitDiffContent) gitDiffContent.textContent = '正在加载差异...';
+  openModal(gitDiffModal);
+  try {
+    const query = new URLSearchParams({ cwd, path });
+    const r = await fetch('/api/git/diff?' + query.toString());
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || '读取差异失败');
+    if (gitDiffContent) gitDiffContent.innerHTML = renderGitDiffHtml(data.diff || '');
+  } catch (e) {
+    if (gitDiffContent) gitDiffContent.textContent = e.message || '读取差异失败';
+  }
+}
+
+async function renderChangedFilesSummary(container) {
+  if (!codeMode || !container) return;
+  const cwd = cwdInput.value.trim();
+  if (!cwd) return;
+  try {
+    const r = await fetch('/api/git?cwd=' + encodeURIComponent(cwd));
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.available) return;
+    const files = Array.isArray(data.files) ? data.files : [];
+    container.querySelector(':scope > .cw-changed-files')?.remove();
+    if (!files.length) return;
+    const card = document.createElement('section');
+    card.className = 'cw-changed-files';
+    card.innerHTML = `
+      <div class="cw-changed-files-head">
+        <span class="cw-changed-files-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/></svg></span>
+        <strong>修改的文件</strong>
+        <span>${files.length}</span>
+      </div>
+      <div class="cw-changed-files-list">
+        ${files.map(file => `<button type="button" class="cw-changed-file" data-git-diff-path="${escapeHtml(file.path)}">
+          <span class="cw-changed-file-status status-${escapeHtml(file.status || 'M')}">${gitStatusLabel(file.status || 'M')}</span>
+          <code title="${escapeHtml(file.path)}">${escapeHtml(file.path)}</code>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6"/></svg>
+        </button>`).join('')}
+      </div>`;
+    card.querySelectorAll('[data-git-diff-path]').forEach(btn => {
+      btn.addEventListener('click', () => openGitFileDiff(btn.dataset.gitDiffPath || ''));
+    });
+    container.appendChild(card);
+    scrollBottom();
+  } catch {}
+}
+
 // ===== stats =====
 function renderFeedbackStats(feedback) {
   if (!feedback) return;
@@ -11336,6 +11818,13 @@ async function refreshStats() {
       : tipBase;
     statsBar.textContent = `💰 ~$${d.total_cost_usd.toFixed(2)} · ${d.total_sessions}${gatewayTag}`;
     statsBar.title = tipFull;
+    if (settingsUsageCost) settingsUsageCost.textContent = '~$' + d.total_cost_usd.toFixed(4);
+    if (settingsUsageSessions) settingsUsageSessions.textContent = d.total_sessions;
+    if (settingsUsageTurns) settingsUsageTurns.textContent = d.total_turns;
+    if (settingsUsageDuration) settingsUsageDuration.textContent = (d.total_duration_ms / 1000).toFixed(1) + 's';
+    if (settingsUsageNote) settingsUsageNote.textContent = pricing.is_gateway
+      ? `检测到第三方网关：${pricing.base_url}。这里仍按官方价估算，不代表实际账单。`
+      : '按官方公开价目估算，仅用于观察本地会话趋势。';
     $('statCost').textContent = '~$' + d.total_cost_usd.toFixed(4);
     const noteEl = $('statCostNote');
     if (noteEl) {
@@ -11370,6 +11859,11 @@ async function refreshStats() {
   } catch {}
 }
 statsBar.addEventListener('click', () => openModal(statsModal));
+if (openDetailedStatsBtn) openDetailedStatsBtn.addEventListener('click', () => {
+  openModal(statsModal);
+  refreshStats();
+});
+if (refreshUsageStatsBtn) refreshUsageStatsBtn.addEventListener('click', refreshStats);
 
 async function refreshExtensionStatus() {
   if (!extensionStatusText) return;
@@ -11516,6 +12010,20 @@ function renderMobileAccess() {
   if (mobileAccessCustomTtl) {
     mobileAccessCustomTtl.classList.toggle('hidden', mobileAccessTtlPreset?.value !== 'custom');
   }
+  const totpEnabled = !!mobileAccessState.totp_enabled;
+  if (mobileTotpStatus) {
+    mobileTotpStatus.textContent = totpEnabled
+      ? '已启用 · 远程登录使用 30 秒动态验证码'
+      : '未启用 · 远程登录使用一次性访问码';
+  }
+  if (mobileTotpSetupBtn) {
+    mobileTotpSetupBtn.textContent = totpEnabled ? '停用 Authenticator' : '开始设置';
+    mobileTotpSetupBtn.disabled = !mobileAccessState.enabled;
+  }
+  if (generateMobileAccessCodeBtn) {
+    generateMobileAccessCodeBtn.classList.toggle('hidden', totpEnabled);
+  }
+  if (mobileTotpSetupBox && totpEnabled) mobileTotpSetupBox.classList.add('hidden');
   if (!mobileAccessSessionsEl) return;
   if (!sessions.length) {
     mobileAccessSessionsEl.innerHTML = '<div class="text-xs py-2" style="color:var(--text-subtle);">暂无已授权设备</div>';
@@ -11624,6 +12132,67 @@ async function generateMobileAccessCode() {
   }
 }
 
+async function setupMobileTotp() {
+  if (!mobileTotpSetupBtn || !mobileAccessState.enabled) return;
+  if (mobileAccessState.totp_enabled) {
+    if (!confirm('停用 Authenticator 会撤销现有远程设备，之后需重新生成访问码登录。继续吗？')) return;
+    try {
+      const r = await fetch('/api/mobile-access/totp', { method: 'DELETE' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || '停用失败');
+      mobileAccessState = data;
+      mobileTotpSetupBox?.classList.add('hidden');
+      toast('Authenticator 已停用，现有远程设备已撤销');
+      renderMobileAccess();
+    } catch (e) {
+      toast(e.message || '停用 Authenticator 失败');
+    }
+    return;
+  }
+  mobileTotpSetupBtn.disabled = true;
+  try {
+    const r = await fetch('/api/mobile-access/totp/setup', { method: 'POST' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || '初始化失败');
+    if (mobileTotpSecret) mobileTotpSecret.value = data.secret || '';
+    if (mobileTotpUri) mobileTotpUri.value = data.provisioning_uri || '';
+    if (mobileTotpCode) mobileTotpCode.value = '';
+    mobileTotpSetupBox?.classList.remove('hidden');
+    mobileTotpCode?.focus();
+  } catch (e) {
+    toast(e.message || 'Authenticator 设置失败');
+  } finally {
+    mobileTotpSetupBtn.disabled = false;
+  }
+}
+
+async function enableMobileTotp() {
+  const code = (mobileTotpCode?.value || '').replace(/\D/g, '');
+  if (code.length !== 6) {
+    toast('请输入 Authenticator 当前显示的 6 位验证码');
+    return;
+  }
+  mobileTotpEnableBtn.disabled = true;
+  try {
+    const r = await fetch('/api/mobile-access/totp/enable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, ttl_seconds: selectedMobileAccessTtl() }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || '验证码校验失败');
+    mobileAccessState = data;
+    mobileTotpSetupBox?.classList.add('hidden');
+    mobileAccessCodeBox?.classList.add('hidden');
+    toast('Authenticator 已启用');
+    renderMobileAccess();
+  } catch (e) {
+    toast(e.message || 'Authenticator 启用失败');
+  } finally {
+    mobileTotpEnableBtn.disabled = false;
+  }
+}
+
 async function revokeMobileAccessSession(sessionId) {
   if (!sessionId) return;
   try {
@@ -11656,6 +12225,13 @@ if (mobileAccessTtlPreset) mobileAccessTtlPreset.addEventListener('change', rend
 if (mobileAccessCustomValue) mobileAccessCustomValue.addEventListener('input', renderMobileAccess);
 if (mobileAccessCustomUnit) mobileAccessCustomUnit.addEventListener('change', renderMobileAccess);
 if (generateMobileAccessCodeBtn) generateMobileAccessCodeBtn.addEventListener('click', generateMobileAccessCode);
+if (mobileTotpSetupBtn) mobileTotpSetupBtn.addEventListener('click', setupMobileTotp);
+if (mobileTotpEnableBtn) mobileTotpEnableBtn.addEventListener('click', enableMobileTotp);
+if (copyMobileTotpSecretBtn) copyMobileTotpSecretBtn.addEventListener('click', async () => {
+  if (!mobileTotpSecret?.value) return;
+  try { await navigator.clipboard.writeText(mobileTotpSecret.value); toast('Authenticator 密钥已复制'); }
+  catch { mobileTotpSecret.select(); toast('请手动复制密钥'); }
+});
 if (copyMobileAccessCodeBtn) copyMobileAccessCodeBtn.addEventListener('click', async () => {
   const urls = mobileAccessUrlList();
   const extraUrls = urls.slice(1).map(url => `备用地址：${url}`).join('\n');
@@ -12019,6 +12595,7 @@ function activateSettingsTab(tabName) {
   });
   const body = settingsModal.querySelector('.settings-body');
   if (body) body.scrollTop = 0;
+  if (tabName === 'usage') refreshStats();
 }
 
 if (settingsModal) {
@@ -13807,11 +14384,12 @@ function sidebarSectionLabel() {
 }
 
 function updateShellNav(active) {
-  const activeKey = active || (codeMode ? 'code' : (archivedView ? 'records' : (searchInput?.value.trim() ? 'search' : 'chat')));
+  const activeKey = active || (cliView ? 'cli' : (codeMode ? 'code' : (archivedView ? 'records' : (searchInput?.value.trim() ? 'search' : 'chat'))));
   [
     [cwChatNav, 'chat'],
     [cwSearchNav, 'search'],
     [cwRecordsNav, 'records'],
+    [cwCliNav, 'cli'],
     [cwCodeNav, 'code']
   ].forEach(([btn, key]) => {
     if (btn) btn.classList.toggle('active', key === activeKey);
@@ -13933,6 +14511,26 @@ function syncEmptyShellState() {
 }
 
 function activateShellView(view) {
+  if (view === 'cli') {
+    if (mobileQuestionMode) {
+      toast('手机问答模式不能导入 CLI 会话');
+      return;
+    }
+    codeMode = false;
+    archivedView = false;
+    milestoneView = false;
+    cliView = true;
+    cliVisibleCount = 10;
+    if (searchInput) searchInput.value = '';
+    hideSearchFieldIfEmpty();
+    setCodeMode(false);
+    updateShellNav('cli');
+    updateViewTabs();
+    renderCliSessionList();
+    closeMobileSidebar();
+    syncEmptyShellState();
+    return;
+  }
   if (view === 'code') {
     archivedView = false;
     cliView = false;
@@ -14259,12 +14857,21 @@ async function renderCliSessionList() {
   try {
     const data = await fetch('/api/cli-sessions/scan').then(r => r.json());
     if (!cliView || requestId !== cliSessionListRequestId) return;
-    const sessions = data.sessions || [];
-    if (!sessions.length) {
-      sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">未找到 CLI 会话</div>';
-      return;
-    }
-    sessionItems.innerHTML = sessions.map(s => {
+    cliSessionCache = data.sessions || [];
+    renderCliSessionPage();
+  } catch(e) {
+    if (!cliView || requestId !== cliSessionListRequestId) return;
+    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载失败</div>';
+  }
+}
+
+function renderCliSessionPage() {
+  const sessions = cliSessionCache.slice(0, cliVisibleCount);
+  if (!cliSessionCache.length) {
+    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">未找到 CLI 会话</div>';
+    return;
+  }
+  sessionItems.innerHTML = '<div class="cli-list-intro"><strong>本机 CLI 对话</strong><span>按更新时间显示，首屏 10 条</span></div>' + sessions.map(s => {
       const alreadyImported = s.already_imported;
       const date = s.updated_at ? new Date(s.updated_at * 1000).toLocaleDateString('zh-CN', {month:'numeric',day:'numeric'}) : '';
       const title = (s.title || s.first_message || s.session_id || '').trim();
@@ -14285,8 +14892,10 @@ async function renderCliSessionList() {
           </button>
         </div>
       </div>`;
-    }).join('');
-    sessionItems.querySelectorAll('.cli-import-one').forEach(btn => {
+    }).join('') + (cliVisibleCount < cliSessionCache.length
+      ? `<button type="button" id="cliLoadMoreBtn" class="cli-load-more">加载更多 10 条 <span>${sessions.length}/${cliSessionCache.length}</span></button>`
+      : `<div class="cli-list-end">已显示全部 ${cliSessionCache.length} 条</div>`);
+  sessionItems.querySelectorAll('.cli-import-one').forEach(btn => {
       if (btn.textContent.trim() === '已导入') return;
       btn.addEventListener('click', async () => {
         btn.disabled = true; btn.textContent = '导入中…';
@@ -14299,11 +14908,11 @@ async function renderCliSessionList() {
           refreshSessions();
         } catch(e) { btn.disabled = false; btn.textContent = '导入'; alert('导入失败'); }
       });
-    });
-  } catch(e) {
-    if (!cliView || requestId !== cliSessionListRequestId) return;
-    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载失败</div>';
-  }
+  });
+  $('cliLoadMoreBtn')?.addEventListener('click', () => {
+    cliVisibleCount += 10;
+    renderCliSessionPage();
+  });
 }
 
 // ===== MCP management =====
@@ -15107,9 +15716,18 @@ function renderTourStep() {
   const centerTooltip = () => {
     spot.style.display = 'none';
     tip.style.display = 'block';
-    tip.style.left = '50%';
     tip.style.top = '50%';
-    tip.style.transform = 'translate(-50%, -50%)';
+    if (window.innerWidth <= 768) {
+      tip.style.left = '16px';
+      tip.style.right = '16px';
+      tip.style.width = 'auto';
+      tip.style.transform = 'translateY(-50%)';
+    } else {
+      tip.style.left = '50%';
+      tip.style.right = 'auto';
+      tip.style.width = '90vw';
+      tip.style.transform = 'translate(-50%, -50%)';
+    }
   };
 
   if (!step.targetId) { centerTooltip(); return; }
@@ -15142,6 +15760,8 @@ function renderTourStep() {
   tip.style.display = 'block';
   tip.style.transform = 'none';
   const tipWidth = Math.min(340, window.innerWidth - 32);
+  tip.style.right = 'auto';
+  tip.style.width = tipWidth + 'px';
   const tipHeight = tip.offsetHeight || 160;
   let tipTop = rect.bottom + 16;
   let tipLeft = Math.max(16, Math.min(window.innerWidth - tipWidth - 16, rect.left + rect.width / 2 - tipWidth / 2));
@@ -15150,9 +15770,7 @@ function renderTourStep() {
   }
   // If still doesn't fit vertically, fall back to centered tooltip (spotlight stays)
   if (tipTop < 16 || tipTop + tipHeight > window.innerHeight - 16) {
-    tip.style.left = '50%';
-    tip.style.top = '50%';
-    tip.style.transform = 'translate(-50%, -50%)';
+    centerTooltip();
     return;
   }
   tip.style.top = tipTop + 'px';
