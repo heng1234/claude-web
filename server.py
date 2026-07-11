@@ -2103,6 +2103,90 @@ def _mobile_access_totp_code(secret: str, counter: int) -> str:
     return f"{value % 1_000_000:06d}"
 
 
+def _cli_setup_totp():
+    """CLI command to set up TOTP authenticator with QR code in terminal."""
+    import sys
+
+    # Check if TOTP is already enabled
+    if _mobile_access_totp_enabled():
+        print("⚠️  TOTP Authenticator is already enabled.", file=sys.stderr)
+        print()
+        response = input("Disable current TOTP and generate new secret? (yes/no): ").strip().lower()
+        if response not in ("yes", "y"):
+            print("Aborted.")
+            return
+        _mobile_access_clear_totp()
+        print("✓ Cleared existing TOTP configuration.\n")
+
+    # Generate new secret
+    secret = _mobile_access_totp_generate_secret()
+    issuer = "Claude Code Web"
+    account = socket.gethostname() or "local"
+    label = f"{issuer}:{account}"
+    provisioning_uri = (
+        f"otpauth://totp/{quote(label, safe='')}"
+        f"?{urlencode({'secret': secret, 'issuer': issuer, 'digits': 6, 'period': 30})}"
+    )
+
+    # Print setup instructions
+    print("=" * 60)
+    print("  TOTP Authenticator Setup")
+    print("=" * 60)
+    print()
+    print("1. Open your authenticator app (Google Authenticator, Authy, etc.)")
+    print("2. Scan the QR code below, or manually enter the secret")
+    print()
+
+    # Display QR code in terminal
+    try:
+        # Try to use qrcode library if available
+        import qrcode
+        qr = qrcode.QRCode(border=1)
+        qr.add_data(provisioning_uri)
+        qr.make()
+        qr.print_ascii(invert=True)
+    except ImportError:
+        print("⚠️  qrcode library not installed. Install it for QR code display:")
+        print("   pip install qrcode")
+        print()
+        print("Or manually enter this secret in your authenticator app:")
+
+    print()
+    print(f"Account:  {account}")
+    print(f"Secret:   {secret}")
+    print(f"Issuer:   {issuer}")
+    print()
+
+    # Verify with user
+    print("3. Enter the 6-digit code from your authenticator to verify:")
+    for attempt in range(3):
+        code = input("   Code: ").strip()
+        if _mobile_access_totp_verify(code, secret):
+            # Save the configuration
+            _app_meta_set(_MOBILE_ACCESS_TOTP_SECRET_META_KEY, secret)
+            _app_meta_set(_MOBILE_ACCESS_TOTP_ENABLED_META_KEY, "1")
+            _app_meta_delete(_MOBILE_ACCESS_TOTP_PENDING_META_KEY)
+            _app_meta_delete(_MOBILE_ACCESS_TOTP_LAST_COUNTER_META_KEY)
+            _mobile_access_clear_code()
+
+            print()
+            print("✓ TOTP Authenticator enabled successfully!")
+            print()
+            print("Remote mobile access now requires authenticator codes.")
+            print("Access codes have been disabled.")
+            return
+
+        remaining = 2 - attempt
+        if remaining > 0:
+            print(f"   ✗ Invalid code. {remaining} attempt(s) remaining.")
+        else:
+            print("   ✗ Invalid code. Setup failed.")
+
+    print()
+    print("Setup aborted. TOTP was not enabled.")
+    print("Run 'python server.py --setup-totp' to try again.")
+
+
 def _mobile_access_totp_verify(code: str, secret: str, *, consume: bool = False) -> bool:
     normalized = re.sub(r"\D", "", code or "")
     if len(normalized) != 6 or not secret:
@@ -8206,6 +8290,7 @@ def main():
     parser.add_argument("--version", "-v", action="store_true", help="Show version")
     parser.add_argument("--extension-path", action="store_true", help="Print bundled Chrome extension directory and exit")
     parser.add_argument("--skip-cli-check", action="store_true", help="Skip claude CLI availability check on startup")
+    parser.add_argument("--setup-totp", action="store_true", help="Generate TOTP secret and display QR code in terminal")
     args = parser.parse_args()
 
     if args.version:
@@ -8218,6 +8303,10 @@ def main():
             print("Chrome extension files were not found in this installation.", file=sys.stderr)
             sys.exit(1)
         print(path)
+        return
+
+    if args.setup_totp:
+        _cli_setup_totp()
         return
 
     print(f"Claude Code Web v{__version__}")

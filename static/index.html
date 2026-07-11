@@ -5476,7 +5476,7 @@
       <span>搜索</span>
     </button>
     <button type="button" class="cw-nav-row" id="cwRecordsNav" data-cw-view="records">
-      <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+      <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
       <span>记录</span>
     </button>
     <button type="button" class="cw-nav-row" id="cwCliNav" data-cw-view="cli">
@@ -7016,6 +7016,7 @@ const tokenBar = $('tokenBar');
 const tokenCounter = $('tokenCounter');
 const filePicker = $('filePicker');
 const viewActiveBtn = $('viewActive'), viewArchivedBtn = $('viewArchived'), viewMilestonesBtn = $('viewMilestones'), viewCliBtn = $('viewCli');
+const cwCliNav = $('cwCliNav');
 const tagFilter = $('tagFilter');
 const lightbox = $('lightbox');
 const gitBar = $('gitBar');
@@ -7023,7 +7024,6 @@ const sessionLabelText = $('sessionLabelText');
 const suggestTitleBtn = $('suggestTitleBtn');
 const toggleSidebar = $('toggleSidebar'), sidebar = $('sidebar');
 const closeSidebarBtn = $('closeSidebar'), sidebarScrim = $('sidebarScrim');
-const cwCliNav = $('cwCliNav');
 
 // ===== utilities =====
 let userScrolledUp = false;
