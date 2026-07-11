@@ -3152,18 +3152,31 @@
   .cw-quick-action {
     display: inline-flex;
     align-items: center;
-    gap: 9px;
+    gap: 8px;
     min-height: 36px;
-    padding: 0 16px;
-    border: 1px solid #e3dcd4;
-    border-radius: 999px;
-    background: #fff;
+    padding: 0 14px;
+    border: 1px solid #e7e2dc;
+    border-radius: 10px;
+    background: #fafaf9;
     color: #3b3632;
     font-size: 13px;
-    font-weight: 620;
-    box-shadow: 0 4px 12px rgba(38, 31, 26, .035);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(38, 31, 26, .04);
+    transition: all 0.15s ease;
+    cursor: pointer;
   }
-  .cw-quick-action svg { width: 17px; height: 17px; color: #777069; }
+  .cw-quick-action:hover {
+    background: #f5f3f1;
+    border-color: #d9d3cc;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(38, 31, 26, .06);
+  }
+  .cw-quick-action svg {
+    width: 16px;
+    height: 16px;
+    color: #6b6660;
+    flex-shrink: 0;
+  }
   .cw-model-select {
     min-height: 32px;
     padding: 0 28px 0 10px;
@@ -4176,15 +4189,38 @@
     border-radius: 0 0 18px 18px;
     background: #f4f3f1 !important;
   }
-  .cw-quick-action {
-    min-height: 33px !important;
-    padding: 0 14px !important;
-    font-size: 12.5px !important;
-    font-weight: 600 !important;
-  }
-  body:not(.cw-empty) .cw-quick-actions,
   body:not(.cw-empty) .cw-composer-code-context {
-    display: none !important;
+    display: flex !important;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px !important;
+    padding: 6px 12px !important;
+    margin: 0 -26px;
+    margin-top: 4px;
+    background: transparent !important;
+    border-top: 0 !important;
+    border-radius: 0 !important;
+  }
+  .cw-context-chip {
+    min-height: 24px !important;
+    padding: 0 4px !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #77716b !important;
+    font-size: 13px !important;
+    font-weight: 520 !important;
+    gap: 6px !important;
+  }
+  button.cw-context-chip:hover {
+    background: #f1eeeb !important;
+  }
+  .cw-context-chip svg {
+    display: block !important;
+    width: 16px !important;
+    height: 16px !important;
+    color: #8a847d !important;
+    flex: 0 0 auto;
   }
   .composer-upload-strip {
     display: flex;
@@ -4753,41 +4789,115 @@
     bottom: calc(100% + 10px);
     z-index: 96;
     display: grid;
-    gap: 3px;
-    width: min(372px, calc(100vw - 32px));
-    padding: 6px;
+    gap: 2px;
+    width: min(320px, calc(100vw - 32px));
+    padding: 5px;
     border: 1px solid #dcd5ce;
-    border-radius: 16px;
+    border-radius: 14px;
     background: #fff;
     box-shadow: 0 24px 58px rgba(38, 31, 26, .17), 0 4px 14px rgba(38, 31, 26, .06);
   }
   .cw-mode-menu.hidden {
     display: none !important;
   }
+  .cw-settings-menu {
+    width: min(220px, calc(100vw - 24px));
+    overflow: visible;
+  }
+  .cw-settings-section-trigger {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 14px;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 34px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .cw-settings-section-trigger:hover,
+  .cw-settings-section-trigger[aria-expanded="true"] {
+    background: var(--surface-2);
+  }
+  .cw-settings-section-value {
+    max-width: 108px;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-weight: 520;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cw-settings-section-caret {
+    width: 14px;
+    height: 14px;
+    color: var(--text-subtle);
+  }
+  .cw-settings-submenu {
+    position: absolute;
+    left: calc(100% + 8px);
+    top: 0;
+    z-index: 2;
+    display: grid;
+    gap: 1px;
+    width: min(180px, calc(100vw - 24px));
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: 0 24px 58px rgba(38, 31, 26, .17), 0 4px 14px rgba(38, 31, 26, .06);
+  }
+  .cw-settings-submenu.hidden {
+    display: none !important;
+  }
+  .cw-settings-submenu.open-left {
+    right: calc(100% + 8px);
+    left: auto;
+  }
+  .cw-settings-submenu-title {
+    padding: 5px 8px 4px;
+    color: var(--text-subtle);
+    font-size: 10px;
+    font-weight: 650;
+  }
+  .cw-settings-submenu .cw-mode-option {
+    min-height: 28px;
+    padding: 3px 8px;
+  }
+  .cw-settings-submenu[data-settings-submenu="effort"] .cw-mode-option {
+    min-height: 32px;
+  }
   .cw-mode-option {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr) 20px;
+    grid-template-columns: minmax(0, 1fr) 16px;
     align-items: center;
-    gap: 11px;
+    gap: 6px;
     width: 100%;
-    min-height: 60px;
-    padding: 8px 10px;
+    min-height: 36px;
+    padding: 5px 8px;
     border: 1px solid transparent;
-    border-radius: 11px;
+    border-radius: 8px;
     background: transparent;
     color: #3d3935;
     font-family: inherit;
     text-align: left;
     cursor: pointer;
+    transition: all 0.15s ease;
   }
   .cw-mode-option:hover,
   .cw-mode-option:focus-visible {
-    border-color: #eee9e4;
+    border-color: transparent;
     background: #f7f5f3;
     outline: 0;
   }
   .cw-mode-option.active {
-    border-color: #e0d7cf;
+    border-color: transparent;
     background: #f1ece8;
     color: #302b27;
   }
@@ -4802,16 +4912,16 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
     background: #f5f2ef;
     color: #6d6862;
   }
   .cw-mode-option-icon svg {
     display: block;
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
   }
   .cw-mode-option.active .cw-mode-option-icon {
     background: #fff;
@@ -4825,29 +4935,41 @@
   .cw-mode-option-title {
     display: block;
     color: inherit;
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 600;
     line-height: 1.3;
   }
   .cw-mode-option-description {
     display: block;
-    margin-top: 2px;
+    margin-top: 0;
     color: #8d867f;
-    font-size: 12px;
-    font-weight: 520;
-    line-height: 1.4;
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 1.3;
   }
   .cw-mode-option.active .cw-mode-option-description {
     color: #746d66;
   }
   .cw-mode-option-check {
-    width: 18px;
-    height: 18px;
+    width: 17px;
+    height: 17px;
     color: #3aa65b;
     opacity: 0;
   }
   .cw-mode-option.active .cw-mode-option-check {
     opacity: 1;
+  }
+  .cw-mode-option-compact {
+    grid-template-columns: minmax(0, 1fr) 18px;
+    min-height: 40px;
+    padding: 6px 9px;
+  }
+  .cw-mode-option-compact .cw-mode-option-title {
+    font-size: 13px;
+  }
+  .cw-mode-option-compact .cw-mode-option-description {
+    font-size: 11px;
+    margin-top: 1px;
   }
   :root.dark .cw-mode-menu {
     border-color: #494744;
@@ -5156,7 +5278,88 @@
   .settings-usage-grid span { color:var(--text-muted); font-size:11px; }
   .settings-usage-grid strong { color:var(--text); font-size:18px; }
 
+  @media (min-width: 769px) {
+    body.code-mode.cw-empty .composer {
+      min-height: 128px !important;
+      padding: 18px 22px 10px !important;
+    }
+    body.code-mode.cw-empty .composer-actions {
+      min-height: 38px;
+      margin-top: 4px !important;
+    }
+    body.code-mode.cw-empty .cw-composer-code-context {
+      left: 14px !important;
+      right: 14px !important;
+      bottom: -30px !important;
+      min-height: 28px !important;
+      gap: 10px !important;
+      padding: 0 12px !important;
+      border-top: 1px solid rgba(77, 68, 60, .055);
+      border-radius: 0 0 14px 14px !important;
+      background: rgba(244, 243, 241, .74) !important;
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+    body.code-mode.cw-empty .cw-composer-code-context .cw-context-chip {
+      min-height: 24px !important;
+      padding: 0 4px !important;
+      font-size: 12px !important;
+    }
+    body.code-mode.cw-empty .cw-composer-code-context .cw-composer-mode-picker > #cwComposerPermBtn {
+      min-height: 26px !important;
+      padding: 0 7px 0 6px !important;
+      font-size: 12px !important;
+    }
+    body.code-mode.cw-empty .cw-composer-code-context #tokenCounter {
+      margin-left: 2px !important;
+      color: #aaa39c !important;
+      font-size: 11px !important;
+      white-space: nowrap;
+    }
+    body.code-mode .cw-composer-settings-picker {
+      display: inline-flex !important;
+      align-items: center;
+    }
+    body.code-mode .cw-composer-settings-picker > #cwComposerSettingsBtn {
+      min-height: 36px !important;
+      max-width: 154px;
+      padding: 0 9px !important;
+      border: 0 !important;
+      border-radius: 10px !important;
+      background: transparent !important;
+      color: #4d4843 !important;
+      font-size: 13px !important;
+      font-weight: 650 !important;
+      white-space: nowrap;
+    }
+    body.code-mode .cw-composer-settings-picker > #cwComposerSettingsBtn:hover,
+    body.code-mode .cw-composer-settings-picker > #cwComposerSettingsBtn[aria-expanded="true"] {
+      background: #f3f0ed !important;
+      color: #2f2b28 !important;
+    }
+    body.code-mode .cw-composer-settings-picker > #cwSettingsMenu {
+      right: 0;
+      left: auto;
+      max-height: none;
+      overflow: visible;
+    }
+  }
+
+  .cw-composer-settings-picker {
+    display: none !important;
+  }
+  body.code-mode .cw-composer-settings-picker {
+    display: inline-flex !important;
+  }
+
   @media (max-width: 768px) {
+    .cw-settings-submenu,
+    .cw-settings-submenu.open-left {
+      right: 0;
+      bottom: 0;
+      left: auto;
+      top: auto;
+    }
     html, body { height: 100dvh; min-height: 100dvh; }
     body { overflow: hidden; }
     #mainPane > header {
@@ -5277,7 +5480,7 @@
       <span>记录</span>
     </button>
     <button type="button" class="cw-nav-row" id="cwCliNav" data-cw-view="cli">
-      <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l-3 4 3 4M11 16h6"/><rect x="3" y="4" width="18" height="16" rx="3"/></svg></span>
+      <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 2"/></svg></span>
       <span>CLI 导入</span>
     </button>
     <button type="button" class="cw-nav-row" id="cwCodeNav" data-cw-view="code">
@@ -5519,35 +5722,6 @@
             <button type="button" id="docAttachBtn" class="composer-btn" title="上传文件 (支持 HTML/源码/文档等文本文件)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             </button>
-            <span class="cw-mode-picker cw-composer-mode-picker">
-              <button type="button" class="cw-context-chip" id="cwComposerPermBtn" title="选择运行模式" aria-haspopup="menu" aria-expanded="false">
-                <span id="cwComposerPermIcon" class="cw-mode-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h10a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H9l-4 3v-3.2a3 3 0 0 1-2-2.8v-5a3 3 0 0 1 1-2.2"/><path d="M9 8h8a3 3 0 0 1 3 3v7l-3-2.2"/></svg></span>
-                <span id="cwComposerPermLabel">默认模式</span>
-                <svg class="cw-mode-trigger-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
-              </button>
-              <span id="cwPermissionModeMenu" class="cw-mode-menu hidden" role="menu" aria-label="选择运行模式">
-                <button type="button" class="cw-mode-option" data-permission-mode="free" role="menuitemradio" aria-checked="false">
-                  <span class="cw-mode-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h10a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H9l-4 3v-3.2a3 3 0 0 1-2-2.8v-5a3 3 0 0 1 1-2.2"/><path d="M9 8h8a3 3 0 0 1 3 3v7l-3-2.2"/></svg></span>
-                  <span class="cw-mode-option-copy"><span class="cw-mode-option-title">默认模式</span><span class="cw-mode-option-description">Claude 自动判断常规操作，安全命令直接执行</span></span>
-                  <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
-                </button>
-                <button type="button" class="cw-mode-option" data-permission-mode="plan" role="menuitemradio" aria-checked="false">
-                  <span class="cw-mode-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 1.5 1.5L8 5"/><path d="M11 6h9"/><path d="m4 12 1.5 1.5L8 11"/><path d="M11 12h9"/><path d="m4 18 1.5 1.5L8 17"/><path d="M11 18h9"/></svg></span>
-                  <span class="cw-mode-option-copy"><span class="cw-mode-option-title">规划模式</span><span class="cw-mode-option-description">仅使用只读工具，生成计划供用户审批后执行</span></span>
-                  <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
-                </button>
-                <button type="button" class="cw-mode-option" data-permission-mode="acceptEdits" role="menuitemradio" aria-checked="false">
-                  <span class="cw-mode-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="14" height="11" rx="4"/><path d="M9 11h.01M15 11h.01M9 15h6M12 7V4M10 4h4"/></svg></span>
-                  <span class="cw-mode-option-copy"><span class="cw-mode-option-title">代理模式</span><span class="cw-mode-option-description">自动接受文件创建 / 编辑，减少确认步骤</span></span>
-                  <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
-                </button>
-                <button type="button" class="cw-mode-option" data-permission-mode="bypassPermissions" role="menuitemradio" aria-checked="false">
-                  <span class="cw-mode-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m13 2-8 12h7l-1 8 8-12h-7z"/></svg></span>
-                  <span class="cw-mode-option-copy"><span class="cw-mode-option-title">自动模式</span><span class="cw-mode-option-description">完全自动化，绕过所有权限检查【谨慎使用】</span></span>
-                  <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
-                </button>
-              </span>
-            </span>
             <button type="button" id="webSearchBtn" class="composer-btn" title="联网搜索">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
             </button>
@@ -5575,16 +5749,91 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="5" r="2"/><circle cx="12" cy="19" r="2"/><path d="M6 7v3a4 4 0 0 0 4 4h2"/><path d="M18 7v3a4 4 0 0 1-4 4h-2"/><path d="M12 14v3"/></svg>
                 <span id="cwComposerBranchName">main</span>
               </button>
+              <span class="cw-mode-picker cw-composer-mode-picker">
+                <button type="button" class="cw-context-chip" id="cwComposerPermBtn" title="选择运行模式" aria-haspopup="menu" aria-expanded="false">
+                  <span id="cwComposerPermIcon" class="cw-mode-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h10a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H9l-4 3v-3.2a3 3 0 0 1-2-2.8v-5a3 3 0 0 1 1-2.2"/><path d="M9 8h8a3 3 0 0 1 3 3v7l-3-2.2"/></svg></span>
+                  <span id="cwComposerPermLabel">默认模式</span>
+                  <svg class="cw-mode-trigger-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+                </button>
+                <span id="cwPermissionModeMenu" class="cw-mode-menu hidden" role="menu" aria-label="选择运行模式">
+                  <button type="button" class="cw-mode-option cw-mode-option-compact" data-permission-mode="free" role="menuitemradio" aria-checked="false">
+                    <span class="cw-mode-option-copy"><span class="cw-mode-option-title">默认模式</span><span class="cw-mode-option-description">Claude 自动判断常规操作，安全命令直接执行</span></span>
+                    <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                  </button>
+                  <button type="button" class="cw-mode-option cw-mode-option-compact" data-permission-mode="plan" role="menuitemradio" aria-checked="false">
+                    <span class="cw-mode-option-copy"><span class="cw-mode-option-title">规划模式</span><span class="cw-mode-option-description">仅使用只读工具，生成计划供用户审批后执行</span></span>
+                    <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                  </button>
+                  <button type="button" class="cw-mode-option cw-mode-option-compact" data-permission-mode="acceptEdits" role="menuitemradio" aria-checked="false">
+                    <span class="cw-mode-option-copy"><span class="cw-mode-option-title">代理模式</span><span class="cw-mode-option-description">自动接受文件创建 / 编辑，减少确认步骤</span></span>
+                    <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                  </button>
+                  <button type="button" class="cw-mode-option cw-mode-option-compact" data-permission-mode="bypassPermissions" role="menuitemradio" aria-checked="false">
+                    <span class="cw-mode-option-copy"><span class="cw-mode-option-title">自动模式</span><span class="cw-mode-option-description">完全自动化，绕过所有权限检查【谨慎使用】</span></span>
+                    <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                  </button>
+                </span>
+              </span>
+              <span class="cw-mode-picker cw-composer-settings-picker">
+                <button type="button" class="cw-context-chip" id="cwComposerSettingsBtn" title="模型和推理强度" aria-haspopup="menu" aria-expanded="false">
+                  <span id="cwComposerSettingsLabel">默认模型</span>
+                  <svg class="cw-mode-trigger-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+                </button>
+                <span id="cwSettingsMenu" class="cw-mode-menu cw-settings-menu hidden" role="menu" aria-label="模型设置">
+                  <button type="button" class="cw-settings-section-trigger" data-settings-section="model" aria-haspopup="menu" aria-expanded="false">
+                    <span>模型</span>
+                    <span id="cwSettingsModelValue" class="cw-settings-section-value">默认模型</span>
+                    <svg class="cw-settings-section-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                  </button>
+                  <button type="button" class="cw-settings-section-trigger" data-settings-section="effort" aria-haspopup="menu" aria-expanded="false">
+                    <span>推理强度</span>
+                    <span id="cwSettingsEffortValue" class="cw-settings-section-value">默认</span>
+                    <svg class="cw-settings-section-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                  </button>
+                  <span class="cw-settings-submenu hidden" data-settings-submenu="model" role="menu" aria-label="选择模型">
+                    <span class="cw-settings-submenu-title">模型</span>
+                    <button type="button" class="cw-mode-option" data-model="" role="menuitemradio" aria-checked="false">
+                      <span class="cw-mode-option-copy"><span class="cw-mode-option-title">默认模型</span></span>
+                      <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
+                    <button type="button" class="cw-mode-option" data-model="opus" role="menuitemradio" aria-checked="false">
+                      <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Opus</span></span>
+                      <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
+                    <button type="button" class="cw-mode-option" data-model="sonnet" role="menuitemradio" aria-checked="false">
+                      <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Sonnet</span></span>
+                      <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
+                    <button type="button" class="cw-mode-option" data-model="haiku" role="menuitemradio" aria-checked="false">
+                      <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Haiku</span></span>
+                      <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
+                  </span>
+                  <span class="cw-settings-submenu hidden" data-settings-submenu="effort" role="menu" aria-label="选择推理强度">
+                    <span class="cw-settings-submenu-title">推理强度</span>
+                    <button type="button" class="cw-mode-option cw-effort-option" data-effort="low" role="menuitemradio" aria-checked="false">
+                      <span class="cw-mode-option-copy"><span class="cw-mode-option-title">low</span><span class="cw-mode-option-description">快速响应</span></span>
+                      <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
+                    <button type="button" class="cw-mode-option cw-effort-option" data-effort="medium" role="menuitemradio" aria-checked="false">
+                      <span class="cw-mode-option-copy"><span class="cw-mode-option-title">medium</span><span class="cw-mode-option-description">平衡速度与质量</span></span>
+                      <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
+                    <button type="button" class="cw-mode-option cw-effort-option" data-effort="high" role="menuitemradio" aria-checked="false">
+                      <span class="cw-mode-option-copy"><span class="cw-mode-option-title">high</span><span class="cw-mode-option-description">更深入思考</span></span>
+                      <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
+                    <button type="button" class="cw-mode-option cw-effort-option" data-effort="max" role="menuitemradio" aria-checked="false">
+                      <span class="cw-mode-option-copy"><span class="cw-mode-option-title">max</span><span class="cw-mode-option-description">最大推理能力</span></span>
+                      <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
+                  </span>
+                </span>
+              </span>
+              <div id="tokenCounter" class="text-[10px] ml-1" style="color:var(--text-subtle);">0 tokens</div>
             </span>
-            <div id="tokenCounter" class="text-[10px] ml-1" style="color:var(--text-subtle);">0 tokens</div>
           </div>
           <div class="flex items-center gap-1.5">
-            <select id="modelSelect" class="cw-model-select" title="模型">
-              <option value="">默认模型</option>
-              <option value="opus">Opus</option>
-              <option value="sonnet">Sonnet</option>
-              <option value="haiku">Haiku</option>
-            </select>
             <button type="button" id="stopBtn" class="hidden composer-btn composer-btn-stop" title="停止">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
             </button>
@@ -6224,63 +6473,65 @@
 </div>
 
 <div id="statsModal" class="modal-backdrop hidden">
-  <div class="modal-box lg p-5">
-    <div class="flex items-center justify-between mb-4">
-      <div class="text-lg font-semibold">📊 使用统计</div>
-      <button data-close class="text-xl">×</button>
+  <div class="modal-box lg p-0" style="max-width:720px; overflow:hidden;">
+    <div class="flex items-center justify-between px-5 pt-4 pb-3" style="border-bottom:1px solid var(--border);">
+      <div class="font-semibold text-[15px]">使用统计</div>
+      <button data-close class="sb-icon-btn text-xl" style="color:var(--text-muted);">×</button>
     </div>
-    <div class="grid grid-cols-4 gap-3 text-sm mb-5">
-      <div class="p-3 rounded bg-orange-50 dark:bg-orange-900/30">
-        <div class="text-xs text-gray-500">估算成本 <span title="按 Anthropic 官方价目表估算；订阅 / 第三方网关用户与实付不同" style="cursor:help;">ⓘ</span></div>
-        <div id="statCost" class="text-xl font-semibold">~$0.00</div>
-        <div id="statCostNote" class="hidden text-[10px] mt-1" style="color:#f59e0b;"></div>
-      </div>
-      <div class="p-3 rounded bg-blue-50 dark:bg-blue-900/30">
-        <div class="text-xs text-gray-500">会话数</div>
-        <div id="statSessions" class="text-xl font-semibold">0</div>
-      </div>
-      <div class="p-3 rounded bg-green-50 dark:bg-green-900/30">
-        <div class="text-xs text-gray-500">对话轮次</div>
-        <div id="statTurns" class="text-xl font-semibold">0</div>
-      </div>
-      <div class="p-3 rounded bg-purple-50 dark:bg-purple-900/30">
-        <div class="text-xs text-gray-500">总耗时</div>
-        <div id="statDuration" class="text-xl font-semibold">0s</div>
-      </div>
-    </div>
-    <div class="mb-4">
-      <div class="text-sm font-semibold mb-2">每日成本</div>
-      <canvas id="dailyChart" height="80"></canvas>
-    </div>
-    <div>
-      <div class="text-sm font-semibold mb-2">工具使用排行</div>
-      <canvas id="toolsChart" height="80"></canvas>
-    </div>
-    <div class="mt-5 pt-4" style="border-top:1px solid var(--border);">
-      <div class="flex items-center justify-between mb-3">
-        <div class="text-sm font-semibold">回答反馈</div>
-        <div id="feedbackStatsSummary" class="text-xs" style="color:var(--text-subtle);">暂无标记</div>
-      </div>
-      <div class="grid grid-cols-4 gap-2 text-sm mb-3">
-        <div class="p-2 rounded" style="background:var(--surface-2);">
-          <div class="text-xs" style="color:var(--text-muted);">好评</div>
-          <div id="feedbackUpCount" class="text-lg font-semibold">0</div>
+    <div class="px-5 py-4">
+      <div class="grid grid-cols-4 gap-2 text-sm mb-5">
+        <div class="p-3 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);">
+          <div class="text-[11px] mb-1" style="color:var(--text-subtle);">估算成本 <span title="按 Anthropic 官方价目表估算；订阅 / 第三方网关用户与实付不同" style="cursor:help;">ⓘ</span></div>
+          <div id="statCost" class="text-lg font-semibold" style="color:var(--text);">~$0.00</div>
+          <div id="statCostNote" class="hidden text-[10px] mt-1" style="color:var(--accent);"></div>
         </div>
-        <div class="p-2 rounded" style="background:var(--surface-2);">
-          <div class="text-xs" style="color:var(--text-muted);">差评</div>
-          <div id="feedbackDownCount" class="text-lg font-semibold">0</div>
+        <div class="p-3 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);">
+          <div class="text-[11px] mb-1" style="color:var(--text-subtle);">会话数</div>
+          <div id="statSessions" class="text-lg font-semibold" style="color:var(--text);">0</div>
         </div>
-        <div class="p-2 rounded" style="background:var(--surface-2);">
-          <div class="text-xs" style="color:var(--text-muted);">收藏</div>
-          <div id="feedbackStarCount" class="text-lg font-semibold">0</div>
+        <div class="p-3 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);">
+          <div class="text-[11px] mb-1" style="color:var(--text-subtle);">对话轮次</div>
+          <div id="statTurns" class="text-lg font-semibold" style="color:var(--text);">0</div>
         </div>
-        <div class="p-2 rounded" style="background:var(--surface-2);">
-          <div class="text-xs" style="color:var(--text-muted);">总标记</div>
-          <div id="feedbackTotalCount" class="text-lg font-semibold">0</div>
+        <div class="p-3 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);">
+          <div class="text-[11px] mb-1" style="color:var(--text-subtle);">总耗时</div>
+          <div id="statDuration" class="text-lg font-semibold" style="color:var(--text);">0s</div>
         </div>
       </div>
-      <div id="feedbackReasonList" class="flex flex-wrap gap-1.5 mb-3"></div>
-      <div id="feedbackRecentList" class="space-y-1.5 max-h-44 overflow-y-auto text-xs"></div>
+      <div class="mb-4">
+        <div class="text-[12px] font-semibold mb-2" style="color:var(--text-subtle); text-transform:uppercase; letter-spacing:0.4px;">每日成本</div>
+        <canvas id="dailyChart" height="80"></canvas>
+      </div>
+      <div class="mb-4">
+        <div class="text-[12px] font-semibold mb-2" style="color:var(--text-subtle); text-transform:uppercase; letter-spacing:0.4px;">工具使用排行</div>
+        <canvas id="toolsChart" height="80"></canvas>
+      </div>
+      <div class="pt-4" style="border-top:1px solid var(--border);">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-[12px] font-semibold" style="color:var(--text-subtle); text-transform:uppercase; letter-spacing:0.4px;">回答反馈</div>
+          <div id="feedbackStatsSummary" class="text-xs" style="color:var(--text-subtle);">暂无标记</div>
+        </div>
+        <div class="grid grid-cols-4 gap-2 text-sm mb-3">
+          <div class="p-2 rounded-lg" style="background:var(--surface-2); border:1px solid var(--border);">
+            <div class="text-[11px]" style="color:var(--text-muted);">好评</div>
+            <div id="feedbackUpCount" class="text-base font-semibold">0</div>
+          </div>
+          <div class="p-2 rounded-lg" style="background:var(--surface-2); border:1px solid var(--border);">
+            <div class="text-[11px]" style="color:var(--text-muted);">差评</div>
+            <div id="feedbackDownCount" class="text-base font-semibold">0</div>
+          </div>
+          <div class="p-2 rounded-lg" style="background:var(--surface-2); border:1px solid var(--border);">
+            <div class="text-[11px]" style="color:var(--text-muted);">收藏</div>
+            <div id="feedbackStarCount" class="text-base font-semibold">0</div>
+          </div>
+          <div class="p-2 rounded-lg" style="background:var(--surface-2); border:1px solid var(--border);">
+            <div class="text-[11px]" style="color:var(--text-muted);">总标记</div>
+            <div id="feedbackTotalCount" class="text-base font-semibold">0</div>
+          </div>
+        </div>
+        <div id="feedbackReasonList" class="flex flex-wrap gap-1.5 mb-3"></div>
+        <div id="feedbackRecentList" class="space-y-1.5 max-h-44 overflow-y-auto text-xs"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -6667,7 +6918,6 @@ const sidebarSearchRow = searchInput ? searchInput.closest('.cw-search-row') : n
 const cwSearchOverlayBackdrop = $('cwSearchOverlayBackdrop');
 const cwSearchOverlayResults = $('cwSearchOverlayResults');
 const cwSearchCloseBtn = $('cwSearchCloseBtn');
-const modelSelect = $('modelSelect');
 const permSelect = $('permSelect');
 const PERMISSION_MODE_LABELS = Object.freeze({
   free: '默认模式',
@@ -6844,7 +7094,8 @@ function addSessionAllowedTool(targetSessionId, toolName) {
 }
 function setSessionBypassPermissions(targetSessionId, enabled) {
   if (!targetSessionId) return;
-  if (mobileQuestionMode) {
+  const isMobile = document.body.classList.contains('mobile-device-detected');
+  if (mobileQuestionMode && !isMobile) {
     toast('手机问答模式不能切换高权限');
     return;
   }
@@ -6877,20 +7128,24 @@ function unlockMobileControl(el) {
   el.classList.remove('mobile-mode-locked');
 }
 function applyMobileQuestionMode() {
+  const isMobile = document.body.classList.contains('mobile-device-detected');
   document.documentElement.classList.toggle('mobile-question-mode', mobileQuestionMode);
   if (mobileModeBanner) mobileModeBanner.classList.toggle('active', mobileQuestionMode && !mobileBannerDismissed);
-  [configCenterBtn, mcpBtn].forEach(el => {
+
+  const hiddenFeatures = isMobile ? [] : [configCenterBtn, mcpBtn];
+  hiddenFeatures.forEach(el => {
     if (!el) return;
     el.classList.toggle('mobile-mode-hidden', mobileQuestionMode);
     el.setAttribute('aria-hidden', mobileQuestionMode ? 'true' : 'false');
   });
+
   if (permSelect) {
     [...permSelect.options].forEach(opt => {
       const unsafe = MOBILE_UNSAFE_PERMISSION_MODES.includes(opt.value);
-      opt.disabled = mobileQuestionMode && unsafe;
-      opt.hidden = mobileQuestionMode && unsafe;
+      opt.disabled = mobileQuestionMode && unsafe && !isMobile;
+      opt.hidden = mobileQuestionMode && unsafe && !isMobile;
     });
-    if (mobileQuestionMode && MOBILE_UNSAFE_PERMISSION_MODES.includes(permSelect.value)) {
+    if (mobileQuestionMode && !isMobile && MOBILE_UNSAFE_PERMISSION_MODES.includes(permSelect.value)) {
       setPermissionMode('free');
     }
   }
@@ -6899,7 +7154,8 @@ function applyMobileQuestionMode() {
     cwdInput.placeholder = mobileQuestionMode ? '从已保存项目中选择' : '工作目录（留空默认 ~）';
     cwdInput.title = mobileQuestionMode ? '手机问答模式只能切换到已保存项目目录' : '';
   }
-  [
+
+  const restrictedControls = isMobile ? [] : [
     systemPromptInput,
     notificationMasterEnabled,
     saveNotificationsBtn,
@@ -6914,17 +7170,38 @@ function applyMobileQuestionMode() {
     cliImportRefresh,
     cliImportSelectAll,
     cliImportSubmit,
-  ].forEach(el => {
+  ];
+  restrictedControls.forEach(el => {
     if (mobileQuestionMode) lockMobileControl(el);
     else unlockMobileControl(el);
   });
 }
+function isMobileDevice() {
+  const ua = navigator.userAgent.toLowerCase();
+  const mobileKeywords = ['android', 'webos', 'iphone', 'ipad', 'ipod', 'blackberry', 'windows phone'];
+  if (mobileKeywords.some(k => ua.includes(k))) return true;
+  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    return window.innerWidth <= 768;
+  }
+  return false;
+}
+
 async function refreshMobileQuestionMode() {
   try {
     const r = await fetch('/api/mobile-access/status');
     if (!r.ok) return;
     mobileAccessStatus = await r.json();
-    mobileQuestionMode = mobileAccessStatus.local === false && mobileAccessStatus.authorized === true;
+    const isRemoteAuth = mobileAccessStatus.local === false && mobileAccessStatus.authorized === true;
+    const isMobile = isMobileDevice();
+
+    mobileQuestionMode = isRemoteAuth;
+
+    if (isRemoteAuth && isMobile) {
+      document.body.classList.add('mobile-device-detected');
+    } else {
+      document.body.classList.remove('mobile-device-detected');
+    }
+
     applyMobileQuestionMode();
   } catch {}
 }
@@ -9986,8 +10263,17 @@ function estimateTokens(text) {
 }
 function updateTokenCount() {
   const t = estimateTokens(input.value);
-  tokenCounter.textContent = `~${t} tokens`;
-  tokenCounter.classList.toggle('text-orange-500', t > 50000);
+  const contextSize = latestContextTokens || 0;
+  const totalSize = contextSize + t;
+  const maxSize = 200000;
+  const percent = Math.min(100, Math.round((totalSize / maxSize) * 100));
+
+  if (contextSize > 0) {
+    tokenCounter.textContent = `${percent}% · ${_fmtTokens(totalSize)} / ${_fmtTokens(maxSize)}`;
+  } else {
+    tokenCounter.textContent = `~${t} tokens`;
+  }
+  tokenCounter.classList.toggle('text-orange-500', t > 50000 || totalSize > 150000);
 }
 
 function syncComposerDraftState() {
@@ -10032,8 +10318,12 @@ async function applyExtensionDraftFromUrl() {
       refreshGitStatus();
     }
     if (draft.model !== undefined) {
-      modelSelect.value = draft.model || '';
-      LS.set('model', modelSelect.value);
+      selectedModel = draft.model || '';
+      modelSelect.value = selectedModel;
+      selectedEffort = draft.effort || '';
+      LS.set('model', selectedModel);
+      LS.set('effort', selectedEffort);
+      updateSettingsLabel();
     }
     if (draft.permission_mode) {
       const mode = draft.permission_mode === 'default' ? 'free' : draft.permission_mode;
@@ -10629,6 +10919,7 @@ async function runAgentLoop() {
         session_id: sessionId,
         cwd: cwd || null,
         model: modelSelect.value || null,
+        effort: selectedEffort || null,
         system_prompt: mobileQuestionMode ? null : (settings.systemPrompt || null),
         permission_mode: perm.permission_mode,
         allowed_tools: perm.allowed_tools,
@@ -10872,6 +11163,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         docs: docMetadata.length ? docMetadata : null,
         workspace_mode: codeMode ? 'code' : 'chat',
         model: modelSelect.value || null,
+        effort: selectedEffort || null,
         system_prompt: mobileQuestionMode ? null : (settings.systemPrompt || null),
         display_message: actualDisplay || null,
         permission_mode: perm.permission_mode,
@@ -11087,7 +11379,8 @@ viewMilestonesBtn.addEventListener('click', () => {
   renderMilestones();
 });
 viewCliBtn.addEventListener('click', () => {
-  if (mobileQuestionMode) {
+  const isMobile = document.body.classList.contains('mobile-device-detected');
+  if (mobileQuestionMode && !isMobile) {
     toast('手机问答模式不能导入 CLI 会话');
     return;
   }
@@ -12855,9 +13148,123 @@ addMemoryBtn.addEventListener('click', async () => {
 
 document.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
 
-// ===== model =====
-modelSelect.value = LS.get('model', '');
-modelSelect.addEventListener('change', () => LS.set('model', modelSelect.value));
+// ===== model + effort =====
+let selectedModel = LS.get('model', '');
+let selectedEffort = LS.get('effort', '');
+
+// Keep legacy modelSelect in DOM for compatibility (hidden)
+const modelSelect = { value: selectedModel };
+
+function updateSettingsLabel() {
+  const label = $('cwComposerSettingsLabel');
+  const modelValue = $('cwSettingsModelValue');
+  const effortValue = $('cwSettingsEffortValue');
+  const modelNames = { '': '默认模型', opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' };
+  const effortNames = { low: '低', medium: '中', high: '高', max: '极高' };
+  const modelText = modelNames[selectedModel] || selectedModel || '默认模型';
+  if (label) label.textContent = modelText;
+  if (modelValue) modelValue.textContent = modelText;
+  if (effortValue) effortValue.textContent = effortNames[selectedEffort] || '默认';
+}
+
+function syncSettingsMenuChecks() {
+  const menu = $('cwSettingsMenu');
+  if (!menu) return;
+  menu.querySelectorAll('.cw-mode-option[data-model]').forEach(btn => {
+    const active = btn.dataset.model === selectedModel && !btn.classList.contains('cw-effort-option');
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-checked', active ? 'true' : 'false');
+  });
+  menu.querySelectorAll('.cw-effort-option').forEach(btn => {
+    const active = btn.dataset.effort === selectedEffort;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-checked', active ? 'true' : 'false');
+  });
+}
+
+const composerSettingsBtn = $('cwComposerSettingsBtn');
+const settingsMenu = $('cwSettingsMenu');
+const composerSettingsPicker = composerSettingsBtn?.closest('.cw-composer-settings-picker');
+const composerSubmitActions = $('send')?.parentElement;
+if (composerSettingsPicker && composerSubmitActions) {
+  composerSubmitActions.insertBefore(composerSettingsPicker, $('stopBtn'));
+}
+
+function closeSettingsSubmenus() {
+  if (!settingsMenu) return;
+  settingsMenu.querySelectorAll('[data-settings-submenu]').forEach(menu => {
+    menu.classList.add('hidden');
+    menu.classList.remove('open-left');
+  });
+  settingsMenu.querySelectorAll('[data-settings-section]').forEach(trigger => {
+    trigger.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function closeComposerSettingsMenu() {
+  if (!settingsMenu || !composerSettingsBtn) return;
+  closeSettingsSubmenus();
+  settingsMenu.classList.add('hidden');
+  composerSettingsBtn.setAttribute('aria-expanded', 'false');
+}
+
+if (composerSettingsBtn && settingsMenu) {
+  composerSettingsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = !settingsMenu.classList.contains('hidden');
+    settingsMenu.classList.toggle('hidden', open);
+    composerSettingsBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+    closeSettingsSubmenus();
+    if (!open) {
+      updateSettingsLabel();
+      syncSettingsMenuChecks();
+    }
+  });
+  settingsMenu.querySelectorAll('[data-settings-section]').forEach(trigger => {
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const section = trigger.dataset.settingsSection;
+      const submenu = settingsMenu.querySelector(`[data-settings-submenu="${section}"]`);
+      if (!submenu) return;
+      const shouldOpen = submenu.classList.contains('hidden');
+      closeSettingsSubmenus();
+      if (!shouldOpen) return;
+      submenu.classList.remove('hidden');
+      trigger.setAttribute('aria-expanded', 'true');
+      const rect = submenu.getBoundingClientRect();
+      if (rect.right > window.innerWidth - 12) submenu.classList.add('open-left');
+    });
+  });
+  settingsMenu.querySelectorAll('.cw-mode-option[data-model]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedModel = btn.dataset.model || '';
+      modelSelect.value = selectedModel;
+      LS.set('model', selectedModel);
+      updateSettingsLabel();
+      syncSettingsMenuChecks();
+      closeComposerSettingsMenu();
+    });
+  });
+  settingsMenu.querySelectorAll('.cw-effort-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedEffort = btn.dataset.effort === selectedEffort ? '' : (btn.dataset.effort || '');
+      LS.set('effort', selectedEffort);
+      updateSettingsLabel();
+      syncSettingsMenuChecks();
+      closeComposerSettingsMenu();
+    });
+  });
+  document.addEventListener('click', (e) => {
+    if (!settingsMenu.classList.contains('hidden') && !composerSettingsBtn.contains(e.target) && !settingsMenu.contains(e.target)) {
+      closeComposerSettingsMenu();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !settingsMenu.classList.contains('hidden')) closeComposerSettingsMenu();
+  });
+}
+updateSettingsLabel();
+syncSettingsMenuChecks();
 
 // ===== permission mode =====
 const ALL_TOOLS = ['Bash','Read','Write','Edit','MultiEdit','Grep','Glob','WebFetch','WebSearch','TodoWrite','Task','NotebookEdit'];
@@ -14850,10 +15257,12 @@ function updateTabStyles() {
 }
 
 // ===== CLI session list (sidebar) =====
-async function renderCliSessionList() {
+async function renderCliSessionList(silent = false) {
   updateViewTabs();
   const requestId = ++cliSessionListRequestId;
-  sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载中...</div>';
+  if (!silent) {
+    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载中...</div>';
+  }
   try {
     const data = await fetch('/api/cli-sessions/scan').then(r => r.json());
     if (!cliView || requestId !== cliSessionListRequestId) return;
@@ -14861,7 +15270,7 @@ async function renderCliSessionList() {
     renderCliSessionPage();
   } catch(e) {
     if (!cliView || requestId !== cliSessionListRequestId) return;
-    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载失败</div>';
+    if (!silent) sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">加载失败</div>';
   }
 }
 
@@ -14906,6 +15315,7 @@ function renderCliSessionPage() {
           btn.style.color = 'var(--text-subtle)';
           btn.style.border = '1px solid var(--border)';
           refreshSessions();
+          renderCliSessionList(true);
         } catch(e) { btn.disabled = false; btn.textContent = '导入'; alert('导入失败'); }
       });
   });

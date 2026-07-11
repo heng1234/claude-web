@@ -5156,6 +5156,41 @@
   .settings-usage-grid span { color:var(--text-muted); font-size:11px; }
   .settings-usage-grid strong { color:var(--text); font-size:18px; }
 
+  @media (min-width: 769px) {
+    body.code-mode.cw-empty .composer {
+      min-height: 128px !important;
+      padding: 18px 22px 10px !important;
+    }
+    body.code-mode.cw-empty .composer-actions {
+      min-height: 38px;
+      margin-top: 4px !important;
+    }
+    body.code-mode.cw-empty .cw-composer-code-context {
+      left: 14px !important;
+      right: 14px !important;
+      bottom: -30px !important;
+      min-height: 28px !important;
+      gap: 10px !important;
+      padding: 0 12px !important;
+      border-top: 1px solid rgba(77, 68, 60, .055);
+      border-radius: 0 0 14px 14px !important;
+      background: rgba(244, 243, 241, .74) !important;
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+    body.code-mode.cw-empty .cw-composer-code-context .cw-context-chip {
+      min-height: 24px !important;
+      padding: 0 4px !important;
+      font-size: 12px !important;
+    }
+    body.code-mode.cw-empty .cw-composer-code-context #tokenCounter {
+      margin-left: 2px !important;
+      color: #aaa39c !important;
+      font-size: 11px !important;
+      white-space: nowrap;
+    }
+  }
+
   @media (max-width: 768px) {
     html, body { height: 100dvh; min-height: 100dvh; }
     body { overflow: hidden; }
@@ -5575,8 +5610,8 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="5" r="2"/><circle cx="12" cy="19" r="2"/><path d="M6 7v3a4 4 0 0 0 4 4h2"/><path d="M18 7v3a4 4 0 0 1-4 4h-2"/><path d="M12 14v3"/></svg>
                 <span id="cwComposerBranchName">main</span>
               </button>
+              <div id="tokenCounter" class="text-[10px] ml-1" style="color:var(--text-subtle);">0 tokens</div>
             </span>
-            <div id="tokenCounter" class="text-[10px] ml-1" style="color:var(--text-subtle);">0 tokens</div>
           </div>
           <div class="flex items-center gap-1.5">
             <select id="modelSelect" class="cw-model-select" title="模型">
