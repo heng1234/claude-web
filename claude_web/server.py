@@ -104,8 +104,9 @@ MAX_UPLOAD_MB = 20
 IGNORED_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", ".next", "dist", "build", ".cache", ".idea", ".vscode"}
 KNOWN_TOOL_NAMES = {
     "Bash", "Read", "Write", "Edit", "MultiEdit", "Grep", "Glob",
-    "WebFetch", "WebSearch", "TodoWrite", "Task", "NotebookEdit",
+    "LS", "WebFetch", "WebSearch", "TodoWrite", "Task", "NotebookEdit",
 }
+_CODE_WORKSPACE_ALLOWED_TOOLS = sorted(KNOWN_TOOL_NAMES)
 
 _running_processes: Dict[str, asyncio.subprocess.Process] = {}
 _stopped_sessions: Set[str] = set()
@@ -1101,9 +1102,10 @@ class ChatRequest(BaseModel):
     disallowed_tools: Optional[List[str]] = None
     force_new: Optional[bool] = None
     workspace_mode: Optional[str] = None
+    effort: Optional[str] = None
     # UI-only metadata for attached docs (name/size/length/path); rendered as
-    # badges on the user message. Not used to build the prompt — the doc text
-    # is already embedded in `message` by the client.
+    # badges on the user message. Chat mode embeds extracted text in `message`;
+    # Code mode passes local paths so Claude Code can Read/Bash the files itself.
     docs: Optional[List[dict]] = None
 
 
@@ -1313,6 +1315,7 @@ def _proc_sig(
 
 
 _ROOT_UNSAFE_PERMISSION_MODES = {"auto", "bypassPermissions"}
+_CODE_WORKSPACE_DEFAULT_PERMISSION_MODE = "acceptEdits"
 
 
 def _running_with_root_or_sudo_privileges() -> bool:
@@ -1327,6 +1330,33 @@ def _running_with_root_or_sudo_privileges() -> bool:
 def _root_unsafe_permission_requested(permission_mode: Optional[str]) -> bool:
     mode = (permission_mode or "").strip()
     return mode in _ROOT_UNSAFE_PERMISSION_MODES and _running_with_root_or_sudo_privileges()
+
+
+def _effective_permission_mode_for_workspace(
+    workspace_mode: Optional[str],
+    permission_mode: Optional[str],
+) -> Optional[str]:
+    mode = (permission_mode or "").strip()
+    if mode == "free":
+        mode = ""
+    if (workspace_mode or "").strip().lower() == "code" and _root_unsafe_permission_requested(mode):
+        return "acceptEdits"
+    if (workspace_mode or "").strip().lower() == "code" and not mode:
+        return _CODE_WORKSPACE_DEFAULT_PERMISSION_MODE
+    return mode or None
+
+
+def _apply_code_workspace_tool_defaults(req: ChatRequest, effective_permission_mode: Optional[str]) -> None:
+    if (req.workspace_mode or "").strip().lower() != "code":
+        return
+    if (effective_permission_mode or "").strip() == "plan":
+        return
+    if (effective_permission_mode or "").strip() == "bypassPermissions":
+        return
+    disallowed = set(req.disallowed_tools or [])
+    merged = set(req.allowed_tools or [])
+    merged.update(tool for tool in _CODE_WORKSPACE_ALLOWED_TOOLS if tool not in disallowed)
+    req.allowed_tools = sorted(merged) if merged else None
 
 
 def _root_auto_mode_error_message() -> str:
@@ -1349,6 +1379,7 @@ def build_persistent_args(
     permission_mode: Optional[str] = None,
     allowed_tools: Optional[List[str]] = None,
     disallowed_tools: Optional[List[str]] = None,
+    effort: Optional[str] = None,
 ) -> List[str]:
     """Build args for a long-lived persistent process (stdin stays open)."""
     args = claude_cli_argv() + [
@@ -1368,6 +1399,8 @@ def build_persistent_args(
         args += ["--allowed-tools", ",".join(allowed_tools)]
     if disallowed_tools:
         args += ["--disallowed-tools", ",".join(disallowed_tools)]
+    if effort:
+        args += ["--effort", effort]
     return args
 
 
@@ -1381,6 +1414,7 @@ def build_args(
     allowed_tools: Optional[List[str]] = None,
     disallowed_tools: Optional[List[str]] = None,
     use_stdin: bool = False,
+    effort: Optional[str] = None,
 ) -> List[str]:
     args = claude_cli_argv()
     if use_stdin:
@@ -1400,6 +1434,8 @@ def build_args(
         args += ["--model", model]
     if system_prompt:
         args += ["--append-system-prompt", system_prompt]
+    if effort:
+        args += ["--effort", effort]
     permission_mode = (permission_mode or "").strip()
     if permission_mode and permission_mode in ("default", "acceptEdits", "auto", "bypassPermissions", "plan"):
         args += ["--permission-mode", permission_mode]
@@ -1471,6 +1507,127 @@ def build_image_input_message(message: str, images: List[str]) -> bytes:
     return json.dumps(msg, ensure_ascii=False).encode() + b"\n"
 
 
+_CODE_FILE_WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+_CODE_BASH_WRITE_RE = re.compile(
+    r"("
+    r">\s*\S+|>>\s*\S+|"
+    r"\btee\b|"
+    r"\b(?:sed|perl)\b[^\n;&|]*\s-i(?:\b|['\"])?|"
+    r"\b(?:python|python3|node|ruby|php)\b[^\n;&|]*(?:write_text|write_bytes|open\([^)]*,\s*['\"][wa])"
+    r")",
+    re.I,
+)
+
+
+def _normalize_code_changed_path(cwd: str, path: str) -> str:
+    raw = str(path or "").strip()
+    if not raw:
+        return ""
+    raw = raw.replace("\\", "/")
+    try:
+        root = Path(cwd).expanduser().resolve()
+        target = Path(raw).expanduser()
+        if target.is_absolute():
+            resolved = target.resolve()
+            if resolved == root:
+                return "."
+            if root in resolved.parents:
+                return resolved.relative_to(root).as_posix()
+    except Exception:
+        pass
+    return re.sub(r"/+", "/", raw.lstrip("./"))
+
+
+def _bash_command_may_write(command: str) -> bool:
+    return bool(_CODE_BASH_WRITE_RE.search(command or ""))
+
+
+def code_write_intent_from_event(obj: dict, cwd: str) -> tuple[bool, Set[str]]:
+    """Detect whether this Claude turn intentionally wrote files.
+
+    The git diff is still the source of truth for what changed, but this guards
+    the UI from attributing unrelated external edits in the same worktree to a
+    read-only Claude turn.
+    """
+    if not isinstance(obj, dict) or obj.get("type") != "assistant":
+        return False, set()
+    content = (obj.get("message") or {}).get("content") or []
+    if not isinstance(content, list):
+        return False, set()
+    saw_write = False
+    targets: Set[str] = set()
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "tool_use":
+            continue
+        name = str(block.get("name") or "")
+        input_data = block.get("input") if isinstance(block.get("input"), dict) else {}
+        low_name = name.lower()
+        if name in _CODE_FILE_WRITE_TOOLS or any(token in low_name for token in ("write_file", "edit_file", "replace_file")):
+            saw_write = True
+            raw_target = input_data.get("file_path") or input_data.get("notebook_path") or input_data.get("path") or ""
+            rel = _normalize_code_changed_path(cwd, str(raw_target))
+            if rel:
+                targets.add(rel)
+        elif name == "Bash" and _bash_command_may_write(str(input_data.get("command") or "")):
+            saw_write = True
+    return saw_write, targets
+
+
+def filter_code_changed_files(changed_files: List[dict], write_targets: Set[str], saw_write_intent: bool) -> List[dict]:
+    if not saw_write_intent:
+        return []
+    if not write_targets:
+        return changed_files
+    normalized_targets = {re.sub(r"/+", "/", t.strip().lstrip("./")) for t in write_targets if t}
+    return [
+        item for item in changed_files
+        if re.sub(r"/+", "/", str(item.get("path") or "").strip().lstrip("./")) in normalized_targets
+    ]
+
+
+def _code_mode_attachment_context(docs: Optional[List[dict]], images: Optional[List[str]] = None) -> str:
+    """Build a path-only attachment block for Claude Code style sessions."""
+    lines: List[str] = []
+    for idx, item in enumerate(docs or [], 1):
+        if not isinstance(item, dict):
+            continue
+        raw_path = str(item.get("path") or "").strip()
+        if not raw_path:
+            continue
+        try:
+            path = str(Path(raw_path).expanduser().resolve())
+        except Exception:
+            path = raw_path
+        name = str(item.get("name") or Path(path).name or f"附件 {idx}").strip()
+        size = item.get("size")
+        length = item.get("length")
+        meta_parts: List[str] = []
+        if isinstance(size, (int, float)) and size > 0:
+            meta_parts.append(f"{int(size)} bytes")
+        if isinstance(length, (int, float)) and length > 0:
+            meta_parts.append(f"提取文本约 {int(length)} 字")
+        meta = f" ({'，'.join(meta_parts)})" if meta_parts else ""
+        lines.append(f"{len(lines) + 1}. {name}{meta}: {path}")
+    for raw_path in images or []:
+        if not raw_path:
+            continue
+        try:
+            path = str(Path(str(raw_path)).expanduser().resolve())
+        except Exception:
+            path = str(raw_path)
+        name = Path(path).name or f"图片 {len(lines) + 1}"
+        lines.append(f"{len(lines) + 1}. {name} (图片，已同时附加到本轮消息): {path}")
+    if not lines:
+        return ""
+    return (
+        "【已附加到本轮的本地文件】\n"
+        "这些文件已经保存在本机磁盘。需要查看内容时，请像 Claude Code 一样使用 Read 或 Bash 读取对应路径；"
+        "不要假设文件内容已经完整粘贴在消息里。\n"
+        + "\n".join(lines)
+        + "\n\n"
+    )
+
+
 async def _git_run(cwd: str, *args: str) -> Optional[str]:
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -1489,6 +1646,118 @@ async def _git_run(cwd: str, *args: str) -> Optional[str]:
         return stdout.decode("utf-8", errors="replace").strip()
     except Exception:
         return None
+
+
+async def _git_run_raw(cwd: str, *args: str) -> Optional[str]:
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git", "-C", cwd, *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return None
+        if proc.returncode != 0:
+            return None
+        return stdout.decode("utf-8", errors="replace")
+    except Exception:
+        return None
+
+
+def _git_status_label(status: str) -> str:
+    raw = (status or "").strip()
+    if raw == "??":
+        return "A"
+    if "D" in raw:
+        return "D"
+    if "R" in raw:
+        return "R"
+    if "A" in raw:
+        return "A"
+    if "M" in raw:
+        return "M"
+    return raw[:1] or "M"
+
+
+async def _hash_worktree_file(cwd: str, rel_path: str) -> str:
+    try:
+        root = Path(cwd).resolve()
+        target = (root / rel_path).resolve()
+        if root != target and root not in target.parents:
+            return "outside"
+        if not target.exists():
+            return "missing"
+        if target.is_dir():
+            chunks: List[str] = []
+            for child in sorted(p for p in target.rglob("*") if p.is_file())[:500]:
+                try:
+                    stat = child.stat()
+                    chunks.append(f"{child.relative_to(root)}:{stat.st_size}:{stat.st_mtime_ns}")
+                except Exception:
+                    continue
+            return hashlib.sha256("\n".join(chunks).encode("utf-8")).hexdigest()
+        h = hashlib.sha256()
+        with target.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return "unreadable"
+
+
+async def git_dirty_signatures(cwd: str) -> Dict[str, dict]:
+    """Return signatures for the current dirty worktree, used for per-turn diffs."""
+    if not cwd or not os.path.isdir(cwd):
+        return {}
+    raw = await _git_run_raw(cwd, "status", "--porcelain=v1", "-z")
+    if not raw:
+        return {}
+    parts = [p for p in raw.split("\0") if p]
+    out: Dict[str, dict] = {}
+    i = 0
+    while i < len(parts):
+        item = parts[i]
+        if len(item) < 4:
+            i += 1
+            continue
+        status = item[:2]
+        path = item[3:]
+        # In porcelain -z rename/copy records are followed by the old path.
+        if "R" in status or "C" in status:
+            i += 1
+        label = _git_status_label(status)
+        if status == "??":
+            signature_src = await _hash_worktree_file(cwd, path)
+        else:
+            unstaged = await _git_run(cwd, "diff", "--binary", "--", path) or ""
+            staged = await _git_run(cwd, "diff", "--cached", "--binary", "--", path) or ""
+            signature_src = staged + "\n---WORKTREE---\n" + unstaged
+            if not signature_src.strip():
+                signature_src = await _hash_worktree_file(cwd, path)
+        out[path] = {
+            "path": path,
+            "status": label,
+            "signature": hashlib.sha256(signature_src.encode("utf-8", errors="replace")).hexdigest(),
+        }
+        i += 1
+    return out
+
+
+async def git_changed_files_since(cwd: str, before: Optional[Dict[str, dict]]) -> List[dict]:
+    before = before or {}
+    after = await git_dirty_signatures(cwd)
+    changed: List[dict] = []
+    for path, item in after.items():
+        prev = before.get(path)
+        if prev and prev.get("signature") == item.get("signature") and prev.get("status") == item.get("status"):
+            continue
+        changed.append({"path": path, "status": item.get("status") or "M"})
+    changed.sort(key=lambda item: (0 if item.get("status") == "A" else 1, item.get("path") or ""))
+    return changed
 
 
 async def create_git_checkpoint(cwd: str) -> Optional[dict]:
@@ -2646,19 +2915,58 @@ def _require_extension_token(token: Optional[str]) -> None:
 
 
 def _require_local_same_origin(request: Request) -> None:
+    # Access is already gated by local/private-network detection, mobile access
+    # code/TOTP, or extension token checks at the route/middleware layer. Strict
+    # Origin matching breaks NAS / reverse-proxy / mobile browser shells, so do
+    # not use it as an extra blocker for in-app actions such as permission retry.
+    return
     origin = request.headers.get("origin")
     if not origin:
         return
     try:
         origin_url = urlparse(origin)
+        origin_scheme = (origin_url.scheme or "").lower()
+        origin_host = (origin_url.hostname or "").strip("[]").lower()
+        origin_port = origin_url.port or (443 if origin_scheme == "https" else 80)
+        candidates: Set[tuple] = set()
+
+        def add_candidate(scheme: str, host: str, port: Optional[int] = None) -> None:
+            scheme = (scheme or "").strip().lower()
+            host = _normalize_client_host(host or "").strip("[]").lower()
+            if not scheme or not host:
+                return
+            candidates.add((scheme, host, port or (443 if scheme == "https" else 80)))
+
         request_url = request.url
-        origin_port = origin_url.port or (443 if origin_url.scheme == "https" else 80)
-        request_port = request_url.port or (443 if request_url.scheme == "https" else 80)
-        same = (
-            origin_url.scheme == request_url.scheme
-            and origin_url.hostname == request_url.hostname
-            and origin_port == request_port
-        )
+        add_candidate(request_url.scheme, request_url.hostname or "", request_url.port)
+
+        forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
+        effective_scheme = forwarded_proto or request_url.scheme
+        host_header = (request.headers.get("host") or "").split(",", 1)[0].strip()
+        if host_header:
+            parsed_host = urlparse(f"//{host_header}")
+            add_candidate(effective_scheme, parsed_host.hostname or host_header, parsed_host.port)
+
+        forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",", 1)[0].strip()
+        if forwarded_host:
+            parsed_forwarded_host = urlparse(f"//{forwarded_host}")
+            add_candidate(effective_scheme, parsed_forwarded_host.hostname or forwarded_host, parsed_forwarded_host.port)
+
+        forwarded = (request.headers.get("forwarded") or "").split(",", 1)[0]
+        forwarded_values = {}
+        for part in forwarded.split(";"):
+            key, _, value = part.strip().partition("=")
+            if key and value:
+                forwarded_values[key.lower()] = value.strip().strip('"')
+        if forwarded_values.get("host"):
+            parsed_forwarded = urlparse(f"//{forwarded_values['host']}")
+            add_candidate(
+                forwarded_values.get("proto") or effective_scheme,
+                parsed_forwarded.hostname or forwarded_values["host"],
+                parsed_forwarded.port,
+            )
+
+        same = (origin_scheme, origin_host, origin_port) in candidates
     except Exception:
         same = False
     if not same:
@@ -4015,11 +4323,22 @@ async def _chat_response(req: ChatRequest):
 
     is_new = not remote_ready
     work_dir = req.cwd or (row["cwd"] if row and row["cwd"] else os.path.expanduser("~"))
+    code_workspace = (req.workspace_mode or "").strip().lower() == "code"
     full_message = req.message
+    if code_workspace:
+        attachment_context = _code_mode_attachment_context(req.docs, req.images)
+        if attachment_context and attachment_context not in full_message:
+            full_message = attachment_context + full_message
     display_text = req.display_message if req.display_message is not None else req.message
-    _ensure_cli_permission_mode_supported(req.permission_mode)
+    effective_permission_mode = _effective_permission_mode_for_workspace(
+        req.workspace_mode,
+        req.permission_mode,
+    )
+    _apply_code_workspace_tool_defaults(req, effective_permission_mode)
+    _ensure_cli_permission_mode_supported(effective_permission_mode)
 
     checkpoint = await create_git_checkpoint(work_dir)
+    git_dirty_before = await git_dirty_signatures(work_dir) if code_workspace else {}
 
     user_event = {
         "type": "user_input",
@@ -4032,8 +4351,8 @@ async def _chat_response(req: ChatRequest):
     # When the prompt was rewritten on the client (doc content / URL fetch / web-search prefix
     # injected), keep the full sent text so badge previews can recover doc bodies even
     # after the upload file is pruned. Only stored when it actually differs.
-    if req.message != display_text:
-        user_event["full_text"] = req.message
+    if full_message != display_text:
+        user_event["full_text"] = full_message
     upsert_session(session_id, derive_title(display_text), work_dir, req.workspace_mode)
     append_event(session_id, user_event)
     set_session_remote_state(session_id, remote_session_id, remote_ready and not is_new)
@@ -4048,13 +4367,13 @@ async def _chat_response(req: ChatRequest):
         }
         yield f"data: {json.dumps(meta)}\n\n"
 
-        effective_system_prompt = compose_system_prompt(
+        effective_system_prompt = None if code_workspace else compose_system_prompt(
             load_enabled_memories(work_dir, session_id),
             req.system_prompt,
         )
         current_sig = _proc_sig(
             remote_session_id,
-            req.model, req.permission_mode, effective_system_prompt,
+            req.model, effective_permission_mode, effective_system_prompt,
             work_dir, req.allowed_tools, req.disallowed_tools,
         )
 
@@ -4089,9 +4408,10 @@ async def _chat_response(req: ChatRequest):
                     resume=not is_new,
                     model=req.model,
                     system_prompt=effective_system_prompt,
-                    permission_mode=req.permission_mode,
+                    permission_mode=effective_permission_mode,
                     allowed_tools=req.allowed_tools,
                     disallowed_tools=req.disallowed_tools,
+                    effort=req.effort or "high",
                 )
             except ClaudeCliResolutionError as e:
                 err_event = {"type": "error", "message": str(e)}
@@ -4134,6 +4454,8 @@ async def _chat_response(req: ChatRequest):
             stderr_task = asyncio.create_task(_drain_stream(process.stderr, stderr_buffer))
 
         turn_ended = False  # set True when result event received
+        code_write_intent_seen = False
+        code_write_targets: Set[str] = set()
         try:
             assert process.stdout is not None
             while True:
@@ -4171,6 +4493,20 @@ async def _chat_response(req: ChatRequest):
 
                 if session_has_remote_conversation([obj]):
                     remote_became_ready = True
+                if code_workspace:
+                    saw_write, targets = code_write_intent_from_event(obj, work_dir)
+                    if saw_write:
+                        code_write_intent_seen = True
+                    if targets:
+                        code_write_targets.update(targets)
+                if t == "result" and not obj.get("parent_tool_use_id") and code_workspace:
+                    changed_files = await git_changed_files_since(work_dir, git_dirty_before)
+                    obj["changed_files"] = filter_code_changed_files(
+                        changed_files,
+                        code_write_targets,
+                        code_write_intent_seen,
+                    )
+
                 if t != "stream_event" and not (t == "system" and obj.get("subtype", "").startswith("hook_")):
                     append_event(session_id, obj)
                     if t == "result":
