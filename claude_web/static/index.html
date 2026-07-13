@@ -5672,6 +5672,72 @@
     body:not(.code-mode) .user-msg-actions { display:none !important; }
     #composerQuickActions { display:none !important; }
   }
+
+  /* ===== Tool Row Cards (new vertical card style) ===== */
+  .tool-card-list { display: flex; flex-direction: column; gap: 0; margin: 4px 0; }
+  .tool-card {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 4px;
+    background: transparent; border: none; border-radius: 0;
+    font-size: 13px; line-height: 1.4; cursor: pointer;
+    transition: background .12s; color: var(--text); width: 100%;
+    font-family: inherit; text-align: left;
+  }
+  .tool-card:hover { background: transparent; opacity: .75; }
+  .tool-card.active { opacity: .75; }
+  .tool-card-icon { width: 20px; text-align: center; flex-shrink: 0; font-size: 15px; }
+  .tool-card-name { font-weight: 500; flex-shrink: 0; color: var(--text); }
+  .tool-card-file {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #4a9eff; flex-shrink: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 12px;
+  }
+  .tool-card-lines {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--text-subtle); font-size: 11.5px; flex-shrink: 0;
+  }
+  .tool-card-arg {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--text-subtle); flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 12px;
+  }
+  .tool-card-spacer { flex: 1; min-width: 4px; }
+  .tool-card-dot {
+    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  }
+  .tool-card-dot.running {
+    background: #3b82f6;
+    box-shadow: 0 0 0 0 rgba(59,130,246,.6);
+    animation: tool-dot-pulse 1.4s infinite;
+  }
+  .tool-card-dot.done { background: #10b981; }
+  .tool-card-dot.error { background: #ef4444; }
+  .tool-card-dot.cancelled { background: #f59e0b; }
+  @keyframes tool-dot-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(59,130,246,.6); }
+    70%  { box-shadow: 0 0 0 6px rgba(59,130,246,0); }
+    100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+  }
+  .tool-card-detail {
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface); overflow: hidden;
+    margin-top: 2px; font-size: 12px;
+  }
+  .tool-card-detail.hidden { display: none; }
+  .tool-card-detail pre {
+    margin: 0; padding: 8px 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px; white-space: pre-wrap; word-break: break-all;
+    overflow-x: auto; background: transparent;
+  }
+  .tool-card-detail-label {
+    padding: 5px 14px; font-size: 11px; font-weight: 600;
+    color: var(--text-subtle); background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  :root.dark .tool-card-file { color: #60a5fa; }
 </style>
 </head>
 <body class="h-screen flex">
@@ -7010,6 +7076,8 @@ const LS = {
   set(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
 };
 
+const THINKING_OPEN_DEFAULT_MIGRATION_KEY = 'cw_thinking_open_default_v3';
+
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
   const resp = await nativeFetch(...args);
@@ -7027,7 +7095,7 @@ window.fetch = async (...args) => {
 const settings = {
   theme: LS.get('theme', 'light'),
   systemPrompt: LS.get('systemPrompt', ''),
-  thinkingOpen: LS.get('thinkingOpen', false),
+  thinkingOpen: LS.get('thinkingOpen', true),
   toolUseOpen: LS.get('toolUseOpen', false),
   toolResultOpen: LS.get('toolResultOpen', false),
   notifyEnabled: LS.get('notifyEnabled', false),
@@ -7036,6 +7104,11 @@ const settings = {
   chatWebSearch: LS.get('chatWebSearch', LS.get('webSearch', false)),
   codeWebSearch: LS.get('codeWebSearch', false),
 };
+if (!LS.get(THINKING_OPEN_DEFAULT_MIGRATION_KEY, false)) {
+  settings.thinkingOpen = true;
+  LS.set('thinkingOpen', true);
+  LS.set(THINKING_OPEN_DEFAULT_MIGRATION_KEY, true);
+}
 
 let sessionId = null;
 let pendingImages = [];
@@ -7045,6 +7118,8 @@ let activeImageUploadPromises = new Set();
 const activeDocUploadPromises = new Set();
 let pendingImageGeneration = 0;
 let currentController = null;
+let pendingPermissionAutoRetry = null;
+const permissionAutoRetryKeys = new Set();
 let archivedView = false;
 let cliView = false;
 let milestoneView = false;
@@ -7200,6 +7275,7 @@ const PERMISSION_MODE_LABELS = Object.freeze({
   bypassPermissions: '自动模式',
 });
 const PERMISSION_MODE_VALUES = Object.freeze(Object.keys(PERMISSION_MODE_LABELS));
+const CODE_WORKSPACE_DEFAULT_PERMISSION_MODE = 'acceptEdits';
 const MOBILE_UNSAFE_PERMISSION_MODES = Object.freeze(['acceptEdits', 'bypassPermissions']);
 const ROOT_UNSAFE_PERMISSION_MODES = Object.freeze(['bypassPermissions']);
 const mobileModeBanner = $('mobileModeBanner');
@@ -7368,6 +7444,15 @@ function addSessionAllowedTool(targetSessionId, toolName) {
     extraAllowedTools: [...current.extraAllowedTools, toolName],
   });
 }
+function addSessionAllowedTools(targetSessionId, toolNames) {
+  if (!targetSessionId) return;
+  const tools = normalizeToolNames(toolNames);
+  if (tools.length === 0) return;
+  const current = getSessionPermissionOverride(targetSessionId);
+  setSessionPermissionOverride(targetSessionId, {
+    extraAllowedTools: [...current.extraAllowedTools, ...tools],
+  });
+}
 function setSessionBypassPermissions(targetSessionId, enabled) {
   if (!targetSessionId) return;
   const isMobile = document.body.classList.contains('mobile-device-detected');
@@ -7376,6 +7461,14 @@ function setSessionBypassPermissions(targetSessionId, enabled) {
     return;
   }
   const current = getSessionPermissionOverride(targetSessionId);
+  if (enabled && runtimeStatus.root_or_sudo) {
+    setSessionPermissionOverride(targetSessionId, {
+      mode: null,
+      extraAllowedTools: normalizeToolNames([...current.extraAllowedTools, ...ALL_TOOLS]),
+    });
+    toast('root/sudo 环境下 Claude CLI 不支持自动模式，已改为预放行常用工具');
+    return;
+  }
   setSessionPermissionOverride(targetSessionId, {
     mode: enabled ? 'bypassPermissions' : null,
     extraAllowedTools: current.extraAllowedTools,
@@ -7850,6 +7943,7 @@ function cssEscape(value) {
 }
 
 function renderFeedbackControls(container, meta = {}) {
+  if (codeMode) return;
   if (!container || !meta.messageKey) return;
   const existing = container.querySelector(`.message-feedback[data-message-key="${cssEscape(meta.messageKey)}"]`);
   if (existing) {
@@ -8168,6 +8262,7 @@ function updateToolUseInput(id, inputData) {
   }
   if (!info) return false;
   info.inputData = inputData || {};
+  rememberCodeWriteTarget(info.containerEl || info.chipEl?.closest('.asst-wrap') || info.el?.closest('.asst-wrap'), info.name, info.inputData);
   if (info.isSubagent) {
     const card = subagentCards.get(id);
     if (card) {
@@ -8188,19 +8283,16 @@ function updateToolUseInput(id, inputData) {
     return true;
   }
   if (info.isChip && info.chipEl) {
-    const keyArg = extractToolKeyArg(info.name, info.inputData);
-    let argEl = info.chipEl.querySelector('.tool-chip-arg');
-    if (keyArg) {
-      if (!argEl) {
-        argEl = document.createElement('span');
-        argEl.className = 'tool-chip-arg';
-        info.chipEl.appendChild(argEl);
-      }
-      argEl.textContent = keyArg;
-    } else if (argEl) {
-      argEl.remove();
-    }
-    if (info.chipEl.classList.contains('active') && info.detailEl) {
+    // Update new card-style elements
+    const chip = info.chipEl;
+    const { file, lines, arg } = extractToolCardParts(info.name, info.inputData);
+    const fileEl = chip.querySelector('.tool-card-file');
+    const linesEl = chip.querySelector('.tool-card-lines');
+    const argEl = chip.querySelector('.tool-card-arg, .tool-chip-arg');
+    if (fileEl) fileEl.textContent = file || '';
+    if (linesEl) linesEl.textContent = lines || '';
+    if (argEl) argEl.textContent = arg || '';
+    if (chip.classList.contains('active') && info.detailEl) {
       renderToolDetail(info.detailEl, info);
     }
     return true;
@@ -8228,8 +8320,9 @@ function markToolUseComplete(toolUseId, isError) {
     if (info.rowEl) info.rowEl.classList.toggle('error', !!isError);
   } else if (info.isChip && info.chipEl) {
     setToolChipStatus(info.chipEl, isError ? 'error' : 'done');
+    // strip progress only applies to old chip style
     const strip = info.chipEl.parentElement;
-    if (strip) updateStripProgress(strip);
+    if (strip && strip.classList.contains('tool-strip')) updateStripProgress(strip);
   } else if (info.pending) {
     setToolStatus(info.statusEl, isError ? '出错' : '已返回结果', isError ? 'error' : 'done');
   }
@@ -8251,7 +8344,7 @@ function finishPendingToolUses(text = '已结束', kind = 'done') {
       const status = kind === 'error' ? 'error' : (kind === 'stopped' ? 'cancelled' : 'done');
       setToolChipStatus(info.chipEl, status);
       const strip = info.chipEl.parentElement;
-      if (strip) updateStripProgress(strip);
+      if (strip && strip.classList.contains('tool-strip')) updateStripProgress(strip);
     } else {
       setToolStatus(info.statusEl, text, kind);
     }
@@ -8550,6 +8643,40 @@ function extractToolKeyArg(name, input) {
   }
 }
 
+function isFileWriteTool(name) {
+  return ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(name);
+}
+
+function normalizeCodeFilePathForCompare(path, cwd) {
+  let raw = String(path || '').trim();
+  if (!raw) return '';
+  raw = raw.replace(/\\/g, '/');
+  const base = String(cwd || '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  if (base && raw.startsWith(base + '/')) raw = raw.slice(base.length + 1);
+  raw = raw.replace(/^\.\/+/, '');
+  return raw.replace(/\/+/g, '/');
+}
+
+function codeWritePathFromToolInput(name, input) {
+  if (!isFileWriteTool(name) || !input || typeof input !== 'object') return '';
+  return input.file_path || input.notebook_path || '';
+}
+
+function rememberCodeWriteTarget(container, name, input) {
+  if (!codeMode || !container) return;
+  const raw = codeWritePathFromToolInput(name, input);
+  const rel = normalizeCodeFilePathForCompare(raw, cwdInput?.value || '');
+  if (!rel) return;
+  const existing = (container.dataset.codeWriteTargets || '')
+    .split('\n')
+    .map(s => s.trim())
+    .filter(Boolean);
+  if (!existing.includes(rel)) {
+    existing.push(rel);
+    container.dataset.codeWriteTargets = existing.join('\n');
+  }
+}
+
 function isWebLookupTool(name) {
   return name === 'WebSearch' || name === 'WebFetch';
 }
@@ -8798,10 +8925,10 @@ function updateStripProgress(strip) {
 
 function setToolChipStatus(chip, status) {
   if (!chip) return;
-  chip.classList.toggle('pending', status === 'running');
   chip.classList.toggle('error', status === 'error');
-  const dot = chip.querySelector('.tool-chip-status');
-  if (dot) dot.className = `tool-chip-status ${status}`;
+  // support both old .tool-chip-status and new .tool-card-dot
+  const dot = chip.querySelector('.tool-chip-status, .tool-card-dot');
+  if (dot) dot.className = (dot.classList.contains('tool-card-dot') ? 'tool-card-dot' : 'tool-chip-status') + ` ${status}`;
 }
 
 function renderToolDetail(detailEl, info) {
@@ -8822,15 +8949,12 @@ function renderToolDetail(detailEl, info) {
       ? 'bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200'
       : 'bg-gray-50 dark:bg-slate-800';
     resultHtml = `
-      <div class="tool-strip-detail-section-label">${result.isError ? '❌ 错误结果' : '📋 结果'} (${len} 字)</div>
+      <div class="tool-card-detail-label">${result.isError ? '❌ 错误' : '✅ 输出'}</div>
       <pre class="${cls}">${escapeHtml(truncated)}</pre>
     `;
   }
   detailEl.innerHTML = `
-    <div class="tool-strip-detail-header">
-      ${toolIcon(name)} <code>${escapeHtml(name)}</code>
-    </div>
-    <div class="tool-strip-detail-section-label">输入</div>
+    <div class="tool-card-detail-label">📥 输入</div>
     ${bodyHtml}
     ${resultHtml}
   `;
@@ -8838,10 +8962,10 @@ function renderToolDetail(detailEl, info) {
 
 function toggleChipDetail(chip, info, detailEl) {
   if (!chip || !info || !detailEl) return;
-  const strip = chip.parentElement;
+  const parent = chip.parentElement;
   const isActive = chip.classList.contains('active');
-  // Clear other active chips in the same strip
-  if (strip) strip.querySelectorAll('.tool-chip.active').forEach(c => c.classList.remove('active'));
+  // Clear other active cards in same list
+  if (parent) parent.querySelectorAll('.tool-chip.active, .tool-card.active').forEach(c => c.classList.remove('active'));
   if (isActive) {
     detailEl.classList.add('hidden');
     detailEl.innerHTML = '';
@@ -8870,38 +8994,147 @@ function attachToolResult(toolUseId, content, isError) {
   return true;
 }
 
+function getToolCardDisplayName(name) {
+  const map = {
+    Read: '读取文件', Write: '写入文件', Edit: '编辑文件', MultiEdit: '编辑文件',
+    Bash: '执行命令', Grep: '搜索', Glob: '文件匹配',
+    WebFetch: '抓取网页', WebSearch: '搜索网页',
+    NotebookEdit: '编辑 Notebook', TodoWrite: '任务清单', Task: '子任务',
+  };
+  return map[name] || name;
+}
+
+function extractToolCardParts(name, input) {
+  if (!input || typeof input !== 'object') return { file: '', lines: '', arg: '' };
+  switch (name) {
+    case 'Read': {
+      const fp = basenameOf(input.file_path || '');
+      const offset = input.offset != null ? Number(input.offset) + 1 : null;
+      const limit = input.limit != null ? Number(input.limit) : null;
+      let lines = '';
+      if (offset != null && limit != null) lines = `L${offset}-${offset + limit - 1}`;
+      else if (offset != null) lines = `L${offset}`;
+      return { file: fp, lines, arg: '' };
+    }
+    case 'Write': case 'Edit': case 'MultiEdit': case 'NotebookEdit':
+      return { file: basenameOf(input.file_path || input.notebook_path || ''), lines: '', arg: '' };
+    case 'Bash': {
+      const cmd = firstLine(input.command || '');
+      return { file: '', lines: '', arg: truncateMid(cmd, 80) };
+    }
+    case 'Grep': {
+      const fp = basenameOf(input.path || '');
+      const pattern = input.pattern || '';
+      return { file: fp, lines: '', arg: pattern ? truncateMid(pattern, 40) : '' };
+    }
+    case 'Glob':
+      return { file: '', lines: '', arg: truncateMid(input.pattern || '', 48) };
+    case 'WebFetch':
+      try { return { file: new URL(input.url).hostname, lines: '', arg: '' }; }
+      catch { return { file: '', lines: '', arg: truncateMid(input.url || '', 48) }; }
+    case 'WebSearch':
+      return { file: '', lines: '', arg: truncateMid(input.query || '', 48) };
+    default: {
+      for (const k of ['file_path', 'path', 'query', 'pattern', 'url', 'command', 'description']) {
+        if (typeof input[k] === 'string' && input[k]) return { file: '', lines: '', arg: truncateMid(input[k], 48) };
+      }
+      return { file: '', lines: '', arg: '' };
+    }
+  }
+}
+
+function getOrCreateToolCardList(container) {
+  const last = container.lastElementChild;
+  if (last && last.dataset && last.dataset.kind === 'tool-card-list') return last;
+  const list = document.createElement('div');
+  list.className = 'tool-card-list';
+  list.dataset.kind = 'tool-card-list';
+  container.appendChild(list);
+  return list;
+}
+
 function addToolChip(container, name, inputData, options = {}) {
   const id = options.id || '';
   const input = inputData || {};
-  const { strip, detail } = getOrCreateToolStrip(container);
+  rememberCodeWriteTarget(container, name, input);
   const isPending = options.pending !== false;
-  const chip = document.createElement('button');
-  chip.type = 'button';
-  chip.className = 'tool-chip' + (isPending ? ' pending' : '');
-  if (id) chip.dataset.toolId = id;
-  const keyArg = extractToolKeyArg(name, input);
-  chip.innerHTML = `
-    <span class="tool-chip-status ${isPending ? 'running' : 'done'}"></span>
-    <span class="tool-chip-icon">${toolIcon(name)}</span>
-    <span class="tool-chip-name">${escapeHtml(name)}</span>
-    ${keyArg ? `<span class="tool-chip-arg">${escapeHtml(keyArg)}</span>` : ''}
+
+  // Chat mode: use original horizontal chip style
+  if (!codeMode) {
+    const { strip, detail } = getOrCreateToolStrip(container);
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'tool-chip' + (isPending ? ' pending' : '');
+    if (id) chip.dataset.toolId = id;
+    const keyArg = extractToolKeyArg(name, input);
+    chip.innerHTML = `
+      <span class="tool-chip-status ${isPending ? 'running' : 'done'}"></span>
+      <span class="tool-chip-icon">${toolIcon(name)}</span>
+      <span class="tool-chip-name">${escapeHtml(name)}</span>
+      ${keyArg ? `<span class="tool-chip-arg">${escapeHtml(keyArg)}</span>` : ''}
+    `;
+    strip.appendChild(chip);
+    if (id) {
+      if (toolUseBlocks.has(id)) {
+        const info = toolUseBlocks.get(id);
+        info.chipEl = chip; info.detailEl = detail; info.containerEl = container;
+        info.inputData = input; info.name = name; info.isChip = true;
+      } else {
+        toolUseBlocks.set(id, { chipEl: chip, detailEl: detail, containerEl: container, name, inputData: input, pending: isPending, isChip: true, resultData: null });
+        if (isPending && !pendingToolUseIds.includes(id)) pendingToolUseIds.push(id);
+      }
+      const info = toolUseBlocks.get(id);
+      chip.addEventListener('click', () => toggleChipDetail(chip, info, detail));
+    }
+    updateStripProgress(strip);
+    return chip;
+  }
+
+  // Code mode: use new vertical card style
+  const list = getOrCreateToolCardList(container);
+
+  // detail panel lives after the list
+  let detail = list.nextElementSibling;
+  if (!detail || !detail.classList.contains('tool-card-detail')) {
+    detail = document.createElement('div');
+    detail.className = 'tool-card-detail hidden';
+    list.after(detail);
+  }
+
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'tool-card' + (isPending ? '' : ' done');
+  if (id) card.dataset.toolId = id;
+
+  const { file, lines, arg } = extractToolCardParts(name, input);
+  const displayName = getToolCardDisplayName(name);
+  const dotClass = isPending ? 'running' : 'done';
+
+  card.innerHTML = `
+    <span class="tool-card-icon">${toolIcon(name)}</span>
+    <span class="tool-card-name">${escapeHtml(displayName)}</span>
+    ${file ? `<span class="tool-card-file">${escapeHtml(file)}</span>` : ''}
+    ${lines ? `<span class="tool-card-lines">${escapeHtml(lines)}</span>` : ''}
+    ${arg ? `<span class="tool-card-arg">${escapeHtml(arg)}</span>` : ''}
+    <span class="tool-card-spacer"></span>
+    <span class="tool-card-dot ${dotClass}"></span>
   `;
-  // Append chip (progress badge now lives in the wrap, not the strip)
-  strip.appendChild(chip);
+  list.appendChild(card);
 
   if (id) {
     if (toolUseBlocks.has(id)) {
-      // Re-registration via streaming: just refresh metadata
       const info = toolUseBlocks.get(id);
-      info.chipEl = chip;
+      info.chipEl = card;
       info.detailEl = detail;
+      info.containerEl = container;
       info.inputData = input;
       info.name = name;
       info.isChip = true;
     } else {
       toolUseBlocks.set(id, {
-        chipEl: chip,
+        chipEl: card,
         detailEl: detail,
+        containerEl: container,
         name,
         inputData: input,
         pending: isPending,
@@ -8911,10 +9144,9 @@ function addToolChip(container, name, inputData, options = {}) {
       if (isPending && !pendingToolUseIds.includes(id)) pendingToolUseIds.push(id);
     }
     const info = toolUseBlocks.get(id);
-    chip.addEventListener('click', () => toggleChipDetail(chip, info, detail));
+    card.addEventListener('click', () => toggleChipDetail(card, info, detail));
   }
-  updateStripProgress(strip);
-  return chip;
+  return card;
 }
 
 function renderPlanCard(container, inputData, options = {}) {
@@ -9200,6 +9432,25 @@ function addThinkingBlock(container, text) {
   return block;
 }
 
+function updateLiveThinkingBlock(container, text) {
+  if (!container || !String(text || '').trim()) return null;
+  hideThinking(container);
+  let block = container.querySelector(':scope > .thinking-block[data-live-thinking="1"]');
+  if (!block) {
+    block = document.createElement('details');
+    block.className = 'thinking-block cw-code-prose-enter';
+    block.dataset.role = 'thinking-block';
+    block.dataset.liveThinking = '1';
+    block.open = !!settings.thinkingOpen;
+    block.innerHTML = thinkingSummaryHtml('思考过程') + '<div class="thinking-body"></div>';
+    container.appendChild(block);
+  }
+  const body = block.querySelector('.thinking-body');
+  if (body) body.textContent = text || '';
+  scrollBottom();
+  return block;
+}
+
 function addSystemInfo(text) {
   const el = document.createElement('div');
   el.className = 'system-info text-center text-xs text-gray-400 py-1';
@@ -9230,14 +9481,35 @@ function addSystemAction(text, actionText, onClick) {
 let sessionTokens = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
 let latestContextTokens = 0;
 let contextCompactionRunning = false;
-const CODE_AUTO_COMPACT_THRESHOLD = 160_000;
-const CODE_AUTO_COMPACT_WARNING = 120_000;
+let selectedModel = LS.get('model', '');
+let selectedEffort = LS.get('effort', '');
+const DEFAULT_CHAT_CONTEXT_LIMIT = 200_000;
+const DEFAULT_CODE_CONTEXT_LIMIT = 1_000_000;
+const CODE_CONTEXT_WARNING_RATIO = 0.8;
 
 function _fmtTokens(n) {
   if (!n) return '0';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(n >= 10_000 ? 0 : 1) + 'k';
   return String(n);
+}
+
+function contextLimitFromModel(model, fallback) {
+  const raw = String(model || '').trim();
+  const match = raw.match(/\[([0-9.]+)\s*([kKmM])\]$/);
+  if (!match) return fallback;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return match[2].toLowerCase() === 'm'
+    ? Math.round(value * 1_000_000)
+    : Math.round(value * 1_000);
+}
+
+function getComposerContextLimit() {
+  return contextLimitFromModel(
+    selectedModel,
+    codeMode ? DEFAULT_CODE_CONTEXT_LIMIT : DEFAULT_CHAT_CONTEXT_LIMIT,
+  );
 }
 
 // Compact per-turn string. Returns '' when usage missing so we don't pollute the
@@ -9294,15 +9566,16 @@ function renderSessionTokens() {
   const hit = totalIn > 0 ? Math.round((sessionTokens.cacheRead / totalIn) * 100) : 0;
   const sumAll = totalIn + sessionTokens.output;
   tokenBar.textContent = `🎫 ${_fmtTokens(totalIn)} 输入 · ${_fmtTokens(sessionTokens.output)} 输出 · 缓存 ${hit}%`;
-  const contextWarning = latestContextTokens >= CODE_AUTO_COMPACT_WARNING;
+  const contextLimit = getComposerContextLimit();
+  const contextWarning = latestContextTokens >= contextLimit * CODE_CONTEXT_WARNING_RATIO;
   tokenBar.style.color = contextWarning ? '#f59e0b' : 'var(--text-subtle)';
   tokenBar.title = [
     `本会话 token 累计`,
     `输入 ${_fmtTokens(totalIn)} (含缓存读 ${_fmtTokens(sessionTokens.cacheRead)})`,
     `输出 ${_fmtTokens(sessionTokens.output)}`,
     `缓存命中率 ${hit}%`,
-    latestContextTokens ? `当前上下文约 ${_fmtTokens(latestContextTokens)}` : '',
-    contextWarning ? `代码模式达到 ${_fmtTokens(CODE_AUTO_COMPACT_THRESHOLD)} 后，将在下次发送前自动压缩` : '',
+    latestContextTokens ? `当前上下文约 ${_fmtTokens(latestContextTokens)} / ${_fmtTokens(contextLimit)}` : '',
+    contextWarning ? '上下文较高；Claude Code 可能自动压缩，也可以手动输入 /compact' : '',
   ].filter(Boolean).join('\n');
 }
 function addErrorBlock(message) {
@@ -9345,6 +9618,29 @@ async function retryTurnWithCurrentPermissions(targetSessionId, userIdx) {
     try { await loadSession(targetSessionId); } catch {}
   }
 }
+function permissionDeniedToolNames(info) {
+  const direct = info?.tool_name ? [info.tool_name] : [];
+  const denials = Array.isArray(info?.permission_denials)
+    ? info.permission_denials.map(item => item?.tool_name).filter(Boolean)
+    : [];
+  return normalizeToolNames([...direct, ...denials]);
+}
+function maybeScheduleCodePermissionAutoRetry(container, info) {
+  if (!codeMode || mobileQuestionMode || !sessionId) return false;
+  const targetSessionId = sessionId;
+  const userIdx = Number(container?.parentElement?.dataset.userIndex ?? lastUserIndex);
+  if (userIdx < 0) return false;
+  const allowedSet = new Set(CODE_WORKSPACE_ALLOWED_TOOLS);
+  const tools = permissionDeniedToolNames(info).filter(tool => allowedSet.has(tool));
+  if (tools.length === 0) return false;
+  const key = `${targetSessionId}:${userIdx}:${tools.slice().sort().join(',')}`;
+  if (permissionAutoRetryKeys.has(key)) return false;
+  permissionAutoRetryKeys.add(key);
+  addSessionAllowedTools(targetSessionId, tools);
+  pendingPermissionAutoRetry = { targetSessionId, userIdx, tools };
+  addSystemInfo(`已自动放行 ${tools.join(', ')}，本轮结束后重试`);
+  return true;
+}
 function addPermissionErrorBlock(container, info) {
   if (!container) container = newAssistantBubble();
   const targetSessionId = sessionId;
@@ -9371,7 +9667,14 @@ function addPermissionErrorBlock(container, info) {
 
   const hint = document.createElement('div');
   hint.className = 'mt-2 text-xs text-amber-700 dark:text-amber-300';
-  hint.textContent = info.hint || '请预先放行工具后重试本轮，或改用 Claude Code CLI。';
+  const defaultHint = '请预先放行工具后重试本轮，或改用 Claude Code CLI。';
+  let hintText = info.hint || defaultHint;
+  if (runtimeStatus.root_or_sudo) {
+    hintText = hintText
+      .replace('或切换为「代理模式」或「自动模式」。', '或点击下方按钮预放行工具后重试。root/sudo 环境下 Claude CLI 不支持自动模式。')
+      .replace('或改用 Claude Code CLI。', 'root/sudo 环境下 Claude CLI 不支持自动模式，请预放行工具或使用代理模式。');
+  }
+  hint.textContent = hintText;
   card.appendChild(hint);
 
   const actions = document.createElement('div');
@@ -9410,12 +9713,17 @@ function addPermissionErrorBlock(container, info) {
   }
 
   makeActionBtn(
-    '本会话全放行并重试',
+    runtimeStatus.root_or_sudo ? '预放行常用工具并重试' : '本会话全放行并重试',
     'px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs',
     async () => {
-      if (!confirm('这会把当前会话切到本机全放行模式，仅建议本地自用且确认任务可信时使用。继续吗？')) return;
+      const confirmText = runtimeStatus.root_or_sudo
+        ? '当前是 root/sudo 环境，Claude CLI 不支持自动模式。将改为预放行常用工具并重试，仅建议在可信项目中使用。继续吗？'
+        : '这会把当前会话切到本机全放行模式，仅建议本地自用且确认任务可信时使用。继续吗？';
+      if (!confirm(confirmText)) return;
       setSessionBypassPermissions(targetSessionId, true);
-      addSystemInfo('当前会话已临时切到本机全放行，正在重试本轮');
+      addSystemInfo(runtimeStatus.root_or_sudo
+        ? '当前会话已预放行常用工具，正在重试本轮'
+        : '当前会话已临时切到本机全放行，正在重试本轮');
       await retryTurnWithCurrentPermissions(targetSessionId, userIdx);
     },
   );
@@ -9926,6 +10234,7 @@ function handleEvent(obj, container, options = {}) {
   if (obj.type === 'permission_error') {
     hideThinking(container);
     finishPendingToolUses('权限被拒绝', 'error');
+    if (!replay && maybeScheduleCodePermissionAutoRetry(container, obj)) return container;
     return addPermissionErrorBlock(container, obj);
   }
   if (obj.type === 'error') { finishPendingToolUses('出错', 'error'); addErrorBlock(obj.message); return container; }
@@ -9996,7 +10305,7 @@ function handleEvent(obj, container, options = {}) {
     addSystemInfo(`完成${dur}${cost}${tokensSuffix}`);
     accumulateSessionTokens(obj.usage);
     refreshStats();
-    if (!replay && codeMode) renderChangedFilesSummary(container);
+    if (codeMode) renderChangedFilesSummary(container, obj.changed_files || []);
     const denials = obj.permission_denials;
     if (Array.isArray(denials) && denials.length > 0) {
       const toolNames = [...new Set(denials.map(d => d.tool_name).filter(Boolean))];
@@ -10004,10 +10313,12 @@ function handleEvent(obj, container, options = {}) {
         type: 'permission_error',
         message: `Claude 尝试使用 ${toolNames.join(', ')} 工具但被权限拒绝（共 ${denials.length} 次）。`,
         tool_name: toolNames[0] || null,
+        permission_denials: denials,
         hint: '请点击下方按钮放行工具后重试，或切换为「代理模式」或「自动模式」。',
       };
       hideThinking(container);
       finishPendingToolUses('权限被拒绝', 'error');
+      if (!replay && maybeScheduleCodePermissionAutoRetry(container, info)) return container;
       return addPermissionErrorBlock(container, info);
     }
     finishPendingToolUses('已结束', 'done');
@@ -10084,8 +10395,10 @@ function handleStreamEvent(ev, container) {
       if (!chunk) return container;
       block.text += chunk;
       if (!block.el) {
-        const el = state.container.querySelector(':scope > [data-role="thinking"]') || showThinking(state.container, '正在思考');
+        const el = updateLiveThinkingBlock(state.container, block.text);
         block.el = el;
+      } else {
+        updateLiveThinkingBlock(state.container, block.text);
       }
       scrollBottom();
     } else if (d.type === 'input_json_delta' && block.type === 'tool_use') {
@@ -10130,8 +10443,10 @@ function handleStreamEvent(ev, container) {
       reconcileStreamingArtifacts(state, ev.index, previewEntries);
       postProcessRendered(el);
     } else if (block.type === 'thinking') {
-      if (block.el) block.el.remove();
-      if (block.text) addThinkingBlock(state.container, block.text);
+      if (block.text) {
+        const live = updateLiveThinkingBlock(state.container, block.text);
+        if (live) delete live.dataset.liveThinking;
+      }
     } else if (block.type === 'tool_use') {
       if (block.name === 'TodoWrite') return container;
       const inputData = parseStreamToolInput(block);
@@ -10552,7 +10867,7 @@ function updateTokenCount() {
   const t = estimateTokens(input.value);
   const contextSize = latestContextTokens || 0;
   const totalSize = contextSize + t;
-  const maxSize = 200000;
+  const maxSize = getComposerContextLimit();
   const percent = Math.min(100, Math.round((totalSize / maxSize) * 100));
 
   if (contextSize > 0) {
@@ -10560,7 +10875,7 @@ function updateTokenCount() {
   } else {
     tokenCounter.textContent = `~${t} tokens`;
   }
-  tokenCounter.classList.toggle('text-orange-500', t > 50000 || totalSize > 150000);
+  tokenCounter.classList.toggle('text-orange-500', t > 50000 || totalSize > maxSize * CODE_CONTEXT_WARNING_RATIO);
 }
 
 function syncComposerDraftState() {
@@ -10979,7 +11294,7 @@ async function insertPickerSelection(i) {
 
 // ===== send / stop =====
 function buildPermissionPayload() {
-  const mode = permSelect.value;
+  const mode = effectivePermissionModeForWorkspace(permSelect.value);
   const out = { permission_mode: null, allowed_tools: null, disallowed_tools: null };
   const applyWebToolPolicy = () => {
     if (isWebSearchEnabled()) return out;
@@ -10998,14 +11313,30 @@ function buildPermissionPayload() {
   }
   if (mode === 'plan') out.permission_mode = 'plan';
   else if (mode === 'acceptEdits') out.permission_mode = 'acceptEdits';
-  else if (mode === 'bypassPermissions') out.permission_mode = 'bypassPermissions';
+  else if (mode === 'bypassPermissions') {
+    if (runtimeStatus.root_or_sudo) {
+      out.permission_mode = 'acceptEdits';
+      out.allowed_tools = normalizeToolNames([...(out.allowed_tools || []), ...ALL_TOOLS]);
+    } else {
+      out.permission_mode = 'bypassPermissions';
+    }
+  }
   else if (mode === 'readonly') out.disallowed_tools = ['Bash', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
   else if (mode === 'custom') {
     const list = getStoredCustomTools();
     if (Array.isArray(list) && list.length > 0) out.allowed_tools = list;
   }
+  if (codeMode && out.permission_mode === 'acceptEdits' && !out.disallowed_tools) {
+    out.allowed_tools = normalizeToolNames([...(out.allowed_tools || []), ...CODE_WORKSPACE_ALLOWED_TOOLS]);
+  }
   const override = getSessionPermissionOverride(sessionId);
   if (override.mode === 'bypassPermissions') {
+    if (runtimeStatus.root_or_sudo) {
+      out.permission_mode = 'acceptEdits';
+      out.allowed_tools = normalizeToolNames([...(out.allowed_tools || []), ...ALL_TOOLS, ...override.extraAllowedTools]);
+      out.disallowed_tools = null;
+      return applyWebToolPolicy();
+    }
     out.permission_mode = 'bypassPermissions';
     out.allowed_tools = null;
     out.disallowed_tools = null;
@@ -11035,9 +11366,7 @@ function setContextCompactionStatus(active, text = '') {
 }
 
 function shouldAutoCompactContext() {
-  if (!codeMode || !sessionId || mobileQuestionMode || currentController || contextCompactionRunning) return false;
-  if (latestContextTokens < CODE_AUTO_COMPACT_THRESHOLD) return false;
-  return chatInner.querySelectorAll(':scope > .user-msg-wrap').length > 1;
+  return false;
 }
 
 function restoreQueuedComposerMessage(message) {
@@ -11089,7 +11418,6 @@ async function send(message) {
     try { await Promise.all([waitForImageUploads(), waitForDocUploads()]); }
     finally { sendBtn.disabled = false; }
   }
-  if (!await maybeAutoCompactBeforeSend(message)) return { ok: false, compactFailed: true };
   return sendCore(message, null, pendingImages.map(i => i.path));
 }
 
@@ -11215,8 +11543,8 @@ async function runAgentLoop() {
         session_id: sessionId,
         cwd: cwd || null,
         model: modelSelect.value || null,
-        effort: selectedEffort || null,
-        system_prompt: mobileQuestionMode ? null : (settings.systemPrompt || null),
+        effort: effectiveEffortForSend() || null,
+        system_prompt: (mobileQuestionMode || codeMode) ? null : (settings.systemPrompt || null),
         permission_mode: perm.permission_mode,
         allowed_tools: perm.allowed_tools,
         disallowed_tools: perm.disallowed_tools,
@@ -11409,7 +11737,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let actualDisplay = displayMessage;
   // Snapshot doc metadata before clearDocs() so we can both render badges and persist to server.
   const docMetadata = !isFork
-    ? pendingDocs.filter(d => d.status !== 'error' && d.content)
+    ? pendingDocs.filter(d => d.status !== 'error' && (d.path || d.content))
         .map(d => ({ name: d.name, size: d.size, length: d.length, path: d.path || null }))
     : [];
   if (!isFork) {
@@ -11466,8 +11794,8 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         docs: docMetadata.length ? docMetadata : null,
         workspace_mode: codeMode ? 'code' : 'chat',
         model: modelSelect.value || null,
-        effort: selectedEffort || null,
-        system_prompt: mobileQuestionMode ? null : (settings.systemPrompt || null),
+        effort: effectiveEffortForSend() || null,
+        system_prompt: (mobileQuestionMode || codeMode) ? null : (settings.systemPrompt || null),
         display_message: actualDisplay || null,
         permission_mode: perm.permission_mode,
         allowed_tools: perm.allowed_tools,
@@ -11548,6 +11876,15 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     if (milestoneView) renderMilestones();
     refreshCwds();
     refreshGitStatus();
+    if (pendingPermissionAutoRetry) {
+      const retry = pendingPermissionAutoRetry;
+      pendingPermissionAutoRetry = null;
+      setTimeout(() => {
+        retryTurnWithCurrentPermissions(retry.targetSessionId, retry.userIdx).catch(err => {
+          addErrorBlock('自动放行后重试失败: ' + (err?.message || err));
+        });
+      }, 0);
+    }
   }
 }
 
@@ -11586,7 +11923,7 @@ form.addEventListener('submit', (e) => {
   }
   hidePicker();
   const text = input.value.trim();
-  const readyDocs = pendingDocs.filter(d => d.status === 'ready' && d.content).length;
+  const readyDocs = pendingDocs.filter(isReadyDocForSend).length;
   const loadingDocs = pendingDocs.filter(d => d.status === 'loading').length;
   if (!text && pendingImages.length === 0 && activeImageUploadPromises.size === 0 && readyDocs === 0 && loadingDocs === 0) return;
   input.value = '';
@@ -12216,7 +12553,6 @@ async function loadSession(id) {
         handleEvent(ev, asstContainer, { replay: true, eventIndex });
       }
     });
-    if (codeMode && asstContainer) renderChangedFilesSummary(asstContainer);
     if (!data.events.length) chatInner.appendChild(welcome);
     forceScrollBottom();
     highlightActiveSession();
@@ -12325,17 +12661,19 @@ async function openGitFileDiff(path) {
   }
 }
 
-async function renderChangedFilesSummary(container) {
+async function renderChangedFilesSummary(container, changedFiles = []) {
   if (!codeMode || !container) return;
-  const cwd = cwdInput.value.trim();
-  if (!cwd) return;
+  container.querySelector(':scope > .cw-changed-files')?.remove();
+  const files = Array.isArray(changedFiles)
+    ? changedFiles
+        .map(file => ({
+          path: String(file?.path || '').trim(),
+          status: String(file?.status || 'M').trim() || 'M',
+        }))
+        .filter(file => file.path)
+    : [];
+  if (!files.length) return;
   try {
-    const r = await fetch('/api/git?cwd=' + encodeURIComponent(cwd));
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok || !data.available) return;
-    const files = Array.isArray(data.files) ? data.files : [];
-    container.querySelector(':scope > .cw-changed-files')?.remove();
-    if (!files.length) return;
     const card = document.createElement('section');
     card.className = 'cw-changed-files';
     card.innerHTML = `
@@ -13361,7 +13699,11 @@ if (cliImportSelectAll) cliImportSelectAll.addEventListener('click', () => {
 if (cliImportSubmit) cliImportSubmit.addEventListener('click', () => importSelectedCliSessions());
 
 systemPromptInput.addEventListener('change', () => { settings.systemPrompt = systemPromptInput.value; LS.set('systemPrompt', settings.systemPrompt); });
-thinkingOpenEl.addEventListener('change', () => { settings.thinkingOpen = thinkingOpenEl.checked; LS.set('thinkingOpen', settings.thinkingOpen); });
+thinkingOpenEl.addEventListener('change', () => {
+  settings.thinkingOpen = thinkingOpenEl.checked;
+  LS.set('thinkingOpen', settings.thinkingOpen);
+  updateSettingsLabel();
+});
 toolUseOpenEl.addEventListener('change', () => { settings.toolUseOpen = toolUseOpenEl.checked; LS.set('toolUseOpen', settings.toolUseOpen); });
 toolResultOpenEl.addEventListener('change', () => { settings.toolResultOpen = toolResultOpenEl.checked; LS.set('toolResultOpen', settings.toolResultOpen); });
 notifyEnabledEl.addEventListener('change', () => {
@@ -13484,11 +13826,14 @@ addMemoryBtn.addEventListener('click', async () => {
 document.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
 
 // ===== model + effort =====
-let selectedModel = LS.get('model', '');
-let selectedEffort = LS.get('effort', '');
-
 // Keep legacy modelSelect in DOM for compatibility (hidden)
 const modelSelect = { value: selectedModel };
+
+function effectiveEffortForSend() {
+  if (!settings.thinkingOpen) return '';
+  if (selectedEffort) return selectedEffort;
+  return codeMode ? 'medium' : '';
+}
 
 function updateSettingsLabel() {
   const label = $('cwComposerSettingsLabel');
@@ -13499,7 +13844,13 @@ function updateSettingsLabel() {
   const modelText = modelNames[selectedModel] || selectedModel || '默认模型';
   if (label) label.textContent = modelText;
   if (modelValue) modelValue.textContent = modelText;
-  if (effortValue) effortValue.textContent = effortNames[selectedEffort] || '默认';
+  if (effortValue) {
+    effortValue.textContent = !settings.thinkingOpen
+      ? '关闭'
+      : selectedEffort
+      ? (effortNames[selectedEffort] || selectedEffort)
+      : (codeMode && settings.thinkingOpen ? '中（代码默认）' : '默认');
+  }
 }
 
 function syncSettingsMenuChecks() {
@@ -13628,12 +13979,19 @@ syncSettingsMenuChecks();
 
 // ===== permission mode =====
 const ALL_TOOLS = ['Bash','Read','Write','Edit','MultiEdit','Grep','Glob','WebFetch','WebSearch','TodoWrite','Task','NotebookEdit'];
+const CODE_WORKSPACE_ALLOWED_TOOLS = ALL_TOOLS;
 function normalizePermissionMode(value) {
   return PERMISSION_MODE_VALUES.includes(value) ? value : 'free';
 }
 
-function permissionModeIconSvg(value) {
+function effectivePermissionModeForWorkspace(value) {
   const mode = normalizePermissionMode(value);
+  if (codeMode && mode === 'free') return CODE_WORKSPACE_DEFAULT_PERMISSION_MODE;
+  return mode;
+}
+
+function permissionModeIconSvg(value) {
+  const mode = effectivePermissionModeForWorkspace(value);
   if (mode === 'plan') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 1.5 1.5L8 5"/><path d="M11 6h9"/><path d="m4 12 1.5 1.5L8 11"/><path d="M11 12h9"/><path d="m4 18 1.5 1.5L8 17"/><path d="M11 18h9"/></svg>';
   if (mode === 'acceptEdits') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="14" height="11" rx="4"/><path d="M9 11h.01M15 11h.01M9 15h6M12 7V4M10 4h4"/></svg>';
   if (mode === 'bypassPermissions') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m13 2-8 12h7l-1 8 8-12h-7z"/></svg>';
@@ -13650,7 +14008,7 @@ function rootUnsafePermissionMessage() {
 
 function renderPermissionModeMenu() {
   if (!cwPermissionModeMenu) return;
-  const current = normalizePermissionMode(permSelect?.value);
+  const current = effectivePermissionModeForWorkspace(permSelect?.value);
   if (cwComposerPermIcon) cwComposerPermIcon.innerHTML = permissionModeIconSvg(current);
   if (permSelect) {
     [...permSelect.options].forEach(opt => {
@@ -14354,7 +14712,7 @@ function clearUrlContext() {
 }
 
 // ===== document upload =====
-const pendingDocs = []; // {name, content, length, truncated}
+const pendingDocs = []; // {name, path, content, length, truncated}
 
 docAttachBtn.addEventListener('click', () => docInput.click());
 
@@ -14625,7 +14983,13 @@ async function openHistoricalDocPreview(doc, hostWrap) {
   });
 }
 
+function isReadyDocForSend(doc) {
+  if (!doc || doc.status !== 'ready') return false;
+  return codeMode ? !!doc.path : !!doc.content;
+}
+
 function composeDocContext() {
+  if (codeMode) return '';
   const ready = pendingDocs.filter(d => d.status !== 'error' && d.content);
   if (ready.length === 0) return '';
   return ready.map(d => {
@@ -15159,7 +15523,7 @@ function currentProjectName() {
 }
 
 function currentPermissionLabel() {
-  return PERMISSION_MODE_LABELS[normalizePermissionMode(permSelect?.value)] || '默认模式';
+  return PERMISSION_MODE_LABELS[effectivePermissionModeForWorkspace(permSelect?.value)] || '默认模式';
 }
 
 function currentBranchLabel() {
@@ -15285,6 +15649,7 @@ function setCodeMode(enabled, options = {}) {
   syncAdvancedOpenState();
   updateWorkspaceLabels();
   updateWelcomeCopy();
+  updateSettingsLabel();
   updateShellNav(codeMode ? 'code' : undefined);
   scheduleConversationRailUpdate();
 }
