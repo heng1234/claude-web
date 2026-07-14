@@ -1757,6 +1757,31 @@ async def git_changed_files_since(cwd: str, before: Optional[Dict[str, dict]]) -
             continue
         changed.append({"path": path, "status": item.get("status") or "M"})
     changed.sort(key=lambda item: (0 if item.get("status") == "A" else 1, item.get("path") or ""))
+    # Attach diff stat (additions/deletions) for changed files
+    if changed:
+        numstat = await _git_run(cwd, "diff", "--numstat")
+        numstat_cached = await _git_run(cwd, "diff", "--cached", "--numstat")
+        stat_map: Dict[str, Tuple[int, int]] = {}
+        for line in ((numstat or "") + "\n" + (numstat_cached or "")).splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                add_str, del_str, fpath = parts[0], parts[1], parts[2]
+                try:
+                    stat_map[fpath] = (int(add_str), int(del_str))
+                except ValueError:
+                    pass
+        total_add = 0
+        total_del = 0
+        for item in changed:
+            p = item.get("path", "")
+            if p in stat_map:
+                item["additions"] = stat_map[p][0]
+                item["deletions"] = stat_map[p][1]
+                total_add += stat_map[p][0]
+                total_del += stat_map[p][1]
+        if changed:
+            changed[0]["_total_additions"] = total_add
+            changed[0]["_total_deletions"] = total_del
     return changed
 
 

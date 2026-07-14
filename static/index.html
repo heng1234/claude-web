@@ -5738,6 +5738,29 @@
     border-bottom: 1px solid var(--border);
   }
   :root.dark .tool-card-file { color: #60a5fa; }
+
+  /* ===== Session Stats Bar (code workspace) ===== */
+  .cw-session-stats-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; margin: 0 0 4px;
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; background: var(--surface);
+  }
+  .cw-session-stats-bar.hidden { display: none; }
+  .cw-stats-item {
+    display: flex; align-items: center; gap: 5px;
+    padding: 7px 16px; flex: 1; justify-content: center;
+    font-size: 12.5px; color: var(--text-subtle);
+    background: transparent; border: none; border-right: 1px solid var(--border);
+    cursor: pointer; transition: background .12s; font-family: inherit;
+  }
+  .cw-stats-item:last-child { border-right: none; }
+  .cw-stats-item:hover { background: var(--bg); color: var(--text); }
+  .cw-stats-item svg { flex-shrink: 0; color: var(--text-subtle); }
+  .cw-stats-label { font-weight: 500; }
+  .cw-stats-count { font-weight: 600; color: var(--text); }
+  .cw-stats-diff-add { font-weight: 600; color: #10b981; }
+  .cw-stats-diff-del { font-weight: 600; color: #ef4444; }
 </style>
 </head>
 <body class="h-screen flex">
@@ -6019,6 +6042,24 @@
       <div id="cwContextCompactionStatus" class="cw-context-compaction-status" role="status" aria-live="polite">
         <span class="cw-context-compaction-spinner" aria-hidden="true"></span>
         <span id="cwContextCompactionText">上下文接近上限，正在压缩…</span>
+      </div>
+      <div id="cwSessionStatsBar" class="cw-session-stats-bar hidden">
+        <button type="button" class="cw-stats-item" id="cwStatsTasks" title="查看任务清单">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="m17 8 2 2 4-4"/></svg>
+          <span class="cw-stats-label">任务</span>
+          <span class="cw-stats-count" id="cwStatsTasksCount"></span>
+        </button>
+        <button type="button" class="cw-stats-item" id="cwStatsAgents" title="查看子代理">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+          <span class="cw-stats-label">子代理</span>
+          <span class="cw-stats-count" id="cwStatsAgentsCount"></span>
+        </button>
+        <button type="button" class="cw-stats-item" id="cwStatsEdits" title="查看变更文件">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <span class="cw-stats-label">编辑</span>
+          <span class="cw-stats-diff-add" id="cwStatsAdd"></span>
+          <span class="cw-stats-diff-del" id="cwStatsDel"></span>
+        </button>
       </div>
       <div class="composer relative" id="composer">
         <div id="urlChips" class="composer-upload-strip hidden"></div>
@@ -8453,6 +8494,7 @@ function statusDotKind(status) {
 }
 
 function renderSubagentPanel() {
+  renderSessionStatsBar();
   if (subagentCards.size === 0) {
     hideSubagentPanel();
     return;
@@ -9754,6 +9796,7 @@ const TODO_PLAYBACK_INTERVAL = 600;
 
 function updateTodoPanel(todos) {
   if (!Array.isArray(todos) || todos.length === 0) return;
+  updateSessionStatsTasks(todos);
   // Skip duplicate snapshots (same status array as last queued)
   const last = todoSnapshotQueue.length
     ? todoSnapshotQueue[todoSnapshotQueue.length - 1]
@@ -12672,6 +12715,13 @@ async function renderChangedFilesSummary(container, changedFiles = []) {
         }))
         .filter(file => file.path)
     : [];
+  updateSessionStatsFiles(files);
+  // Extract diff stats from server response
+  if (files.length && changedFiles[0]) {
+    const totalAdd = changedFiles[0]._total_additions || 0;
+    const totalDel = changedFiles[0]._total_deletions || 0;
+    setSessionStatsDiff(totalAdd, totalDel);
+  }
   if (!files.length) return;
   try {
     const card = document.createElement('section');
@@ -12698,6 +12748,91 @@ async function renderChangedFilesSummary(container, changedFiles = []) {
 }
 
 // ===== stats =====
+// Session stats bar (code workspace): tasks / subagents / edited files
+const sessionStatsState = {
+  tasksDone: 0,
+  tasksTotal: 0,
+  changedFiles: [],
+  addLines: 0,
+  delLines: 0,
+};
+
+function resetSessionStatsBar() {
+  sessionStatsState.tasksDone = 0;
+  sessionStatsState.tasksTotal = 0;
+  sessionStatsState.changedFiles = [];
+  sessionStatsState.addLines = 0;
+  sessionStatsState.delLines = 0;
+  renderSessionStatsBar();
+}
+
+function updateSessionStatsTasks(todos) {
+  if (!Array.isArray(todos)) return;
+  sessionStatsState.tasksTotal = todos.length;
+  sessionStatsState.tasksDone = todos.filter(t => t.status === 'completed').length;
+  renderSessionStatsBar();
+}
+
+function updateSessionStatsFiles(changedFiles) {
+  sessionStatsState.changedFiles = Array.isArray(changedFiles)
+    ? changedFiles.map(f => String(f?.path || '').trim()).filter(Boolean)
+    : [];
+  renderSessionStatsBar();
+}
+
+function setSessionStatsDiff(add, del) {
+  sessionStatsState.addLines = Number(add) || 0;
+  sessionStatsState.delLines = Number(del) || 0;
+  renderSessionStatsBar();
+}
+
+function renderSessionStatsBar() {
+  const bar = $('cwSessionStatsBar');
+  if (!bar) return;
+  const agents = subagentCards.size;
+  const files = sessionStatsState.changedFiles.length;
+  const hasAny = sessionStatsState.tasksTotal > 0 || agents > 0 || files > 0;
+  if (!codeMode || !hasAny) {
+    bar.classList.add('hidden');
+    return;
+  }
+  bar.classList.remove('hidden');
+
+  const tasksCount = $('cwStatsTasksCount');
+  const tasksItem = $('cwStatsTasks');
+  if (tasksCount) {
+    tasksCount.textContent = sessionStatsState.tasksTotal
+      ? `${sessionStatsState.tasksDone}/${sessionStatsState.tasksTotal}` : '';
+  }
+  if (tasksItem) tasksItem.style.display = sessionStatsState.tasksTotal ? '' : 'none';
+
+  const agentsCount = $('cwStatsAgentsCount');
+  const agentsItem = $('cwStatsAgents');
+  if (agentsCount) agentsCount.textContent = agents ? String(agents) : '';
+  if (agentsItem) agentsItem.style.display = agents ? '' : 'none';
+
+  const editsItem = $('cwStatsEdits');
+  const addEl = $('cwStatsAdd');
+  const delEl = $('cwStatsDel');
+  if (addEl) addEl.textContent = sessionStatsState.addLines ? `+${sessionStatsState.addLines}` : '';
+  if (delEl) delEl.textContent = sessionStatsState.delLines ? `-${sessionStatsState.delLines}` : '';
+  if (editsItem) editsItem.style.display = files ? '' : 'none';
+}
+
+async function refreshSessionStatsDiff() {
+  const cwd = (cwdInput && cwdInput.value || '').trim();
+  if (!cwd || !codeMode) return;
+  try {
+    const r = await fetch('/api/git/status?cwd=' + encodeURIComponent(cwd));
+    if (!r.ok) return;
+    const data = await r.json();
+    const diff = data.diff_stat || '';
+    const addMatch = diff.match(/(\d+) insertion/);
+    const delMatch = diff.match(/(\d+) deletion/);
+    setSessionStatsDiff(addMatch ? addMatch[1] : 0, delMatch ? delMatch[1] : 0);
+  } catch {}
+}
+
 function renderFeedbackStats(feedback) {
   if (!feedback) return;
   const total = feedback.total || 0;
@@ -13712,6 +13847,21 @@ notifyEnabledEl.addEventListener('change', () => {
   if (settings.notifyEnabled) maybeRequestNotifyPermission();
 });
 soundEnabledEl.addEventListener('change', () => { settings.soundEnabled = soundEnabledEl.checked; LS.set('soundEnabled', settings.soundEnabled); });
+
+// Stats bar click handlers
+$('cwStatsTasks')?.addEventListener('click', () => {
+  if (todoPanel) { todoPanel.classList.remove('hidden'); todoPanel.style.transform = 'scale(1.03)'; setTimeout(() => { todoPanel.style.transform = ''; }, 200); }
+});
+$('cwStatsAgents')?.addEventListener('click', () => {
+  if (subagentPanel && !subagentPanel.classList.contains('hidden')) {
+    const first = subagentPanel.querySelector('.subagent-card');
+    if (first) first.click();
+  }
+});
+$('cwStatsEdits')?.addEventListener('click', () => {
+  const filesEl = document.querySelector('.cw-changed-files');
+  if (filesEl) filesEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
 urlAutoFetchEl.addEventListener('change', () => {
   settings.urlAutoFetch = urlAutoFetchEl.checked;
   LS.set('urlAutoFetch', settings.urlAutoFetch);
@@ -15631,6 +15781,7 @@ function setCodeMode(enabled, options = {}) {
     closeFeedbackPopover();
   }
   document.body.classList.toggle('code-mode', codeMode);
+  renderSessionStatsBar();
   applyWebSearchBtnState();
   if (!sessionId) {
     setText(titleLabel, codeMode ? 'Code 模式' : '新会话');
