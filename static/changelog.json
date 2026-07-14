@@ -2,6 +2,27 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.0.2",
+      "date": "2026-07-13",
+      "highlights": [
+        { "type": "fix", "text": "Code 工作区权限体验重做：默认使用全工具白名单，Bash / 文件读写 / 搜索 / Task 等常用 Claude Code 工具不再频繁卡在「允许并重试」" },
+        { "type": "fix", "text": "修复授权按钮在 NAS、反向代理、移动浏览器壳和公网访问下误报 same-origin request required；访问安全交给访问码、Authenticator 和插件 Token" },
+        { "type": "fix", "text": "root / sudo 环境下选择自动模式时自动使用 acceptEdits + 工具白名单兼容运行，避免 Claude CLI 的 root 硬限制直接中断任务" },
+        { "type": "feature", "text": "Code 模式默认开启思考过程并发送中等推理强度，可在设置里关闭；流式思考块支持默认展开、折叠和复制" },
+        { "type": "fix", "text": "文件修改摘要只在本轮确实触发写入工具后显示，减少只读分析时误报修改文件；上下文显示改为 1M 级别估算，不再自动压缩打断任务" }
+      ]
+    },
+    {
+      "version": "2.0.1",
+      "date": "2026-07-12",
+      "highlights": [
+        { "type": "fix", "text": "Code 模式新增独立联网开关：关闭地球时禁用 WebSearch / WebFetch，但仍可通过 Bash 使用 curl 等本地命令" },
+        { "type": "fix", "text": "优化 root / sudo 环境下的自动模式提示，不再静默降级权限模式，避免远程 NAS 或虚拟环境部署时行为不清晰" },
+        { "type": "fix", "text": "局域网访问识别扩展到 RFC1918 私网、loopback 和链路本地地址，同网段手机 / 电脑访问本机服务不再误要求访问码" },
+        { "type": "fix", "text": "继续打磨 Code 工作区 UI：输入区上下文按钮、模型切换、思考折叠、工具结果、移动端布局和浏览器插件样式统一优化" }
+      ]
+    },
+    {
       "version": "2.0.0",
       "date": "2026-06-24",
       "highlights": [
