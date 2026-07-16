@@ -7,7 +7,7 @@ from pathlib import Path
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is required for permission policy tests")
 class PermissionPolicyTest(unittest.TestCase):
-    def test_ccgui_style_hook_requires_explicit_side_effect_approval(self):
+    def test_permission_hook_requires_explicit_side_effect_approval(self):
         module_uri = (Path(__file__).parents[1] / "claude_web" / "agent_bridge" / "permission-policy.mjs").resolve().as_uri()
         script = f"""
           import {{ createPreToolUseHook }} from {json.dumps(module_uri)};

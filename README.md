@@ -1,6 +1,6 @@
 # Claude Code Web
 
-[![Version](https://img.shields.io/badge/version-2.0.2-c65f31.svg)](https://github.com/heng1234/claude-web)
+[![Version](https://img.shields.io/badge/version-2.0.4-c65f31.svg)](https://github.com/heng1234/claude-web)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![CSDN Blog](https://img.shields.io/badge/博客-CSDN-red.svg)](https://blog.csdn.net/qq_39313596?type=blog)
@@ -14,7 +14,7 @@ claude-web --open
 
 > 🔒 **隐私说明**：本工具只是 `claude` CLI 的本地 GUI 包装器，不上传任何数据到第三方服务。所有对话、图片、会话历史都存在本机 `history/` `uploads/` `claude-web.db` 中。认证沿用你本地 `claude` 的登录态（`~/.claude/`），本工具不接触任何 API Key。
 
-> 当前文档对应 `2.0.2`。历史变更见 [CHANGELOG.md](CHANGELOG.md)，Authenticator 配置见 [TOTP_SETUP.md](TOTP_SETUP.md)。
+> 当前文档对应 `2.0.4`。历史变更见 [CHANGELOG.md](CHANGELOG.md)，Authenticator 配置见 [TOTP_SETUP.md](TOTP_SETUP.md)。
 
 ## 📸 截图
 
@@ -119,9 +119,9 @@ npm install -g @anthropic-ai/claude-code
 claude
 ```
 
-首次启动后，在「设置 → 通用 → Claude Agent SDK」点击「安装 / 修复锁定版」。claude-web 会按随应用发布的 `package-lock.json` 安装到 `~/.claude-web/dependencies/claude-sdk/`，先在临时目录校验，再原子切换；不会自动跟随 ccgui 或全局 CLI 升级。
+首次启动后，在「设置 → 通用 → Claude Agent SDK」点击「安装锁定版」；已经安装时也可以点击「重新安装」。claude-web 会按随应用发布的 `package-lock.json` 安装到 `~/.claude-web/dependencies/claude-sdk/`，先在临时目录校验，再原子切换；不会自动跟随外部 SDK 或全局 CLI 升级。
 
-`CLAUDE_AGENT_SDK_PATH=/path/to/@anthropic-ai/claude-agent-sdk` 可用于开发覆盖，但版本仍必须与应用锁定版本完全一致。`~/.codemoss/dependencies/claude-sdk/` 只作为 ccgui 迁移兼容路径；缺失或版本不匹配时 Code 模式会明确报错，不会隐式回退 CLI。只有显式设置 `CLAUDE_WEB_CODE_RUNTIME=cli` 才会让新的 Code 会话使用 CLI，已经归属 SDK 的会话仍不会切换。
+`CLAUDE_AGENT_SDK_PATH=/path/to/@anthropic-ai/claude-agent-sdk` 可用于开发覆盖，但版本仍必须与应用锁定版本完全一致。`~/.codemoss/dependencies/claude-sdk/` 只作为旧版安装迁移兼容路径；缺失或版本不匹配时 Code 模式会明确报错，不会隐式回退 CLI。只有显式设置 `CLAUDE_WEB_CODE_RUNTIME=cli` 才会让新的 Code 会话使用 CLI，已经归属 SDK 的会话仍不会切换。
 
 ### pip 安装
 

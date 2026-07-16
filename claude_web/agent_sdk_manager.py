@@ -95,7 +95,7 @@ def classify_sdk_path(value: object) -> str:
     roots = {
         "managed": install_root(),
         "bundled": BRIDGE_DIR,
-        "ccgui_migration": Path.home() / ".codemoss" / "dependencies" / "claude-sdk",
+        "legacy_migration": Path.home() / ".codemoss" / "dependencies" / "claude-sdk",
     }
     for label, root in roots.items():
         try:
@@ -143,7 +143,7 @@ def status_payload(active_sdk: Optional[dict] = None, *, running: bool = False, 
         "npm_available": bool(npm),
         "npm_path": npm,
         "error": error or None,
-        "migration_compatibility": active_source == "ccgui_migration",
+        "migration_compatibility": active_source == "legacy_migration",
         "upgrade_policy": "pinned",
         "auto_upgrade": False,
     }

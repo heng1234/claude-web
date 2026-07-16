@@ -2,17 +2,19 @@
 
 所有重要变更按版本记录。应用内的 What's New 和帮助面板使用 `static/changelog.json`，这里是给 GitHub / Git diff 浏览的 Markdown 版本。
 
-当前稳定版本：`2.0.2`。
+当前稳定版本：`2.0.4`。
 
 ## Unreleased
+
+## v2.0.4 - 2026-07-17
 
 - **FEATURE** Code 模式切换为 Claude Agent SDK 原生持久会话：常驻 Query 只接收本轮新消息，复用原生 Session ID，并直接转发 Claude 的流式事件、工具、Hooks、Skills、MCP、usage 和 compact 状态
 - **FEATURE** 新增 Claude-only Node NDJSON bridge，支持多会话持久 runtime、原生 interrupt、上下文查询和会话释放，不包含 Codex SDK
 - **FIX** 建立严格 runtime ownership：SDK / CLI owner 持久化到会话，失败时禁止隐式回退，旧 CLI 会话、CLI 导入和漏传 `workspace_mode` 都不会串线
 - **FIX** Code 上下文圆环接通 SDK 真实 `getContextUsage()`；直接使用动态 `totalTokens / maxTokens`，本地模型返回 200k 或 1M 都会同步显示，圆环按剩余比例缩小
 - **FEATURE** Code 手动与高水位压缩改为 Claude Code 原生 `/compact`，保持原 Session ID，并消费 `compact_boundary` 的压缩前后 Token；普通聊天仍保留本地摘要路径
-- **FEATURE** 搬入 ccgui 风格的 `PreToolUse` 权限策略，并接通 Web 运行中审批：允许一次、本会话始终允许、拒绝和 AskUserQuestion 回答都会恢复同一个 SDK turn
-- **FEATURE** claude-web 建立自己的 Agent SDK 安装机制：独立用户目录、精确 `package-lock`、临时校验、原子切换、启动失败回滚和设置页显式升级；ccgui 安装只作为迁移兼容
+- **FEATURE** 完善 `PreToolUse` 权限策略并接通 Web 运行中审批：允许一次、本会话始终允许、拒绝和 AskUserQuestion 回答都会恢复同一个 SDK turn
+- **FEATURE** claude-web 建立自己的 Agent SDK 安装机制：独立用户目录、精确 `package-lock`、临时校验、原子切换、启动失败回滚和设置页显式升级；旧版安装只作为迁移兼容
 - **FIX** Git checkpoint v2 保存 tracked、staged 和 untracked 全部状态，以专用 Git ref 防 GC；禁止运行中回滚，并在恢复失败时事务式恢复点击时现场
 - **REFACTOR** `claude_web/server.py` 成为唯一后端实现，根目录 `server.py` 只保留兼容启动转发
 - **FEATURE** 已通过访问码或 Authenticator 认证的远程设备现在可使用与电脑端相同的工具权限、Agent Loop 测试命令和自动模式；Code 模式默认使用 `bypassPermissions`
@@ -23,6 +25,11 @@
 - **FEATURE** Code 会话接通 SDK 原生 `setModel()`、`setPermissionMode()`、`forkSession()` 与 `rewindFiles()`；历史重试和编辑复用原生分叉，并持久化本地/原生消息偏移，避免回滚错轮次
 - **FIX** Agent Loop 的 Token 预算改为“新增提示 + 模型输出”，不再把已有 200k/1M 上下文和 cache read 每轮重复计费
 - **FIX** Node bridge 对同时存活的 Claude Query 设置 8 个硬上限，创建与占用原子化；满载时返回明确的 429，不再因并发竞态无限增长
+- **FEATURE** Code 模式加入完整审查主循环：Edit / Write 使用带行号和语法高亮的 unified diff，会话改动概览支持逐文件查看、保留、安全撤销和整轮回退
+- **FEATURE** 每条 SDK 用户消息提供「回退到此处」入口，先 dry-run 预览受影响文件，再调用原生 `rewindFiles()`；对话历史保留，运行中的 Code 任务禁止回退
+- **FEATURE** Composer 支持 `@文件` 自动补全和引用芯片；引用只在 Code 模式出现，并跟随草稿持久化
+- **FEATURE** 新增内联验证回路：自动检测 npm、Make、pytest 或 unittest，也可输入自定义命令；验证结果写入会话，失败时可一键让 Claude 修复
+- **UI** Claude Agent SDK 设置区改为独立状态卡片，安装、重新安装、升级和加载状态更清晰，桌面与手机端按钮不会再被挤压换行
 
 ## v2.0.2 - 2026-07-13
 

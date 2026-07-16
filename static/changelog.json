@@ -2,6 +2,20 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.0.4",
+      "date": "2026-07-17",
+      "highlights": [
+        { "type": "feature", "text": "Code 模式切换为 Claude Agent SDK 原生持久会话，复用原生 Session ID，并建立严格的 SDK / CLI runtime ownership，失败时不会隐式串线" },
+        { "type": "feature", "text": "上下文圆环接通 SDK 真实 usage 与动态窗口上限；轻上下文使用 Claude Code 原生 compact，200k / 1M 模型窗口均按本地配置同步" },
+        { "type": "feature", "text": "权限 Hook 与 Web 审批回路接通同一个 SDK turn；完成认证的手机和远程设备可以使用完整 Code 工具权限" },
+        { "type": "fix", "text": "Git checkpoint v2 完整保存 tracked、staged 和 untracked 状态，禁止运行中回退，并在恢复失败时事务式恢复现场" },
+        { "type": "feature", "text": "新增 Code 审查主循环：内联 unified diff、逐文件保留或安全撤销、整轮原生回退，以及常驻会话改动概览" },
+        { "type": "feature", "text": "新增内联测试与构建验证，失败结果可一键交给 Claude 修复；Composer 同时支持 @文件 自动补全和引用芯片" },
+        { "type": "feature", "text": "claude-web 使用独立目录和精确版本锁管理 Agent SDK，支持校验、原子切换、失败回滚和设置页显式升级" },
+        { "type": "fix", "text": "浏览器刷新或 SSE 断开后继续 drain 原生 Code turn，并恢复运行状态和未处理审批；并发 Query 设置 8 个硬上限" }
+      ]
+    },
+    {
       "version": "2.0.2",
       "date": "2026-07-13",
       "highlights": [
