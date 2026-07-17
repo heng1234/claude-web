@@ -219,7 +219,7 @@ python3 scripts/check_sensitive_info.py --paths \
         │  HTTP + SSE
         ▼
 FastAPI (Python)
-        ├── Code 模式 ── NDJSON ── Node bridge ── Claude Agent SDK 持久 Query
+        ├── Code 模式 ── NDJSON 命令 / 长度帧事件 ── Node bridge ── Claude Agent SDK 持久 Query
         └── Chat / 显式 CLI ─────── Claude Code CLI stream-json
         │
         ├── claude-web.db        会话元数据、设置、费用、授权设备

@@ -23,6 +23,8 @@
 - **FEATURE** Code 会话接通 SDK 原生 `setModel()`、`setPermissionMode()`、`forkSession()` 与 `rewindFiles()`；历史重试和编辑复用原生分叉，并持久化本地/原生消息偏移，避免回滚错轮次
 - **FIX** Agent Loop 的 Token 预算改为“新增提示 + 模型输出”，不再把已有 200k/1M 上下文和 cache read 每轮重复计费
 - **FIX** Node bridge 对同时存活的 Claude Query 设置 8 个硬上限，创建与占用原子化；满载时返回明确的 429，不再因并发竞态无限增长
+- **FIX** Node bridge 到 Python 的 SDK 事件改用 4 字节长度帧，移除 `readline()` 的 64 KiB 隐式上限；大工具结果和图片不再触发 `Separator is not found, and chunk exceed the limit`
+- **FIX** bridge reader 异常会立即标记 runtime 不健康、结束待定 turn 并在下次请求前换新 daemon；SDK 一接管本轮即回传 queued ACK，避免误判超时和 CLI 重放
 
 ## v2.0.2 - 2026-07-13
 

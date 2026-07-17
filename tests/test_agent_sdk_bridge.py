@@ -1,8 +1,9 @@
+import asyncio
+import os
 import shutil
 import tempfile
 import textwrap
 import unittest
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,8 +19,18 @@ class AgentSdkBridgeProtocolTest(unittest.IsolatedAsyncioTestCase):
             textwrap.dedent(
                 """
                 import { createInterface } from 'node:readline';
-                const write = (value) => process.stdout.write(JSON.stringify(value) + '\\n');
-                write({type: 'ready', protocol: 1, sdk: {version: 'test', path: '/fake/sdk'}});
+                const write = (value) => {
+                  const body = Buffer.from(JSON.stringify(value), 'utf8');
+                  const header = Buffer.allocUnsafe(4);
+                  header.writeUInt32BE(body.length, 0);
+                  process.stdout.write(Buffer.concat([header, body]));
+                };
+                const writeInvalidOversizedHeader = () => {
+                  const header = Buffer.allocUnsafe(4);
+                  header.writeUInt32BE(64 * 1024 * 1024 + 1, 0);
+                  process.stdout.write(header);
+                };
+                write({type: 'ready', protocol: 2, sdk: {version: 'test', path: '/fake/sdk'}});
                 const reader = createInterface({input: process.stdin, crlfDelay: Infinity});
                 let pendingPermissionTurn = null;
                 reader.on('line', (line) => {
@@ -31,6 +42,17 @@ class AgentSdkBridgeProtocolTest(unittest.IsolatedAsyncioTestCase):
                       pendingPermissionTurn = {id: command.id, sessionId};
                       write({id: command.id, type: 'permission_request', approvalId: 'approval-1',
                         toolName: 'Bash', input: {command: 'pwd'}, suggestions: [{type: 'addRules'}]});
+                      return;
+                    }
+                    if (command.params.message === 'large event') {
+                      write({id: command.id, type: 'event', event: {
+                        type: 'assistant', payload: 'x'.repeat(1024 * 1024)
+                      }});
+                      write({id: command.id, type: 'done', success: true, sessionId});
+                      return;
+                    }
+                    if (command.params.message === 'corrupt frame') {
+                      writeInvalidOversizedHeader();
                       return;
                     }
                     write({id: command.id, type: 'event', event: {
@@ -161,6 +183,67 @@ class AgentSdkBridgeProtocolTest(unittest.IsolatedAsyncioTestCase):
             {"cwd": self.temp_dir.name, "resumeSessionId": "native-session"},
         )
         self.assertEqual(["demo.py"], rewind["result"]["filesChanged"])
+
+    async def test_large_sdk_event_is_not_limited_by_asyncio_readline(self):
+        turn = await self.bridge.open_turn(
+            "large-event-session",
+            {"message": "large event", "cwd": self.temp_dir.name, "sessionId": "large-native"},
+        )
+        envelopes = [envelope async for envelope in turn.events()]
+        self.assertEqual(["event", "done"], [item["type"] for item in envelopes])
+        self.assertEqual(1024 * 1024, len(envelopes[0]["event"]["payload"]))
+        self.assertTrue(self.bridge.running)
+
+    async def test_reader_failure_marks_bridge_unhealthy_and_restarts_daemon(self):
+        self.assertTrue(await self.bridge.ensure_started())
+        original_pid = self.bridge.process.pid
+        turn = await self.bridge.open_turn(
+            "corrupt-frame-session",
+            {"message": "corrupt frame", "cwd": self.temp_dir.name, "sessionId": "corrupt-native"},
+        )
+        envelopes = [envelope async for envelope in turn.events()]
+        self.assertEqual(["error", "done"], [item["type"] for item in envelopes])
+        self.assertEqual("bridge_transport_lost", envelopes[0]["code"])
+        self.assertIn("frame size", envelopes[0]["message"])
+        self.assertFalse(self.bridge.running)
+
+        self.assertTrue(await self.bridge.ensure_started())
+        self.assertNotEqual(original_pid, self.bridge.process.pid)
+        recovered = await self.bridge.open_turn(
+            "recovered-session",
+            {"message": "hello", "cwd": self.temp_dir.name, "sessionId": "recovered-native"},
+        )
+        recovered_envelopes = [envelope async for envelope in recovered.events()]
+        self.assertEqual("done", recovered_envelopes[-1]["type"])
+
+    async def test_explicit_restart_finishes_old_turn_before_starting_new_reader(self):
+        turn = await self.bridge.open_turn(
+            "restart-session",
+            {"message": "needs permission", "cwd": self.temp_dir.name, "sessionId": "restart-native"},
+        )
+        original_pid = self.bridge.process.pid
+
+        self.assertTrue(await self.bridge.restart("test restart"))
+        self.assertNotEqual(original_pid, self.bridge.process.pid)
+        envelopes = [envelope async for envelope in turn.events()]
+        self.assertEqual("permission_request", envelopes[0]["type"])
+        self.assertEqual(["error", "done"], [item["type"] for item in envelopes[-2:]])
+
+        recovered = await self.bridge.open_turn(
+            "post-restart-session",
+            {"message": "hello", "cwd": self.temp_dir.name, "sessionId": "post-restart-native"},
+        )
+        self.assertEqual("done", [item async for item in recovered.events()][-1]["type"])
+
+    async def test_transport_failure_unblocks_a_full_turn_queue(self):
+        queue = asyncio.Queue(maxsize=2)
+        queue.put_nowait({"type": "event", "sequence": 1})
+        queue.put_nowait({"type": "event", "sequence": 2})
+
+        self.bridge._force_fail_queue(queue, "reader stopped")
+
+        self.assertEqual("error", queue.get_nowait()["type"])
+        self.assertEqual("done", queue.get_nowait()["type"])
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is required for the bridge runtime-limit test")

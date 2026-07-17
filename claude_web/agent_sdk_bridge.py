@@ -1,8 +1,13 @@
-"""Async NDJSON client for the Claude Agent SDK Node bridge.
+"""Async framed client for the Claude Agent SDK Node bridge.
 
 The browser never talks to the SDK directly. One Node daemon owns the native
 Claude Query objects while FastAPI routes their raw SDK events into the
 existing SSE and history pipeline.
+
+Commands sent to Node remain newline-delimited JSON for compatibility with the
+daemon's stdin parser. Responses use a 4-byte big-endian length prefix followed
+by one UTF-8 JSON payload. Framing avoids asyncio's line-reader limit for large
+tool results, images, and SDK events.
 """
 
 from __future__ import annotations
@@ -19,6 +24,14 @@ from typing import AsyncIterator, Dict, List, Optional
 
 
 _log = logging.getLogger("claude_web.agent_sdk")
+
+BRIDGE_PROTOCOL_VERSION = 2
+DEFAULT_SUBPROCESS_STREAM_LIMIT = 16 * 1024 * 1024
+MIN_SUBPROCESS_STREAM_LIMIT = 1024 * 1024
+MAX_SUBPROCESS_STREAM_LIMIT = 64 * 1024 * 1024
+DEFAULT_MAX_FRAME_SIZE = 64 * 1024 * 1024
+MIN_MAX_FRAME_SIZE = 1024 * 1024
+MAX_MAX_FRAME_SIZE = 256 * 1024 * 1024
 
 
 class AgentSdkBridgeError(RuntimeError):
@@ -46,6 +59,7 @@ class AgentSdkBridge:
         self.sdk_info: Optional[dict] = None
         self.last_error = ""
         self._start_lock = asyncio.Lock()
+        self._terminate_lock = asyncio.Lock()
         self._write_lock = asyncio.Lock()
         self._ready: Optional[asyncio.Future] = None
         self._reader_task: Optional[asyncio.Task] = None
@@ -53,6 +67,34 @@ class AgentSdkBridge:
         self._queues: Dict[str, "asyncio.Queue[dict]"] = {}
         self._turn_sessions: Dict[str, str] = {}
         self._responses: Dict[str, asyncio.Future] = {}
+        self._transport_failed = False
+        self._stopping = False
+
+    @staticmethod
+    def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+        try:
+            value = int(os.environ.get(name, str(default)))
+        except (TypeError, ValueError):
+            value = default
+        return max(minimum, min(value, maximum))
+
+    @property
+    def subprocess_stream_limit(self) -> int:
+        return self._bounded_env_int(
+            "CLAUDE_WEB_AGENT_BRIDGE_STREAM_LIMIT",
+            DEFAULT_SUBPROCESS_STREAM_LIMIT,
+            MIN_SUBPROCESS_STREAM_LIMIT,
+            MAX_SUBPROCESS_STREAM_LIMIT,
+        )
+
+    @property
+    def max_frame_size(self) -> int:
+        return self._bounded_env_int(
+            "CLAUDE_WEB_AGENT_BRIDGE_MAX_FRAME_SIZE",
+            DEFAULT_MAX_FRAME_SIZE,
+            MIN_MAX_FRAME_SIZE,
+            MAX_MAX_FRAME_SIZE,
+        )
 
     @property
     def enabled(self) -> bool:
@@ -62,19 +104,30 @@ class AgentSdkBridge:
 
     @property
     def running(self) -> bool:
+        return (
+            self.process is not None
+            and self.process.returncode is None
+            and self.sdk_info is not None
+            and not self._transport_failed
+            and self._reader_task is not None
+            and not self._reader_task.done()
+        )
+
+    @property
+    def process_alive(self) -> bool:
         return self.process is not None and self.process.returncode is None
 
     async def ensure_started(self) -> bool:
         if not self.enabled:
             self.last_error = "Claude Agent SDK runtime disabled by CLAUDE_WEB_CODE_RUNTIME"
             return False
-        if self.running and self.sdk_info is not None:
+        if self.running:
             return True
         async with self._start_lock:
-            if self.running and self.sdk_info is not None:
+            if self.running:
                 return True
             await self._start()
-            return self.running and self.sdk_info is not None
+            return self.running
 
     async def _start(self) -> None:
         await self._terminate_process()
@@ -85,8 +138,11 @@ class AgentSdkBridge:
         if not self.daemon_path.exists():
             self.last_error = f"Claude Agent SDK bridge missing: {self.daemon_path}"
             return
+        self.last_error = ""
         loop = asyncio.get_running_loop()
         self._ready = loop.create_future()
+        self._transport_failed = False
+        self._stopping = False
         try:
             self.process = await asyncio.create_subprocess_exec(
                 node,
@@ -95,10 +151,17 @@ class AgentSdkBridge:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(self.daemon_path.parent),
+                limit=self.subprocess_stream_limit,
             )
             self._reader_task = asyncio.create_task(self._read_stdout())
             self._stderr_task = asyncio.create_task(self._read_stderr())
             ready = await asyncio.wait_for(asyncio.shield(self._ready), timeout=12.0)
+            protocol = int(ready.get("protocol") or 0)
+            if protocol != BRIDGE_PROTOCOL_VERSION:
+                raise AgentSdkBridgeError(
+                    f"Unsupported Claude Agent SDK bridge protocol {protocol}; "
+                    f"expected {BRIDGE_PROTOCOL_VERSION}"
+                )
             self.sdk_info = ready.get("sdk") or {}
             self.last_error = ""
             _log.info("Claude Agent SDK bridge ready: %s", self.sdk_info)
@@ -111,16 +174,33 @@ class AgentSdkBridge:
         process = self.process
         if process is None or process.stdout is None:
             return
+        unexpected_exit = False
         try:
             while True:
-                raw = await process.stdout.readline()
-                if not raw:
-                    break
+                try:
+                    header = await process.stdout.readexactly(4)
+                except asyncio.IncompleteReadError as exc:
+                    if not exc.partial:
+                        unexpected_exit = not self._stopping
+                        break
+                    raise AgentSdkBridgeError("Claude Agent SDK bridge emitted a truncated frame header") from exc
+                frame_size = int.from_bytes(header, "big")
+                if frame_size <= 0 or frame_size > self.max_frame_size:
+                    raise AgentSdkBridgeError(
+                        f"Claude Agent SDK bridge frame size {frame_size} exceeds the "
+                        f"configured limit {self.max_frame_size}"
+                    )
+                try:
+                    raw = await process.stdout.readexactly(frame_size)
+                except asyncio.IncompleteReadError as exc:
+                    raise AgentSdkBridgeError(
+                        f"Claude Agent SDK bridge frame was truncated "
+                        f"({len(exc.partial)}/{frame_size} bytes)"
+                    ) from exc
                 try:
                     payload = json.loads(raw.decode("utf-8", errors="replace"))
-                except json.JSONDecodeError:
-                    _log.warning("Ignoring non-JSON Agent SDK bridge output")
-                    continue
+                except json.JSONDecodeError as exc:
+                    raise AgentSdkBridgeError("Claude Agent SDK bridge emitted invalid framed JSON") from exc
                 payload_type = payload.get("type")
                 request_id = str(payload.get("id") or "")
                 if payload_type == "ready":
@@ -165,21 +245,47 @@ class AgentSdkBridge:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            unexpected_exit = True
             self.last_error = str(exc)
+            self._transport_failed = True
             _log.exception("Claude Agent SDK bridge reader failed")
         finally:
+            if unexpected_exit and not self.last_error:
+                self.last_error = "Claude Agent SDK bridge exited unexpectedly"
+                self._transport_failed = True
             message = self.last_error or "Claude Agent SDK bridge exited"
             if self._ready is not None and not self._ready.done():
                 self._ready.set_exception(AgentSdkBridgeError(message))
             for queue in list(self._queues.values()):
-                await queue.put({"type": "error", "message": message})
-                await queue.put({"type": "done", "success": False})
+                self._force_fail_queue(queue, message)
             self._queues.clear()
             self._turn_sessions.clear()
             for future in list(self._responses.values()):
                 if not future.done():
                     future.set_exception(AgentSdkBridgeError(message))
             self._responses.clear()
+            if unexpected_exit:
+                # Let this reader finish before process teardown waits on it.
+                # The expected-process guard prevents this cleanup task from
+                # touching a replacement daemon started in the meantime.
+                asyncio.create_task(self._terminate_process(expected_process=process))
+
+    @staticmethod
+    def _force_fail_queue(queue: "asyncio.Queue[dict]", message: str) -> None:
+        terminal = (
+            {"type": "error", "message": message, "code": "bridge_transport_lost"},
+            {"type": "done", "success": False},
+        )
+        while queue.qsize() > max(0, queue.maxsize - len(terminal)):
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        for item in terminal:
+            try:
+                queue.put_nowait(item)
+            except asyncio.QueueFull:
+                break
 
     async def _read_stderr(self) -> None:
         process = self.process
@@ -193,6 +299,10 @@ class AgentSdkBridge:
                 _log.debug("Agent SDK: %s", raw.decode("utf-8", errors="replace").rstrip())
         except asyncio.CancelledError:
             raise
+        except Exception as exc:
+            # stderr is diagnostic-only. A giant/non-delimited diagnostic must
+            # not take down the framed stdout transport or leak a task error.
+            _log.warning("Claude Agent SDK bridge stderr reader stopped: %s", exc)
 
     async def _write(self, payload: dict) -> None:
         if not self.running or self.process is None or self.process.stdin is None:
@@ -387,40 +497,65 @@ class AgentSdkBridge:
     async def close_session(self, session_key: str) -> None:
         await self.request("close_session", {"sessionKey": session_key})
 
+    async def restart(self, reason: str = "Claude Agent SDK bridge restart requested") -> bool:
+        """Replace the daemon and all in-memory runtimes with a clean bridge.
+
+        Native Claude sessions remain persisted by the SDK and are resumed on
+        the next request. The method deliberately never replays a user turn.
+        """
+        self.last_error = reason
+        self._transport_failed = True
+        async with self._start_lock:
+            await self._start()
+            return self.running
+
     def status(self) -> dict:
         return {
             "enabled": self.enabled,
             "running": self.running,
+            "process_alive": self.process_alive,
+            "reader_alive": self._reader_task is not None and not self._reader_task.done(),
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "sdk": self.sdk_info,
             "error": self.last_error or None,
         }
 
-    async def _terminate_process(self) -> None:
-        process = self.process
-        self.process = None
-        self.sdk_info = None
-        current = asyncio.current_task()
-        for task in (self._reader_task, self._stderr_task):
-            if task is not None and task is not current and not task.done():
-                task.cancel()
-        self._reader_task = None
-        self._stderr_task = None
-        if process is None or process.returncode is not None:
-            return
-        try:
-            process.terminate()
-        except ProcessLookupError:
-            return
-        try:
-            await asyncio.wait_for(process.wait(), timeout=3.0)
-        except asyncio.TimeoutError:
+    async def _terminate_process(self, *, expected_process: Optional[asyncio.subprocess.Process] = None) -> None:
+        async with self._terminate_lock:
+            if expected_process is not None and self.process is not expected_process:
+                return
+            process = self.process
+            self.process = None
+            self.sdk_info = None
+            current = asyncio.current_task()
+            cancelled_tasks = []
+            for task in (self._reader_task, self._stderr_task):
+                if task is not None and task is not current and not task.done():
+                    task.cancel()
+                    cancelled_tasks.append(task)
+            self._reader_task = None
+            self._stderr_task = None
+            if cancelled_tasks:
+                # Do not let an old reader's finally block race with the next
+                # daemon's _ready future or event queues.
+                await asyncio.gather(*cancelled_tasks, return_exceptions=True)
+            if process is None or process.returncode is not None:
+                return
             try:
-                process.kill()
+                process.terminate()
             except ProcessLookupError:
                 return
-            await process.wait()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=3.0)
+            except asyncio.TimeoutError:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    return
+                await process.wait()
 
     async def shutdown(self) -> None:
+        self._stopping = True
         if self.running:
             try:
                 await self.request("shutdown", timeout=2.0)

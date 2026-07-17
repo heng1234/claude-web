@@ -5487,13 +5487,18 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 turn = await _claude_agent_bridge.open_turn(session_id, agent_params)
             except asyncio.TimeoutError as exc:
                 try:
-                    await _claude_agent_bridge.close_session(session_id)
+                    await _claude_agent_bridge.restart(
+                        "Claude Agent SDK bridge did not queue the turn within the acknowledgement window"
+                    )
                 except Exception:
                     pass
                 await discard_git_checkpoint(checkpoint, work_dir)
                 raise HTTPException(
                     status_code=504,
-                    detail="Claude Agent SDK did not acknowledge the turn; CLI fallback was blocked to prevent duplicate execution.",
+                    detail=(
+                        "Claude Agent SDK bridge did not queue the turn; the bridge was restarted "
+                        "without replaying the request. Check recent file/tool state before sending it again."
+                    ),
                 ) from exc
             except AgentSdkBridgeError as exc:
                 message = str(exc)
@@ -6792,10 +6797,18 @@ async def compact_agent_sdk_session(session_id: str, req: NativeCompactRequest):
         turn = await _claude_agent_bridge.open_turn(session_id, params)
     except asyncio.TimeoutError as exc:
         try:
-            await _claude_agent_bridge.close_session(session_id)
+            await _claude_agent_bridge.restart(
+                "Claude Agent SDK bridge did not queue native compact within the acknowledgement window"
+            )
         except Exception:
             pass
-        raise HTTPException(status_code=504, detail="Claude Agent SDK did not acknowledge native compact") from exc
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "Claude Agent SDK bridge did not queue native compact; the bridge was restarted "
+                "without replaying the request"
+            ),
+        ) from exc
     except AgentSdkBridgeError as exc:
         message = str(exc)
         status_code = (

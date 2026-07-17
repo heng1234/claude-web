@@ -15,6 +15,12 @@ const EXPECTED_SDK_VERSION = BRIDGE_PACKAGE.dependencies?.[PACKAGE_NAME];
 const ALLOW_UNSUPPORTED_SDK = process.env.CLAUDE_WEB_ALLOW_UNSUPPORTED_SDK === '1';
 const IDLE_RUNTIME_MS = 30 * 60 * 1000;
 const MAX_RUNTIMES = 8;
+const BRIDGE_PROTOCOL_VERSION = 2;
+const DEFAULT_MAX_FRAME_SIZE = 64 * 1024 * 1024;
+const configuredMaxFrameSize = Number.parseInt(process.env.CLAUDE_WEB_AGENT_BRIDGE_MAX_FRAME_SIZE || '', 10);
+const MAX_FRAME_SIZE = Number.isFinite(configuredMaxFrameSize)
+  ? Math.max(1024 * 1024, Math.min(configuredMaxFrameSize, 256 * 1024 * 1024))
+  : DEFAULT_MAX_FRAME_SIZE;
 
 const runtimes = new Map();
 const permissionWaiters = new Map();
@@ -37,10 +43,18 @@ async function withRuntimeMutation(action) {
 }
 
 function write(payload) {
-  const line = `${JSON.stringify(payload, (_key, value) =>
-    typeof value === 'bigint' ? Number(value) : value)}\n`;
+  const body = Buffer.from(JSON.stringify(payload, (_key, value) =>
+    typeof value === 'bigint' ? Number(value) : value), 'utf8');
+  if (body.length <= 0 || body.length > MAX_FRAME_SIZE) {
+    return Promise.reject(new Error(
+      `Claude Agent SDK bridge frame size ${body.length} exceeds the configured limit ${MAX_FRAME_SIZE}`
+    ));
+  }
+  const header = Buffer.allocUnsafe(4);
+  header.writeUInt32BE(body.length, 0);
+  const frame = Buffer.concat([header, body]);
   const pending = outputTail.then(() => new Promise((resolveWrite, rejectWrite) => {
-    process.stdout.write(line, (error) => error ? rejectWrite(error) : resolveWrite());
+    process.stdout.write(frame, (error) => error ? rejectWrite(error) : resolveWrite());
   }));
   outputTail = pending.catch(() => {});
   return pending;
@@ -468,6 +482,25 @@ async function runtimeForSend(key, params) {
   return withRuntimeMutation(() => runtimeForSendLocked(key, params));
 }
 
+function preflightSend(command) {
+  const params = command.params || {};
+  const key = String(params.sessionKey || '').trim();
+  if (!key) throw new Error('sessionKey is required');
+  const runtime = runtimes.get(key);
+  if (runtime?.activeRequestId || runtime?.controlActive) {
+    throw new Error('A Code turn is already running for this session');
+  }
+  if (!runtime && runtimes.size >= MAX_RUNTIMES) {
+    const hasDisposableRuntime = [...runtimes.values()].some(
+      (candidate) => !candidate.activeRequestId && !candidate.controlActive
+    );
+    if (!hasDisposableRuntime) {
+      throw new Error(`Claude Agent SDK runtime limit reached (${MAX_RUNTIMES}); stop an active Code session and retry`);
+    }
+  }
+  return { key, params };
+}
+
 async function handleSend(command) {
   const params = command.params || {};
   const key = String(params.sessionKey || '').trim();
@@ -481,8 +514,6 @@ async function handleSend(command) {
     runtime.activeRequestId = command.id;
     runtime.lastUsed = Date.now();
     try {
-      // Acknowledge before pushing so Python can decide whether SDK or CLI owns this turn.
-      await write({ id: command.id, type: 'accepted', sessionId: runtime.sessionId });
       runtime.input.push(userMessage(params, runtime));
     } catch (error) {
       runtime.activeRequestId = null;
@@ -699,7 +730,7 @@ async function handle(command) {
 
 async function main() {
   await loadSdk();
-  await write({ type: 'ready', sdk: sdkInfo, protocol: 1 });
+  await write({ type: 'ready', sdk: sdkInfo, protocol: BRIDGE_PROTOCOL_VERSION });
   const reader = createInterface({ input: process.stdin, crlfDelay: Infinity });
   reader.on('line', (line) => {
     if (!line.trim() || shuttingDown) return;
@@ -710,7 +741,22 @@ async function main() {
       void write({ type: 'error', message: `Invalid JSON: ${errorText(error)}` });
       return;
     }
-    Promise.resolve(handle(command)).catch(async (error) => {
+    Promise.resolve((async () => {
+      if (command.method === 'send') {
+        const { params } = preflightSend(command);
+        // Claim SDK ownership as soon as the daemon has accepted the turn into
+        // its in-process dispatch queue.
+        // Runtime creation and dynamic controls may be slow, but they must not
+        // make Python treat the request as unacknowledged and risk replaying it.
+        await write({
+          id: command.id,
+          type: 'accepted',
+          phase: 'queued',
+          sessionId: params.resumeSessionId || params.sessionId || null,
+        });
+      }
+      await handle(command);
+    })()).catch(async (error) => {
       await write({ id: command.id, type: 'error', message: errorText(error) });
       if (command.method === 'send') await write({ id: command.id, type: 'done', success: false });
     });

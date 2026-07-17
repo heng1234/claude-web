@@ -38,6 +38,42 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
         finally:
             self._cleanup_session(session_id)
 
+    async def test_unacknowledged_sdk_turn_restarts_bridge_without_cli_replay(self):
+        session_id = "runtime-timeout-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/sdk-timeout-project"
+        server.upsert_session(session_id, "timeout", cwd, "code")
+        checkpoint = {"kind": "git", "ref": "test-checkpoint"}
+        try:
+            with patch.dict(os.environ, {"CLAUDE_WEB_CODE_RUNTIME": "agent-sdk"}), \
+                    patch.object(server, "create_git_checkpoint", AsyncMock(return_value=checkpoint)), \
+                    patch.object(server, "git_dirty_signatures", AsyncMock(return_value={})), \
+                    patch.object(server, "discard_git_checkpoint", AsyncMock()) as discard, \
+                    patch.object(server._claude_agent_bridge, "ensure_started", AsyncMock(return_value=True)), \
+                    patch.object(
+                        server._claude_agent_bridge,
+                        "open_turn",
+                        AsyncMock(side_effect=asyncio.TimeoutError),
+                    ), \
+                    patch.object(server._claude_agent_bridge, "restart", AsyncMock(return_value=True)) as restart, \
+                    patch.object(server._claude_agent_bridge, "close_session", AsyncMock()) as close_session:
+                with self.assertRaises(HTTPException) as raised:
+                    await server._chat_response(
+                        server.ChatRequest(
+                            message="run once",
+                            session_id=session_id,
+                            cwd=cwd,
+                            workspace_mode="code",
+                        )
+                    )
+            self.assertEqual(504, raised.exception.status_code)
+            self.assertIn("without replaying", str(raised.exception.detail))
+            restart.assert_awaited_once()
+            close_session.assert_not_awaited()
+            discard.assert_awaited_once_with(checkpoint, cwd)
+            self.assertEqual([], server.load_events(session_id))
+        finally:
+            self._cleanup_session(session_id)
+
     async def test_running_agent_loop_owns_session_between_turns(self):
         session_id = "loop-owner-" + uuid.uuid4().hex
         job_id = "job-" + uuid.uuid4().hex
