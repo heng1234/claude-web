@@ -13,7 +13,11 @@
 - **FEATURE** Code 手动与高水位压缩改为 Claude Code 原生 `/compact`，保持原 Session ID，并消费 `compact_boundary` 的压缩前后 Token；普通聊天仍保留本地摘要路径
 - **FEATURE** 搬入 ccgui 风格的 `PreToolUse` 权限策略，并接通 Web 运行中审批：允许一次、本会话始终允许、拒绝和 AskUserQuestion 回答都会恢复同一个 SDK turn
 - **FEATURE** claude-web 建立自己的 Agent SDK 安装机制：独立用户目录、精确 `package-lock`、临时校验、原子切换、启动失败回滚和设置页显式升级；ccgui 安装只作为迁移兼容
-- **FEATURE** Claude Agent SDK 设置卡新增稳定版本目录和版本选择器，可显式更新、降级或重装；推荐版继续使用应用锁文件，自选版精确锁定版本，激活时校验实际加载版本并在失败时恢复原安装
+- **FEATURE** Claude Agent SDK 设置卡新增稳定版本目录和版本选择器，可显式更新、降级或重装；应用锁定版继续使用精确锁文件，自选版精确锁定版本，激活时校验实际加载版本并在失败时恢复原安装
+- **FEATURE** Code 模式新增会话级待发送队列：Claude 运行时继续按 Enter 或点击发送会依次排队，不会打断当前任务；图片、文档和链接上下文按消息快照，失败、停止或 compact 失败时保留队列并等待手动继续
+- **FEATURE** Code 模式运行中新增“正在生成响应”与本轮耗时提示：按秒更新，超过一分钟显示“分 + 秒”，工具结果后继续沿用本轮起始时间，刷新恢复中的原生会话也会重新显示运行反馈
+- **FIX** Code 输入区上方的会话状态改为常驻三段式工具条，任务、子代理和文件变更始终保持固定位置；零状态弱化并禁用，避免仅剩“编辑”时铺满整行和输入区上下跳动
+- **FIX** Code 文件审查弹窗改为紧凑的分层操作面板，Diff、保留、撤销、整轮回退和运行验证不再使用同一类大描边按钮；消息回退改为常驻的轻量“回退文件”操作，并补齐桌面、手机和键盘焦点状态
 - **FIX** Git checkpoint v2 保存 tracked、staged 和 untracked 全部状态，以专用 Git ref 防 GC；禁止运行中回滚，并在恢复失败时事务式恢复点击时现场
 - **REFACTOR** `claude_web/server.py` 成为唯一后端实现，根目录 `server.py` 只保留兼容启动转发
 - **FEATURE** 已通过访问码或 Authenticator 认证的远程设备现在可使用与电脑端相同的工具权限、Agent Loop 测试命令和自动模式；Code 模式默认使用 `bypassPermissions`

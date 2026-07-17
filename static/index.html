@@ -940,6 +940,7 @@
     font-weight: 620;
     color: #8f8983;
   }
+  .thinking-elapsed { display: none; }
   .thinking-block {
     width: 100%;
     margin: 6px 0;
@@ -4758,8 +4759,40 @@
   body.code-mode .prose-custom p,
   body.code-mode .prose-custom ul,
   body.code-mode .prose-custom ol {
-    margin-top: 9px;
-    margin-bottom: 9px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+  }
+  body.code-mode .prose-custom ul,
+  body.code-mode .prose-custom ol {
+    padding-left: 22px;
+  }
+  body.code-mode .prose-custom li {
+    margin: 6px 0;
+    padding-left: 4px;
+    line-height: 1.68;
+  }
+  body.code-mode .prose-custom li::marker {
+    color: color-mix(in srgb, var(--accent) 65%, var(--text-subtle));
+    font-weight: 600;
+  }
+  body.code-mode .prose-custom code {
+    padding: 2px 6px;
+    border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    color: #b0532c;
+    font-size: 0.85em;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  :root.dark body.code-mode .prose-custom code {
+    border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: #f0a878;
+  }
+  body.code-mode .prose-custom pre code {
+    padding: 0; border: 0; background: transparent;
+    color: inherit; white-space: pre; font-weight: 400;
   }
   body.code-mode .prose-custom pre {
     margin: 12px 0;
@@ -4781,6 +4814,21 @@
   }
   body.code-mode .prose-custom hr {
     margin: 22px 0;
+  }
+  body.code-mode .prose-custom strong { font-weight: 620; color: #1f1d1b; }
+  :root.dark body.code-mode .prose-custom strong { color: #f4f1ed; }
+  body.code-mode .prose-custom p > strong:only-child {
+    display: block;
+    padding: 12px 16px;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+    color: var(--text);
+    font-weight: 560;
+    line-height: 1.7;
+  }
+  :root.dark body.code-mode .prose-custom p > strong:only-child {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
   }
   .cw-context-compaction-status {
     display: none;
@@ -4839,6 +4887,9 @@
       display: none !important;
       animation: none !important;
     }
+    body.code-mode .thinking-indicator::before {
+      animation: none !important;
+    }
   }
   body.code-mode .message-feedback,
   body.code-mode .followup-chips,
@@ -4874,6 +4925,14 @@
     color: #7d766f;
     font-size: 12.5px;
     font-weight: 560;
+  }
+  body.code-mode .thinking-elapsed {
+    display: inline;
+    color: #9a948d;
+    font-size: 12px;
+    font-weight: 450;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   body.code-mode .tool-strip-wrap {
     gap: 3px;
@@ -5570,6 +5629,24 @@
   :root.dark body.code-mode .prose-custom pre .hljs-title,
   :root.dark body.code-mode .prose-custom pre .hljs-function { color: #8dbce8 !important; }
 
+  body.code-mode .prose-custom pre .copy-btn {
+    background: rgba(0,0,0,.06); color: #5c574f; border-color: rgba(0,0,0,.1);
+  }
+  body.code-mode .prose-custom pre .copy-btn:hover { background: rgba(0,0,0,.12); color: #302e2b; }
+  body.code-mode .prose-custom pre .run-btn {
+    background: rgba(34,197,94,.12); color: #2d7a4c; border-color: rgba(34,197,94,.28);
+  }
+  body.code-mode .prose-custom pre .run-btn:hover { background: rgba(34,197,94,.2); color: #1d6b3a; }
+  body.code-mode .prose-custom pre .run-btn.running { background: rgba(251,146,60,.15); color: #a0521a; }
+  :root.dark body.code-mode .prose-custom pre .copy-btn {
+    background: rgba(255,255,255,.08); color: #c8c2ba; border-color: rgba(255,255,255,.12);
+  }
+  :root.dark body.code-mode .prose-custom pre .copy-btn:hover { background: rgba(255,255,255,.16); color: #ece8e3; }
+  :root.dark body.code-mode .prose-custom pre .run-btn {
+    background: rgba(34,197,94,.16); color: #86efac; border-color: rgba(34,197,94,.3);
+  }
+  :root.dark body.code-mode .prose-custom pre .run-btn:hover { background: rgba(34,197,94,.26); }
+
   body.code-mode .tool-strip-progress,
   body.code-mode .tool-strip-summary {
     width: min(100%, 720px);
@@ -5675,6 +5752,7 @@
     padding: 0 !important;
     overflow: hidden;
   }
+  #gitDiffModal.modal-backdrop { z-index: 60; }
   .git-diff-modal-head {
     display: flex;
     align-items: center;
@@ -5691,18 +5769,23 @@
     padding: 14px 0;
     border: 0;
     border-radius: 0;
-    background: #1d1f21;
-    color: #dedbd7;
+    background: #fafafa;
+    color: #24292f;
     font: 12px/1.58 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
     white-space: pre;
   }
   .git-diff-line { display:block; min-height:19px; padding:0 14px; }
-  .git-diff-line.add { background:rgba(49,133,78,.20); color:#b8e0c3; }
-  .git-diff-line.remove { background:rgba(181,66,63,.20); color:#f0b7b4; }
-  .git-diff-line.hunk { color:#a7bfe8; background:rgba(77,105,156,.16); }
-  .git-diff-line.meta { color:#d8b879; }
+  .git-diff-line.add { background:rgba(34,197,94,.12); color:#1a6b35; }
+  .git-diff-line.remove { background:rgba(239,68,68,.1); color:#9b2420; }
+  .git-diff-line.hunk { color:#3b6fb5; background:rgba(59,130,246,.07); }
+  .git-diff-line.meta { color:#7c6b3a; }
   .git-diff-line .hljs { display:inline; padding:0; background:transparent; color:inherit; }
-  .git-diff-prefix { display:inline-block; width:16px; user-select:none; opacity:.72; }
+  .git-diff-prefix { display:inline-block; width:16px; user-select:none; opacity:.85; }
+  .dark .git-diff-content { background:#1e1e1e; color:#d4d4d4; }
+  .dark .git-diff-line.add { background:rgba(49,133,78,.2); color:#a6e3a1; }
+  .dark .git-diff-line.remove { background:rgba(181,66,63,.2); color:#f5a8a5; }
+  .dark .git-diff-line.hunk { color:#89b4fa; background:rgba(77,105,156,.15); }
+  .dark .git-diff-line.meta { color:#e6c98f; }
   .cw-changed-file-review {
     border-bottom:1px solid color-mix(in srgb,var(--border) 68%,transparent);
   }
@@ -5716,29 +5799,53 @@
   .cw-inline-git-diff {
     overflow:hidden;
     border-top:1px solid var(--border);
-    background:#1d1f21;
+    background:#fafaf9;
   }
   .cw-inline-git-diff .git-diff-content {
     max-height:420px;
-    padding:10px 0;
-    font-size:11.5px;
+    padding:12px 0;
+    font-size:12.5px;
+    line-height:1.6;
+    letter-spacing:.01em;
+    color:#3d3a36;
+    background:#fafaf9;
   }
+  .cw-inline-git-diff .git-diff-line { color:#3d3a36; }
+  .cw-inline-git-diff .git-diff-line.add { background:rgba(34,197,94,.1); color:#1a5c32; }
+  .cw-inline-git-diff .git-diff-line.remove { background:rgba(239,68,68,.08); color:#8b2520; }
+  .cw-inline-git-diff .git-diff-line.hunk { background:rgba(59,130,246,.06); color:#3b6fb5; }
+  .cw-inline-git-diff .git-diff-line.meta { color:#8a7e56; }
+  .cw-inline-git-diff .git-diff-prefix { opacity:.55; }
   .cw-inline-review-actions {
     display:flex;
     flex-wrap:wrap;
     align-items:center;
     justify-content:flex-end;
-    gap:7px;
-    padding:9px 10px;
-    border-top:1px solid rgba(255,255,255,.09);
-    background:#232528;
+    gap:8px;
+    padding:10px 14px;
+    border-top:1px solid var(--border);
+    background:var(--surface);
   }
-  .cw-inline-review-state { margin-right:auto; color:#b9b4ad; font-size:11px; }
-  .cw-inline-review-state.kept { color:#91d2aa; }
-  .cw-inline-review-state.reverted { color:#efaaa6; }
-  .cw-inline-review-actions .cw-review-btn { border-color:#51555b; background:#2c2f33; color:#eeeae5; }
-  .cw-inline-review-actions .cw-review-btn.primary { border-color:#397956; background:#315e46; color:#f5fff8; }
-  .cw-inline-review-actions .cw-review-btn.danger { border-color:#8a4541; color:#ffc6c2; }
+  .cw-inline-review-state { margin-right:auto; color:var(--text-muted); font-size:11.5px; font-weight:500; }
+  .cw-inline-review-state.kept { color:#16834a; }
+  .cw-inline-review-state.reverted { color:#b53d38; }
+  .cw-inline-review-actions .cw-review-btn {
+    min-height:34px; padding:0 14px; border-radius:9px;
+    border:1px solid var(--border); background:var(--surface); color:var(--text);
+    font-size:12.5px; font-weight:550;
+    transition:background .15s ease,border-color .15s ease,transform .1s ease;
+  }
+  .cw-inline-review-actions .cw-review-btn:hover { background:var(--surface-2); border-color:var(--border-strong); }
+  .cw-inline-review-actions .cw-review-btn:active { transform:translateY(.5px); }
+  .cw-inline-review-actions .cw-review-btn.primary {
+    border-color:transparent; background:var(--accent); color:#fff;
+    box-shadow:0 1px 3px color-mix(in srgb,var(--accent) 35%,transparent);
+  }
+  .cw-inline-review-actions .cw-review-btn.primary:hover { background:var(--accent-hover); }
+  .cw-inline-review-actions .cw-review-btn.danger {
+    border-color:#e8b4b1; background:rgba(181,61,56,.06); color:#b53d38;
+  }
+  .cw-inline-review-actions .cw-review-btn.danger:hover { background:rgba(181,61,56,.12); border-color:#d4918e; }
 
   /* ===== Code review loop: diff / keep / rewind / validate ===== */
   .cw-code-diff {
@@ -5786,7 +5893,7 @@
   .cw-code-diff-ln {
     padding:0 7px;
     border-right:1px solid color-mix(in srgb,var(--border) 75%,transparent);
-    color:var(--text-subtle);
+    color:var(--text-muted);
     text-align:right;
     user-select:none;
     font-variant-numeric:tabular-nums;
@@ -5854,94 +5961,159 @@
   .cw-inline-rewind {
     display:inline-flex;
     align-items:center;
-    gap:5px;
-    min-height:34px;
-    margin-top:6px;
-    padding:0 9px;
-    border:1px solid var(--border);
+    justify-content:center;
+    width:30px;
+    height:30px;
+    margin-top:4px;
+    padding:0;
+    border:1px solid color-mix(in srgb,var(--border) 70%,transparent);
     border-radius:9px;
-    background:color-mix(in srgb,var(--surface) 82%,transparent);
-    color:var(--text-muted);
+    background:var(--surface);
+    color:var(--text-subtle);
     cursor:pointer;
-    font:11.5px/1.2 inherit;
+    transition:background .16s ease,color .16s ease,border-color .16s ease,box-shadow .16s ease;
   }
-  .cw-inline-rewind svg { width:14px; height:14px; }
-  .cw-inline-rewind:hover,
-  .cw-inline-rewind:focus-visible { border-color:var(--border-strong); background:var(--surface-2); color:var(--text); outline:none; }
+  .cw-inline-rewind svg { width:15px; height:15px; flex:0 0 15px; }
+  .cw-inline-rewind:hover {
+    background:color-mix(in srgb,var(--surface-2) 80%,var(--surface));
+    color:var(--text);
+    border-color:var(--border-strong);
+    box-shadow:0 1px 4px rgba(28,25,23,.08);
+  }
+  .cw-inline-rewind:active { transform:translateY(.5px); }
+  .cw-inline-rewind:focus-visible {
+    outline:none;
+    border-color:var(--accent);
+    box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 28%,transparent);
+    color:var(--text);
+  }
+  :root.dark .cw-inline-rewind {
+    border-color:color-mix(in srgb,var(--border) 60%,transparent);
+    background:var(--surface);
+    color:var(--text-subtle);
+  }
+  :root.dark .cw-inline-rewind:hover {
+    background:var(--surface-2);
+    color:var(--text);
+    border-color:var(--border-strong);
+  }
+  .cw-message-secondary-actions { display:flex; min-height:33px; justify-content:flex-end; }
   body:not(.code-mode) .cw-inline-rewind { display:none !important; }
 
   .cw-code-review-box,
   .cw-rewind-preview-box {
     display:flex;
-    width:min(860px,calc(100vw - 36px));
-    max-width:860px !important;
-    max-height:min(780px,calc(100dvh - 40px));
+    width:min(880px,calc(100vw - 48px));
+    max-width:880px !important;
+    max-height:min(780px,calc(100dvh - 48px));
     flex-direction:column;
     padding:0 !important;
+    border:1px solid color-mix(in srgb,var(--border-strong) 40%,transparent);
+    border-radius:20px;
     overflow:hidden;
+    box-shadow:0 32px 80px rgba(28,25,23,.18),0 8px 24px rgba(28,25,23,.08);
   }
   .cw-code-review-head {
     display:flex;
-    align-items:flex-start;
+    align-items:center;
     justify-content:space-between;
-    gap:12px;
-    padding:14px 16px;
+    gap:16px;
+    min-height:76px;
+    padding:20px 24px;
     border-bottom:1px solid var(--border);
+    background:linear-gradient(to bottom,color-mix(in srgb,var(--surface-2) 40%,var(--surface)),var(--surface));
   }
-  .cw-code-review-title { color:var(--text); font-size:15px; font-weight:650; }
-  .cw-code-review-sub { margin-top:3px; color:var(--text-muted); font-size:11.5px; }
-  .cw-code-review-body { min-height:0; overflow-y:auto; padding:14px 16px 18px; }
-  .cw-review-empty { padding:36px 16px; color:var(--text-muted); text-align:center; font-size:13px; }
-  .cw-review-set { overflow:hidden; margin-bottom:12px; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
-  .cw-review-set-head { display:flex; align-items:center; gap:8px; min-height:42px; padding:0 11px; border-bottom:1px solid var(--border); background:var(--surface-2); }
-  .cw-review-set-title { font-size:12.5px; font-weight:600; }
-  .cw-review-set-meta { color:var(--text-muted); font-size:11px; }
+  .cw-code-review-head-main { display:flex; align-items:center; gap:14px; min-width:0; }
+  .cw-code-review-icon { display:grid; place-items:center; width:38px; height:38px; flex:0 0 38px; border-radius:10px; background:color-mix(in srgb,var(--accent) 12%,var(--surface)); color:var(--accent); }
+  .cw-code-review-icon svg { width:20px; height:20px; }
+  .cw-code-review-title { color:var(--text); font-size:17px; font-weight:700; letter-spacing:-.02em; }
+  .cw-code-review-sub { margin-top:3px; color:var(--text-muted); font-size:12.5px; letter-spacing:-.005em; }
+  .cw-code-review-close {
+    display:grid; width:36px; height:36px; flex:0 0 36px; place-items:center;
+    border:0; border-radius:50%; background:transparent; color:var(--text-muted); cursor:pointer;
+    transition:background .16s ease,color .16s ease;
+  }
+  .cw-code-review-close svg { width:16px; height:16px; }
+  .cw-code-review-close:hover { background:var(--surface-2); color:var(--text); }
+  .cw-code-review-close:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .cw-code-review-body { min-height:0; overflow-y:auto; padding:20px 24px 24px; }
+  .cw-review-empty { padding:48px 16px; color:var(--text-muted); text-align:center; font-size:13px; }
+  .cw-review-set { overflow:hidden; margin-bottom:16px; border:1px solid var(--border); border-radius:14px; background:var(--surface); transition:border-color .16s ease; }
+  .cw-review-set:hover { border-color:color-mix(in srgb,var(--border-strong) 60%,transparent); }
+  .cw-review-set-head { display:flex; align-items:center; gap:12px; min-height:48px; padding:10px 14px 10px 16px; border-bottom:1px solid var(--border); background:color-mix(in srgb,var(--surface-2) 50%,var(--surface)); }
+  .cw-review-set-copy { display:flex; min-width:0; align-items:center; gap:10px; }
+  .cw-review-set-title { flex:0 0 auto; font-size:12.5px; font-weight:700; padding:3px 9px; border-radius:6px; background:color-mix(in srgb,var(--accent) 10%,var(--surface)); color:var(--accent); }
+  .cw-review-set-meta { overflow:hidden; color:var(--text-muted); text-overflow:ellipsis; white-space:nowrap; font-size:11.5px; }
   .cw-review-set-head .cw-review-rewind { margin-left:auto; }
   .cw-review-file {
     display:grid;
     grid-template-columns:minmax(0,1fr) auto;
-    gap:12px;
+    gap:14px;
     align-items:center;
-    min-height:58px;
-    padding:8px 11px;
-    border-bottom:1px solid color-mix(in srgb,var(--border) 70%,transparent);
+    min-height:60px;
+    padding:12px 14px 12px 16px;
+    border-bottom:1px solid color-mix(in srgb,var(--border) 50%,transparent);
+    transition:background .12s ease;
   }
+  .cw-review-file:hover { background:color-mix(in srgb,var(--surface-2) 50%,transparent); }
   .cw-review-file:last-child { border-bottom:0; }
   .cw-review-file-main { min-width:0; }
-  .cw-review-file-path { overflow:hidden; color:var(--text); text-overflow:ellipsis; white-space:nowrap; font:12px/1.35 'JetBrains Mono',ui-monospace,monospace; }
-  .cw-review-file-meta { display:flex; gap:7px; margin-top:4px; color:var(--text-muted); font-size:10.5px; }
-  .cw-review-file-actions { display:flex; gap:6px; }
+  .cw-review-file-path { overflow:hidden; color:var(--text); text-overflow:ellipsis; white-space:nowrap; font:500 13px/1.4 'JetBrains Mono',ui-monospace,monospace; }
+  .cw-review-file-meta { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:5px; color:var(--text-muted); font-size:11.5px; }
+  .cw-review-file-actions { display:flex; gap:4px; padding:4px; border-radius:11px; background:color-mix(in srgb,var(--surface-2) 80%,var(--surface)); }
   .cw-review-btn {
     display:inline-flex;
     align-items:center;
     justify-content:center;
     gap:5px;
     min-height:34px;
-    padding:0 10px;
-    border:1px solid var(--border);
+    padding:0 12px;
+    border:1px solid transparent;
     border-radius:8px;
-    background:var(--surface);
+    background:transparent;
     color:var(--text-muted);
     cursor:pointer;
-    font:11.5px/1.2 inherit;
+    font:500 12px/1.2 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    letter-spacing:-.005em;
+    transition:background .14s ease,border-color .14s ease,color .14s ease,opacity .14s ease,transform .1s ease;
   }
   .cw-review-btn:hover,
-  .cw-review-btn:focus-visible { border-color:var(--border-strong); background:var(--surface-2); color:var(--text); outline:none; }
-  .cw-review-btn.primary { border-color:color-mix(in srgb,var(--accent) 36%,var(--border)); color:var(--accent); }
-  .cw-review-btn.danger { color:#b53d38; }
-  .cw-review-btn:disabled { opacity:.45; cursor:not-allowed; }
-  .cw-review-state { font-weight:600; }
-  .cw-review-state.kept { color:#16834a; }
+  .cw-review-btn:focus-visible { background:var(--surface); color:var(--text); outline:none; }
+  .cw-review-btn:active { transform:scale(.96); }
+  .cw-review-btn:focus-visible { box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 34%,transparent); }
+  .cw-review-btn.primary { border-color:transparent; background:var(--text); color:var(--surface); font-weight:600; }
+  .cw-review-btn.primary:hover,
+  .cw-review-btn.primary:focus-visible { background:color-mix(in srgb,var(--text) 84%,var(--surface)); color:var(--surface); }
+  .cw-review-btn.danger { color:#c0392b; font-weight:600; }
+  .cw-review-btn.danger:hover,
+  .cw-review-btn.danger:focus-visible { background:color-mix(in srgb,#c0392b 8%,var(--surface)); color:#a83225; }
+  .dark .cw-review-btn.danger { color:#f09a93; }
+  .dark .cw-review-btn.danger:hover,
+  .dark .cw-review-btn.danger:focus-visible { background:color-mix(in srgb,#f09a93 12%,var(--surface)); color:#ffc1bc; }
+  .cw-review-rewind { min-height:34px; padding:0 10px; color:#c0392b; font-size:11.5px; }
+  .cw-review-rewind svg { width:13px; height:13px; }
+  .cw-review-rewind:hover,
+  .cw-review-rewind:focus-visible { background:color-mix(in srgb,#c0392b 7%,transparent); color:#a83225; }
+  .dark .cw-review-rewind { color:#e99086; }
+  .dark .cw-review-rewind:hover,
+  .dark .cw-review-rewind:focus-visible { color:#ffc1bc; }
+  .cw-review-btn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
+  .cw-review-state { font-weight:600; font-size:11px; padding:2px 7px; border-radius:4px; }
+  .cw-review-state.pending { color:var(--text-muted); background:color-mix(in srgb,var(--text-muted) 8%,transparent); }
+  .cw-review-state.kept { color:#16834a; background:color-mix(in srgb,#16834a 10%,transparent); }
   .cw-review-state.reverted,
-  .cw-review-state.rewound { color:#b56a20; }
+  .cw-review-state.rewound { color:#b56a20; background:color-mix(in srgb,#b56a20 10%,transparent); }
 
-  .cw-validation-zone { margin-top:16px; padding:13px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); }
-  .cw-validation-title { font-size:12.5px; font-weight:600; }
-  .cw-validation-help { margin-top:3px; color:var(--text-muted); font-size:11px; }
-  .cw-validation-form { display:flex; gap:8px; margin-top:10px; }
-  .cw-validation-form input { min-width:0; min-height:40px; flex:1; padding:0 11px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--text); font:12px/1.3 'JetBrains Mono',ui-monospace,monospace; }
-  .cw-validation-form input:focus { border-color:var(--accent); outline:2px solid color-mix(in srgb,var(--accent) 18%,transparent); }
-  .cw-validation-result { margin-top:10px; }
+  .cw-validation-zone { display:grid; grid-template-columns:minmax(180px,.65fr) minmax(300px,1.35fr); gap:14px 20px; align-items:end; margin-top:24px; padding:20px 0 0; border-top:1px solid var(--border); }
+  .cw-validation-copy { align-self:center; }
+  .cw-validation-title { display:flex; align-items:center; gap:7px; font-size:13px; font-weight:700; letter-spacing:-.01em; }
+  .cw-validation-title svg { width:16px; height:16px; color:var(--accent); flex:0 0 16px; }
+  .cw-validation-help { max-width:340px; margin-top:6px; color:var(--text-muted); font-size:11.5px; line-height:1.55; }
+  .cw-validation-form { display:flex; gap:8px; }
+  .cw-validation-form input { min-width:0; min-height:40px; flex:1; padding:0 13px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); color:var(--text); font:12.5px/1.3 'JetBrains Mono',ui-monospace,monospace; transition:border-color .14s ease,box-shadow .14s ease; }
+  .cw-validation-form input:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent); outline:none; }
+  .cw-validation-form .cw-review-btn { flex:0 0 auto; min-height:40px; padding:0 16px; font-weight:600; }
+  .cw-validation-result { grid-column:1 / -1; margin-top:2px; }
   .cw-validation-card { overflow:hidden; border:1px solid var(--border); border-radius:10px; background:var(--surface); }
   .cw-validation-card-head { display:flex; align-items:center; gap:8px; min-height:40px; padding:0 10px; border-bottom:1px solid var(--border); }
   .cw-validation-status { font-weight:650; font-size:12px; }
@@ -5953,20 +6125,99 @@
   .cw-validation-actions { display:flex; justify-content:flex-end; gap:7px; padding:8px 10px; border-top:1px solid var(--border); }
   .cw-validation-timeline { width:min(100%,720px); margin-top:12px; }
 
-  .cw-rewind-preview-list { display:grid; gap:7px; max-height:320px; overflow-y:auto; margin-top:12px; }
-  .cw-rewind-preview-file { padding:9px 10px; border:1px solid var(--border); border-radius:9px; background:var(--surface-2); color:var(--text); font:11.5px/1.35 'JetBrains Mono',ui-monospace,monospace; word-break:break-all; }
-  .cw-rewind-preview-actions { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--border); }
+  .cw-rewind-preview-list { display:grid; gap:6px; max-height:320px; overflow-y:auto; margin-top:14px; }
+  .cw-rewind-preview-file {
+    padding:10px 12px;
+    border:1px solid color-mix(in srgb,var(--border) 70%,transparent);
+    border-radius:10px;
+    background:color-mix(in srgb,var(--surface-2) 60%,var(--surface));
+    color:var(--text);
+    font:12px/1.4 'JetBrains Mono',ui-monospace,monospace;
+    word-break:break-all;
+  }
+  .cw-rewind-preview-file.error {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    border-color:color-mix(in srgb,#d4534a 40%,transparent);
+    background:color-mix(in srgb,#d4534a 8%,var(--surface));
+    color:#b53d38;
+    font-family:inherit;
+    font-size:13px;
+  }
+  .cw-rewind-preview-file.error::before {
+    content:"!";
+    display:grid;
+    place-items:center;
+    width:18px;
+    height:18px;
+    flex:0 0 18px;
+    border-radius:50%;
+    background:#d4534a;
+    color:#fff;
+    font-size:12px;
+    font-weight:700;
+  }
+  .dark .cw-rewind-preview-file.error { color:#f09a93; }
+  .cw-rewind-preview-actions {
+    display:flex;
+    justify-content:flex-end;
+    align-items:center;
+    gap:10px;
+    padding:14px 20px calc(14px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--border);
+    background:color-mix(in srgb,var(--surface) 96%,var(--surface-2));
+  }
+  .cw-rewind-preview-actions .cw-review-btn {
+    min-height:38px;
+    padding:0 16px;
+    border-radius:10px;
+    font-size:13px;
+    font-weight:600;
+  }
+  .cw-rewind-preview-actions .cw-review-btn:not(.danger) {
+    border:1px solid var(--border);
+    background:var(--surface);
+    color:var(--text);
+  }
+  .cw-rewind-preview-actions .cw-review-btn:not(.danger):hover {
+    background:var(--surface-2);
+    border-color:var(--border-strong);
+  }
+  .cw-rewind-preview-actions .cw-review-btn.danger {
+    border:1px solid #d4534a;
+    background:#d4534a;
+    color:#fff;
+  }
+  .cw-rewind-preview-actions .cw-review-btn.danger:hover {
+    background:#bf3f37;
+    border-color:#bf3f37;
+  }
+  .cw-rewind-preview-actions .cw-review-btn.danger:disabled {
+    background:color-mix(in srgb,#d4534a 35%,var(--surface));
+    border-color:transparent;
+    color:color-mix(in srgb,#d4534a 60%,var(--surface));
+  }
 
   @media (max-width: 640px) {
     .cw-code-diff-row { grid-template-columns:34px 34px 20px minmax(max-content,1fr); }
     .cw-code-diff-ln { padding:0 4px; }
     .cw-code-review-box,
     .cw-rewind-preview-box { width:100% !important; max-width:none !important; max-height:92dvh !important; border-radius:20px 20px 0 0 !important; }
-    .cw-code-review-body { padding:12px 10px 16px; }
-    .cw-review-file { grid-template-columns:1fr; gap:8px; }
+    .cw-code-review-head { min-height:68px; padding:12px 14px 12px 16px; }
+    .cw-code-review-icon { width:32px; height:32px; flex:0 0 32px; }
+    .cw-code-review-icon svg { width:17px; height:17px; }
+    .cw-code-review-body { padding:12px 10px calc(16px + env(safe-area-inset-bottom)); }
+    .cw-review-set-head { align-items:center; padding-left:12px; }
+    .cw-review-set-copy { display:block; }
+    .cw-review-set-meta { display:block; margin-top:2px; }
+    .cw-review-file { grid-template-columns:1fr; gap:9px; padding:11px 10px 10px 12px; }
     .cw-review-file-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
     .cw-review-btn,
-    .cw-inline-rewind { min-height:44px; }
+    .cw-inline-rewind { width:38px; height:38px; }
+    .cw-inline-rewind { padding:0; }
+    .cw-message-secondary-actions { min-height:44px; }
+    .cw-validation-zone { grid-template-columns:1fr; gap:10px; padding-inline:2px; }
     .cw-validation-form { align-items:stretch; flex-direction:column; }
     .cw-validation-form input { min-height:44px; font-size:16px; }
     .cw-file-context-chip { min-height:36px; max-width:100%; }
@@ -6287,26 +6538,128 @@
 
   /* ===== Session Stats Bar (code workspace) ===== */
   .cw-session-stats-bar {
-    display: flex; align-items: center; justify-content: center;
-    gap: 0; margin: 0 0 4px;
-    border: 1px solid var(--border); border-radius: 10px;
-    overflow: hidden; background: var(--surface);
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch; width: 100%; margin: 0 0 8px; gap: 3px;
+    min-height: 38px; border: 0; border-radius: 12px;
+    box-sizing: border-box; padding: 3px;
+    background: color-mix(in srgb, var(--surface-2) 62%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 60%, transparent);
   }
   .cw-session-stats-bar.hidden { display: none; }
   .cw-stats-item {
     display: flex; align-items: center; gap: 5px;
-    padding: 7px 16px; flex: 1; justify-content: center;
-    font-size: 12.5px; color: var(--text-subtle);
-    background: transparent; border: none; border-right: 1px solid var(--border);
-    cursor: pointer; transition: background .12s; font-family: inherit;
+    min-width: 0; min-height: 32px; padding: 4px 10px; justify-content: center;
+    font-size: 12px; color: var(--text-subtle);
+    background: transparent; border: none; border-radius: 9px;
+    cursor: pointer; transition: background .16s ease, color .16s ease, box-shadow .16s ease, opacity .16s ease;
+    font-family: inherit; touch-action: manipulation;
   }
-  .cw-stats-item:last-child { border-right: none; }
-  .cw-stats-item:hover { background: var(--bg); color: var(--text); }
-  .cw-stats-item svg { flex-shrink: 0; color: var(--text-subtle); }
-  .cw-stats-label { font-weight: 500; }
-  .cw-stats-count { font-weight: 600; color: var(--text); }
-  .cw-stats-diff-add { font-weight: 600; color: #10b981; }
-  .cw-stats-diff-del { font-weight: 600; color: #ef4444; }
+  .cw-stats-item:not(:disabled):hover {
+    background: var(--surface); color: var(--text);
+    box-shadow: 0 1px 3px rgba(28, 25, 23, .08);
+  }
+  .cw-stats-item:not(:disabled):active { transform: translateY(.5px); }
+  .cw-stats-item:focus-visible {
+    position: relative; z-index: 1; outline: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 42%, transparent);
+  }
+  .cw-stats-item:disabled { cursor: default; opacity: .5; }
+  .cw-stats-item svg { width: 14px; height: 14px; flex-shrink: 0; color: currentColor; opacity: .85; }
+  .cw-stats-label { font-weight: 550; letter-spacing: -.01em; }
+  .cw-stats-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 999px; font-size: 11px; font-weight: 650;
+    color: var(--text); background: color-mix(in srgb, var(--surface) 70%, var(--bg));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 55%, transparent);
+    font-variant-numeric: tabular-nums;
+  }
+  .cw-stats-item:not(:disabled) .cw-stats-count {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+  .cw-stats-diff-add { margin-left: 1px; font-size: 11px; font-weight: 650; color: #10b981; }
+  .cw-stats-diff-del { font-size: 11px; font-weight: 650; color: #ef4444; }
+  @media (max-width: 640px) {
+    .cw-session-stats-bar { min-height: 46px; margin-bottom: 6px; }
+    .cw-stats-item { min-height: 40px; gap: 4px; padding-inline: 7px; font-size: 12px; }
+    .cw-stats-item svg { width: 14px; height: 14px; }
+  }
+
+  /* ===== Code message queue ===== */
+  .cw-code-message-queue {
+    display: flex; flex-direction: column; gap: 4px;
+    margin: -2px -2px 8px; padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-2) 50%, transparent);
+  }
+  .cw-code-message-queue.hidden,
+  body:not(.code-mode) .cw-code-message-queue { display: none !important; }
+  .cw-code-queue-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    min-height: 22px; padding: 0 2px;
+  }
+  .cw-code-queue-title {
+    display: flex; align-items: center; gap: 6px; min-width: 0;
+    color: var(--text-muted); font-size: 11px; font-weight: 550;
+  }
+  .cw-code-queue-title svg { width: 13px; height: 13px; color: var(--text-subtle); flex: 0 0 auto; }
+  .cw-code-queue-state {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text-subtle); font-size: 10.5px; font-weight: 400;
+  }
+  .cw-code-queue-resume {
+    min-height: 26px; padding: 0 9px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--surface); color: var(--text);
+    font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1;
+    cursor: pointer; flex: 0 0 auto;
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
+  }
+  .cw-code-queue-resume:hover { background: var(--bg); border-color: var(--border-strong); }
+  .cw-code-queue-resume:active { transform: translateY(1px); }
+  .cw-code-queue-list {
+    display: flex; flex-direction: column; gap: 3px;
+    max-height: 120px; overflow-y: auto; overscroll-behavior: contain;
+  }
+  .cw-code-queue-item {
+    display: grid; grid-template-columns: 18px minmax(0, 1fr) 26px;
+    align-items: center; gap: 6px; min-height: 30px; padding: 2px 2px 2px 6px;
+    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    border-radius: 8px; background: var(--surface); color: var(--text);
+  }
+  .cw-code-queue-number {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 17px; height: 17px; border-radius: 999px;
+    background: #2f2c29; color: #fff; font-size: 10px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .cw-code-queue-copy { min-width: 0; }
+  .cw-code-queue-preview {
+    display: block;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text); font-size: 12px; line-height: 1.35;
+  }
+  .cw-code-queue-meta { display: block; color: var(--text-subtle); font-size: 10px; line-height: 1.2; }
+  .cw-code-queue-remove {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border: 0; border-radius: 7px;
+    background: transparent; color: var(--text-subtle); cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+  }
+  .cw-code-queue-remove svg { width: 14px; height: 14px; }
+  .cw-code-queue-remove:hover { background: rgba(239, 68, 68, .09); color: #c83a35; }
+  .cw-code-queue-remove:focus-visible,
+  .cw-code-queue-resume:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  @media (max-width: 640px) {
+    .cw-code-message-queue { margin-inline: 0; padding: 7px; border-radius: 10px; }
+    .cw-code-queue-head { min-height: 26px; }
+    .cw-code-queue-item { grid-template-columns: 18px minmax(0, 1fr) 38px; min-height: 40px; }
+    .cw-code-queue-remove { width: 38px; height: 38px; }
+    .cw-code-queue-resume { min-height: 38px; padding-inline: 11px; }
+    .cw-code-queue-state { display: none; }
+  }
 </style>
 </head>
 <body class="h-screen flex">
@@ -6589,25 +6942,37 @@
         <span class="cw-context-compaction-spinner" aria-hidden="true"></span>
         <span id="cwContextCompactionText">上下文接近上限，正在压缩…</span>
       </div>
-      <div id="cwSessionStatsBar" class="cw-session-stats-bar hidden">
-        <button type="button" class="cw-stats-item" id="cwStatsTasks" title="查看任务清单">
+      <div id="cwSessionStatsBar" class="cw-session-stats-bar hidden" aria-label="Code 会话状态">
+        <button type="button" class="cw-stats-item" id="cwStatsTasks" title="暂无任务" disabled>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="m17 8 2 2 4-4"/></svg>
           <span class="cw-stats-label">任务</span>
-          <span class="cw-stats-count" id="cwStatsTasksCount"></span>
+          <span class="cw-stats-count" id="cwStatsTasksCount">0</span>
         </button>
-        <button type="button" class="cw-stats-item" id="cwStatsAgents" title="查看子代理">
+        <button type="button" class="cw-stats-item" id="cwStatsAgents" title="暂无子代理" disabled>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
           <span class="cw-stats-label">子代理</span>
-          <span class="cw-stats-count" id="cwStatsAgentsCount"></span>
+          <span class="cw-stats-count" id="cwStatsAgentsCount">0</span>
         </button>
-        <button type="button" class="cw-stats-item" id="cwStatsEdits" title="查看变更文件">
+        <button type="button" class="cw-stats-item" id="cwStatsEdits" title="暂无文件变更" disabled>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-          <span class="cw-stats-label">编辑</span>
+          <span class="cw-stats-label">变更</span>
+          <span class="cw-stats-count" id="cwStatsEditsCount">0</span>
           <span class="cw-stats-diff-add" id="cwStatsAdd"></span>
           <span class="cw-stats-diff-del" id="cwStatsDel"></span>
         </button>
       </div>
       <div class="composer relative" id="composer">
+        <div id="cwCodeMessageQueue" class="cw-code-message-queue hidden" aria-live="polite" aria-label="Code 待发送队列">
+          <div class="cw-code-queue-head">
+            <div class="cw-code-queue-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              <span id="cwCodeQueueTitle">待发送</span>
+              <span id="cwCodeQueueState" class="cw-code-queue-state">完成后自动发送</span>
+            </div>
+            <button type="button" id="cwCodeQueueResume" class="cw-code-queue-resume hidden">继续发送</button>
+          </div>
+          <div id="cwCodeQueueList" class="cw-code-queue-list"></div>
+        </div>
         <div id="urlChips" class="composer-upload-strip hidden"></div>
         <div id="docChips" class="composer-upload-strip hidden"></div>
         <div id="attachments" class="composer-upload-strip hidden"></div>
@@ -6986,7 +7351,7 @@
                         <path d="m7 10 5 5 5-5" />
                       </svg>
                     </div>
-                    <div id="agentSdkVersionHelp" class="agent-sdk-version-help" role="status" aria-live="polite">推荐版经过当前应用验证；其他版本会在激活前进行启动检查。</div>
+                    <div id="agentSdkVersionHelp" class="agent-sdk-version-help" role="status" aria-live="polite">应用锁定版经过完整验证；其他版本会在激活前进行启动检查。</div>
                   </div>
                   <div id="agentSdkPathText" class="agent-sdk-path"></div>
                 </div>
@@ -6999,7 +7364,7 @@
                   <span id="agentSdkInstallLabel">安装 SDK</span>
                 </button>
               </div>
-              <div class="settings-hint agent-sdk-description">默认使用应用验证的推荐版本，也可以显式选择其他稳定版本更新或降级。所有切换都使用临时安装、启动校验和失败回滚，不会自动升级。</div>
+              <div class="settings-hint agent-sdk-description">应用默认使用锁定且验证过的版本，也可以显式选择其他稳定版本更新或降级。所有切换都使用临时安装、启动校验和失败回滚，不会自动升级。</div>
             </div>
           </div>
         </section>
@@ -7466,17 +7831,29 @@
 <div id="codeReviewModal" class="modal-backdrop hidden">
   <div class="modal-box cw-code-review-box" role="dialog" aria-modal="true" aria-labelledby="codeReviewTitle">
     <div class="cw-code-review-head">
-      <div class="min-w-0">
-        <div id="codeReviewTitle" class="cw-code-review-title">本会话改动</div>
-        <div id="codeReviewSummary" class="cw-code-review-sub">审查 Claude 在 Code 模式中产生的文件修改</div>
+      <div class="cw-code-review-head-main">
+        <div class="cw-code-review-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 9v1a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9"/></svg>
+        </div>
+        <div class="min-w-0">
+          <div id="codeReviewTitle" class="cw-code-review-title">本会话改动</div>
+          <div id="codeReviewSummary" class="cw-code-review-sub">审查 Claude 在 Code 模式中产生的文件修改</div>
+        </div>
       </div>
-      <button data-close class="sb-icon-btn" aria-label="关闭改动审查">×</button>
+      <button data-close class="cw-code-review-close" aria-label="关闭改动审查">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
     </div>
     <div class="cw-code-review-body">
       <div id="codeReviewList"></div>
       <section class="cw-validation-zone" aria-labelledby="codeValidationTitle">
-        <div id="codeValidationTitle" class="cw-validation-title">运行验证</div>
-        <div class="cw-validation-help">留空会自动检测 npm、Make、pytest 或 unittest；结果会保存到当前 Code 会话。</div>
+        <div class="cw-validation-copy">
+          <div id="codeValidationTitle" class="cw-validation-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            运行验证
+          </div>
+          <div class="cw-validation-help">留空会自动检测 npm、Make、pytest 或 unittest；结果会保存到当前 Code 会话。</div>
+        </div>
         <div class="cw-validation-form">
           <input id="codeValidationCommand" type="text" autocomplete="off" spellcheck="false" placeholder="例如：npm test" aria-label="测试或构建命令" />
           <button id="codeValidationRun" type="button" class="cw-review-btn primary">运行验证</button>
@@ -7494,7 +7871,9 @@
         <div id="rewindPreviewTitle" class="cw-code-review-title">回退到此处</div>
         <div id="rewindPreviewSummary" class="cw-code-review-sub">Claude Agent SDK 正在预览受影响文件</div>
       </div>
-      <button data-close class="sb-icon-btn" aria-label="关闭回退预览">×</button>
+      <button data-close class="cw-code-review-close" aria-label="关闭回退预览">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
     </div>
     <div class="cw-code-review-body">
       <div class="text-sm" style="color:var(--text);">文件会恢复到这条用户消息发送前的状态；对话历史会保留。</div>
@@ -7827,6 +8206,7 @@ let activeImageUploadPromises = new Set();
 const activeDocUploadPromises = new Set();
 let pendingImageGeneration = 0;
 let currentController = null;
+let currentControllerQueueOwner = '';
 let pendingPermissionAutoRetry = null;
 const permissionAutoRetryKeys = new Set();
 let archivedView = false;
@@ -7842,6 +8222,13 @@ let cliSessionCache = [];
 let dailyChart = null, toolsChart = null;
 let sessionFeedback = {};
 let feedbackPopover = null;
+let codeQueueOwnerCounter = 0;
+let activeCodeQueueOwner = `draft:${Date.now()}:0`;
+const codeQueueOwnerBySession = new Map();
+const codeMessageQueues = new Map();
+const codeQueueDispatchingOwners = new Set();
+const codeQueuePauseReasons = new Map();
+let codeQueueDrainTimer = null;
 
 // Token-level streaming state
 const streamingMessages = {}; // msgId -> { container, blocks: { [index]: {type, el, text} } }
@@ -8088,6 +8475,9 @@ const codeValidationCommand = $('codeValidationCommand'), codeValidationRun = $(
 const rewindPreviewModal = $('rewindPreviewModal'), rewindPreviewSummary = $('rewindPreviewSummary');
 const rewindPreviewList = $('rewindPreviewList'), rewindPreviewConfirm = $('rewindPreviewConfirm');
 const cwFileContextChips = $('cwFileContextChips');
+const cwCodeMessageQueue = $('cwCodeMessageQueue');
+const cwCodeQueueTitle = $('cwCodeQueueTitle'), cwCodeQueueState = $('cwCodeQueueState');
+const cwCodeQueueResume = $('cwCodeQueueResume'), cwCodeQueueList = $('cwCodeQueueList');
 const memoryBar = $('memoryBar');
 const tokenBar = $('tokenBar');
 const tokenCounter = $('tokenCounter');
@@ -8118,7 +8508,12 @@ function forceScrollBottom() {
   userScrolledUp = false;
   chatEl.scrollTop = chatEl.scrollHeight;
 }
-function removeWelcome() { if (welcome && welcome.parentNode) welcome.remove(); }
+function removeWelcome() {
+  if (welcome && welcome.parentNode) {
+    welcome.remove();
+    if (typeof syncEmptyShellState === 'function') syncEmptyShellState();
+  }
+}
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -8541,9 +8936,8 @@ function addUserMessage(text, images, opts) {
       ${docsHtml}
       ${imagesHtml}
       ${textHtml}
-      ${codeMode ? `<div class="flex justify-end"><button type="button" data-native-rewind="${userIdx}" class="cw-inline-rewind ${currentCodeRuntime === 'claude_agent_sdk' ? '' : 'hidden'}" aria-label="回退到这条消息前的文件状态">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 2"/></svg>
-        <span>回退到此处</span>
+      ${codeMode ? `<div class="cw-message-secondary-actions"><button type="button" data-native-rewind="${userIdx}" class="cw-inline-rewind ${currentCodeRuntime === 'claude_agent_sdk' ? '' : 'hidden'}" aria-label="预览并回退到这条消息前的文件状态" title="回退文件到这条消息之前">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>
       </button></div>` : ''}
       <div class="user-msg-actions absolute -left-24 top-2 opacity-0 group-hover:opacity-100 flex flex-col gap-1 text-xs" style="color:var(--text-subtle);">
         <button data-copy="${encodeURIComponent(text)}" title="复制" class="hover:text-gray-700 dark:hover:text-gray-200">📋</button>
@@ -10385,7 +10779,7 @@ let contextCompactionRunning = false;
 let selectedModel = LS.get('model', '');
 let selectedEffort = LS.get('effort', '');
 const DEFAULT_CHAT_CONTEXT_LIMIT = 200_000;
-const DEFAULT_CODE_CONTEXT_LIMIT = 200_000;
+const DEFAULT_CODE_CONTEXT_LIMIT = 1_000_000;
 const CODE_CONTEXT_WARNING_RATIO = 0.8;
 
 function _fmtTokens(n) {
@@ -10811,11 +11205,14 @@ function addNativePermissionRequest(container, info) {
 
 let nativeTurnRecoveryTimer = null;
 let nativeTurnRecoverySerial = 0;
+let nativeTurnRecoveryRunningSessionId = null;
 
 function stopNativeTurnRecovery() {
   nativeTurnRecoverySerial += 1;
   if (nativeTurnRecoveryTimer) clearTimeout(nativeTurnRecoveryTimer);
   nativeTurnRecoveryTimer = null;
+  nativeTurnRecoveryRunningSessionId = null;
+  renderCodeMessageQueue();
 }
 
 function recoveredPermissionEvent(item) {
@@ -10877,14 +11274,24 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
         }
       }
       if (state.running) {
+        nativeTurnRecoveryRunningSessionId = targetSessionId;
         stopBtn.classList.remove('hidden');
+        if (!asstContainer) asstContainer = newAssistantBubble();
+        if (!asstContainer.querySelector(':scope > [data-role="thinking"]')) {
+          showThinking(asstContainer, '正在生成响应…');
+        }
+        renderCodeMessageQueue();
         nativeTurnRecoveryTimer = setTimeout(poll, 700);
       } else {
+        nativeTurnRecoveryRunningSessionId = null;
         stopBtn.classList.add('hidden');
+        hideThinking(asstContainer);
         finishPendingToolUses('已结束', 'done');
         scheduleNativeContextUsageRefresh(0);
         refreshSessions();
         refreshGitStatus();
+        renderCodeMessageQueue();
+        scheduleCodeQueueDrain(codeQueueOwnerForSession(targetSessionId));
       }
     } catch {
       nativeTurnRecoveryTimer = setTimeout(poll, 1200);
@@ -11440,20 +11847,52 @@ artifactCopyBtn.addEventListener('click', () => {
   setTimeout(() => artifactCopyBtn.textContent = orig, 1200);
 });
 
-function createThinkingIndicator(label) {
+function formatThinkingElapsed(seconds) {
+  const safeSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (safeSeconds < 60) return `${safeSeconds} 秒`;
+  return `${Math.floor(safeSeconds / 60)} 分 ${safeSeconds % 60} 秒`;
+}
+
+function createThinkingIndicator(label, startedAt = Date.now()) {
   const el = document.createElement('div');
   el.className = 'thinking-indicator';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
   el.innerHTML = `
     <span class="thinking-dots"><span></span><span></span><span></span></span>
-    <span class="thinking-label">${label || '正在思考'}</span>
+    <span class="thinking-label">${escapeHtml(label || '正在思考')}</span>
   `;
+  if (codeMode) {
+    const elapsed = document.createElement('span');
+    elapsed.className = 'thinking-elapsed';
+    elapsed.setAttribute('aria-hidden', 'true');
+    const updateElapsed = () => {
+      elapsed.textContent = `（已用 ${formatThinkingElapsed((Date.now() - startedAt) / 1000)}）`;
+    };
+    updateElapsed();
+    el.appendChild(elapsed);
+    el._elapsedTimer = setInterval(() => {
+      if (!el.isConnected) {
+        clearInterval(el._elapsedTimer);
+        el._elapsedTimer = null;
+        return;
+      }
+      updateElapsed();
+    }, 1000);
+  }
   return el;
 }
 
 function showThinking(container, label) {
   if (!container) return null;
   hideThinking(container);
-  const el = createThinkingIndicator(label);
+  let startedAt = Number(container.dataset.turnStartedAt || 0);
+  if (!Number.isFinite(startedAt) || startedAt <= 0) {
+    startedAt = Date.now();
+    container.dataset.turnStartedAt = String(startedAt);
+  }
+  const resolvedLabel = codeMode && (!label || label === '正在思考') ? '正在生成响应…' : label;
+  const el = createThinkingIndicator(resolvedLabel, startedAt);
   el.dataset.role = 'thinking';
   container.appendChild(el);
   scrollBottom();
@@ -11463,7 +11902,10 @@ function showThinking(container, label) {
 function hideThinking(container) {
   if (!container) return;
   const existing = container.querySelector(':scope > [data-role="thinking"]');
-  if (existing) existing.remove();
+  if (existing) {
+    if (existing._elapsedTimer) clearInterval(existing._elapsedTimer);
+    existing.remove();
+  }
 }
 
 function handleEvent(obj, container, options = {}) {
@@ -11477,6 +11919,7 @@ function handleEvent(obj, container, options = {}) {
   }
   if (obj.type === 'meta') {
     sessionId = obj.session_id;
+    bindCodeQueueOwnerToSession(sessionId, options.queueOwner || activeCodeQueueOwner);
     if (obj.runtime) currentCodeRuntime = obj.runtime;
     syncNativeCodeControls();
     sessionLabelText.textContent = '会话 ' + sessionId.slice(0, 8);
@@ -11575,7 +12018,7 @@ function handleEvent(obj, container, options = {}) {
       }
     }
     // tool result shown; Claude may still be reasoning about next step — bring indicator back
-    if (!replay) showThinking(container, '处理结果中');
+    if (!replay) showThinking(container, codeMode ? '正在生成响应…' : '处理结果中');
     scrollBottom();
     return container;
   }
@@ -12069,7 +12512,7 @@ async function previewNativeRewind(userIdx) {
     rewindPreviewConfirm.disabled = !canRewind;
   } catch (error) {
     rewindPreviewSummary.textContent = '回退预览失败';
-    rewindPreviewList.innerHTML = `<div class="cw-rewind-preview-file" style="color:#b53d38;">${escapeHtml(error.message || error)}</div>`;
+    rewindPreviewList.innerHTML = `<div class="cw-rewind-preview-file error">${escapeHtml(error.message || error)}</div>`;
   }
 }
 
@@ -12089,7 +12532,7 @@ rewindPreviewConfirm?.addEventListener('click', async () => {
     scheduleNativeContextUsageRefresh(0);
   } catch (error) {
     rewindPreviewSummary.textContent = '回退失败';
-    rewindPreviewList.innerHTML = `<div class="cw-rewind-preview-file" style="color:#b53d38;">${escapeHtml(error.message || error)}</div>`;
+    rewindPreviewList.innerHTML = `<div class="cw-rewind-preview-file error">${escapeHtml(error.message || error)}</div>`;
     rewindPreviewConfirm.disabled = false;
   } finally {
     rewindPreviewConfirm.textContent = '确认回退';
@@ -12908,7 +13351,7 @@ function restoreQueuedComposerMessage(message) {
   input.focus();
 }
 
-async function maybeAutoCompactBeforeSend(message) {
+async function maybeAutoCompactBeforeSend(message, options = {}) {
   if (!shouldAutoCompactContext()) return true;
   const targetSessionId = sessionId;
   setContextCompactionStatus(true, `轻上下文：已达 ${_fmtTokens(latestContextTokens)}，正在执行 Claude Code 原生 compact…`);
@@ -12921,13 +13364,269 @@ async function maybeAutoCompactBeforeSend(message) {
     toast('Claude Code 已原生压缩上下文，正在继续原任务');
     return true;
   } catch (e) {
-    restoreQueuedComposerMessage(message);
-    toast('自动压缩失败，输入内容已保留：' + (e.message || e), { timeout: 5200 });
+    if (options.restoreOnFailure !== false) restoreQueuedComposerMessage(message);
+    const prefix = options.restoreOnFailure === false
+      ? '自动压缩失败，任务已保留在待发送队列：'
+      : '自动压缩失败，输入内容已保留：';
+    toast(prefix + (e.message || e), { timeout: 5200 });
     return false;
   } finally {
     setContextCompactionStatus(false);
   }
 }
+
+function newCodeQueueOwner() {
+  codeQueueOwnerCounter += 1;
+  return `draft:${Date.now()}:${codeQueueOwnerCounter}`;
+}
+
+function codeQueueFor(owner = activeCodeQueueOwner) {
+  if (!codeMessageQueues.has(owner)) codeMessageQueues.set(owner, []);
+  return codeMessageQueues.get(owner);
+}
+
+function codeQueueOwnerForSession(targetSessionId) {
+  const sid = String(targetSessionId || '').trim();
+  if (!sid) return newCodeQueueOwner();
+  if (!codeQueueOwnerBySession.has(sid)) codeQueueOwnerBySession.set(sid, `session:${sid}`);
+  return codeQueueOwnerBySession.get(sid);
+}
+
+function activateNewCodeQueueOwner() {
+  activeCodeQueueOwner = newCodeQueueOwner();
+  renderCodeMessageQueue();
+}
+
+function activateCodeQueueForSession(targetSessionId) {
+  activeCodeQueueOwner = codeQueueOwnerForSession(targetSessionId);
+  renderCodeMessageQueue();
+}
+
+function bindCodeQueueOwnerToSession(targetSessionId, owner = activeCodeQueueOwner) {
+  const sid = String(targetSessionId || '').trim();
+  if (!sid || !owner) return;
+  const previousOwner = codeQueueOwnerBySession.get(sid);
+  if (previousOwner && previousOwner !== owner) {
+    const previousQueue = codeQueueFor(previousOwner);
+    if (previousQueue.length) codeQueueFor(owner).push(...previousQueue.splice(0));
+    codeQueuePauseReasons.delete(previousOwner);
+  }
+  codeQueueOwnerBySession.set(sid, owner);
+}
+
+function codeQueueSessionIsRecovering(owner) {
+  if (!nativeTurnRecoveryRunningSessionId) return false;
+  return codeQueueOwnerBySession.get(nativeTurnRecoveryRunningSessionId) === owner;
+}
+
+function isCodeQueueOwnerBusy(owner = activeCodeQueueOwner) {
+  return codeQueueDispatchingOwners.has(owner)
+    || (!!currentController && currentControllerQueueOwner === owner)
+    || (owner === activeCodeQueueOwner && codeMode && !stopBtn.classList.contains('hidden'))
+    || codeQueueSessionIsRecovering(owner);
+}
+
+function codeQueueEntryPreview(entry) {
+  const text = String(entry?.displayMessage || entry?.message || '').trim();
+  if (text && !/^（仅(?:图片|文档)）$/.test(text)) return text;
+  const imageCount = entry?.imagePaths?.length || 0;
+  const docCount = entry?.snapshot?.docs?.length || 0;
+  if (imageCount && docCount) return `${imageCount} 张图片、${docCount} 个文件`;
+  if (imageCount) return `${imageCount} 张图片`;
+  if (docCount) return `${docCount} 个文件`;
+  return text || '空消息';
+}
+
+function codeQueueEntryMeta(entry) {
+  const details = [];
+  const imageCount = entry?.imagePaths?.length || 0;
+  const docCount = entry?.snapshot?.docs?.length || 0;
+  if (imageCount) details.push(`${imageCount} 张图片`);
+  if (docCount) details.push(`${docCount} 个文件`);
+  if (entry?.snapshot?.urlEntries?.length) details.push(`${entry.snapshot.urlEntries.length} 个链接`);
+  return details.join(' · ');
+}
+
+function renderCodeMessageQueue() {
+  if (!cwCodeMessageQueue || !cwCodeQueueList) return;
+  const queue = codeQueueFor(activeCodeQueueOwner);
+  const visible = codeMode && queue.length > 0;
+  cwCodeMessageQueue.classList.toggle('hidden', !visible);
+  if (!visible) {
+    cwCodeQueueList.innerHTML = '';
+    return;
+  }
+  const paused = codeQueuePauseReasons.get(activeCodeQueueOwner) || '';
+  const busy = isCodeQueueOwnerBusy(activeCodeQueueOwner);
+  cwCodeQueueTitle.textContent = `待发送 ${queue.length}`;
+  cwCodeQueueState.textContent = paused
+    ? paused
+    : (busy ? '完成后自动发送' : '即将发送');
+  cwCodeQueueResume.classList.toggle('hidden', busy || !paused);
+  cwCodeQueueResume.disabled = busy;
+  cwCodeQueueList.innerHTML = [...queue].reverse().map((entry, reversedIndex) => {
+    const position = queue.length - reversedIndex;
+    const preview = codeQueueEntryPreview(entry);
+    const meta = codeQueueEntryMeta(entry);
+    return `
+      <div class="cw-code-queue-item" data-code-queue-id="${escapeHtml(entry.id)}">
+        <span class="cw-code-queue-number" aria-label="队列第 ${position} 条">${position}</span>
+        <span class="cw-code-queue-copy" title="${escapeHtml(preview)}">
+          <span class="cw-code-queue-preview">${escapeHtml(preview)}</span>
+          ${meta ? `<span class="cw-code-queue-meta">${escapeHtml(meta)}</span>` : ''}
+        </span>
+        <button type="button" class="cw-code-queue-remove" data-remove-code-queue="${escapeHtml(entry.id)}" aria-label="移除待发送消息：${escapeHtml(preview)}" title="移除">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg>
+        </button>
+      </div>`;
+  }).join('');
+}
+
+function enqueueCodeMessage(entry, options = {}) {
+  const queue = codeQueueFor(entry.owner);
+  if (options.front) queue.unshift(entry);
+  else queue.push(entry);
+  if (!options.silent && entry.owner === activeCodeQueueOwner) {
+    toast(`已加入待发送队列 · 第 ${queue.length} 条`);
+  }
+  renderCodeMessageQueue();
+}
+
+function removeQueuedCodeMessage(entryId) {
+  const queue = codeQueueFor(activeCodeQueueOwner);
+  const index = queue.findIndex(entry => entry.id === entryId);
+  if (index < 0) return;
+  queue.splice(index, 1);
+  if (!queue.length) codeQueuePauseReasons.delete(activeCodeQueueOwner);
+  renderCodeMessageQueue();
+}
+
+function pauseCodeMessageQueue(owner, reason) {
+  if (!codeQueueFor(owner).length) return;
+  codeQueuePauseReasons.set(owner, reason || '上一轮未完成，队列已暂停');
+  if (owner === activeCodeQueueOwner) renderCodeMessageQueue();
+}
+
+function scheduleCodeQueueDrain(owner = activeCodeQueueOwner, delay = 120) {
+  if (!owner || owner !== activeCodeQueueOwner || !codeMode) return;
+  if (codeQueueDrainTimer) clearTimeout(codeQueueDrainTimer);
+  codeQueueDrainTimer = setTimeout(() => {
+    codeQueueDrainTimer = null;
+    drainCodeMessageQueue(owner);
+  }, delay);
+}
+
+async function drainCodeMessageQueue(owner = activeCodeQueueOwner) {
+  if (!codeMode || owner !== activeCodeQueueOwner) return;
+  const queue = codeQueueFor(owner);
+  if (!queue.length || codeQueuePauseReasons.has(owner) || isCodeQueueOwnerBusy(owner)) {
+    renderCodeMessageQueue();
+    return;
+  }
+  const entry = queue.shift();
+  renderCodeMessageQueue();
+  await dispatchCodeQueueEntry(entry);
+}
+
+async function captureCodeComposerEntry(text, owner, slashPayload = null) {
+  if (activeImageUploadPromises.size > 0 || activeDocUploadPromises.size > 0) {
+    sendBtn.disabled = true;
+    input.disabled = true;
+    try { await Promise.all([waitForImageUploads(), waitForDocUploads()]); }
+    finally {
+      sendBtn.disabled = false;
+      input.disabled = false;
+      input.focus();
+    }
+  }
+  const ownerStillActive = owner === activeCodeQueueOwner;
+  const imagePaths = ownerStillActive ? pendingImages.map(item => item.path).filter(Boolean) : [];
+  const docs = ownerStillActive
+    ? pendingDocs.filter(isReadyDocForSend).map(doc => ({
+        name: doc.name, size: doc.size, length: doc.length, path: doc.path || null,
+        content: doc.content || '', truncated: !!doc.truncated,
+      }))
+    : [];
+  const urlEntries = ownerStillActive
+    ? Array.from(urlContext.entries()).map(([url, state]) => [url, { ...state }])
+    : [];
+  const fallbackMessage = text || (imagePaths.length > 0 ? '（仅图片）' : '（仅文档）');
+  const entry = {
+    id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    owner,
+    message: slashPayload?.sent || fallbackMessage,
+    displayMessage: slashPayload?.display || fallbackMessage,
+    imagePaths,
+    forceNew: slashPayload ? !slashPayload.native : false,
+    isFork: !!slashPayload,
+    snapshot: {
+      docs,
+      urlEntries,
+      webSearchPrefix: isWebSearchEnabled() ? webSearchPrefix() : '',
+    },
+    queuedAt: Date.now(),
+  };
+  if (ownerStillActive) {
+    clearPendingImages();
+    clearUrlContext();
+    clearDocs();
+    clearDraft();
+    pendingSlashFork = null;
+  }
+  return entry;
+}
+
+async function dispatchCodeQueueEntry(entry) {
+  const owner = entry.owner;
+  if (!codeMode || owner !== activeCodeQueueOwner || isCodeQueueOwnerBusy(owner)) {
+    enqueueCodeMessage(entry, { front: true, silent: true });
+    return;
+  }
+  codeQueueDispatchingOwners.add(owner);
+  codeQueuePauseReasons.delete(owner);
+  renderCodeMessageQueue();
+  let result = null;
+  try {
+    if (!entry.isFork && !await maybeAutoCompactBeforeSend(entry.message, { restoreOnFailure: false })) {
+      enqueueCodeMessage(entry, { front: true, silent: true });
+      pauseCodeMessageQueue(owner, '上下文压缩失败，队列已暂停');
+      return;
+    }
+    result = await sendCore(
+      entry.message,
+      entry.isFork ? entry.displayMessage : null,
+      entry.imagePaths,
+      {
+        forceNew: entry.forceNew,
+        composerSnapshot: entry.snapshot,
+        queueOwner: owner,
+        queueManaged: true,
+      },
+    );
+  } catch (error) {
+    result = { ok: false, error };
+    addErrorBlock(error?.message || String(error));
+  } finally {
+    codeQueueDispatchingOwners.delete(owner);
+  }
+  if (result?.ok) {
+    scheduleCodeQueueDrain(owner);
+  } else {
+    pauseCodeMessageQueue(owner, result?.aborted ? '当前任务已停止，队列已暂停' : '上一轮未完成，队列已暂停');
+  }
+  renderCodeMessageQueue();
+}
+
+cwCodeQueueList?.addEventListener('click', event => {
+  const button = event.target.closest('[data-remove-code-queue]');
+  if (!button) return;
+  removeQueuedCodeMessage(button.dataset.removeCodeQueue || '');
+});
+cwCodeQueueResume?.addEventListener('click', () => {
+  codeQueuePauseReasons.delete(activeCodeQueueOwner);
+  renderCodeMessageQueue();
+  scheduleCodeQueueDrain(activeCodeQueueOwner, 0);
+});
 
 async function send(message) {
   if (activeImageUploadPromises.size > 0 || activeDocUploadPromises.size > 0) {
@@ -13238,12 +13937,19 @@ async function stopAgentLoop() {
 }
 
 async function sendCore(message, displayMessage, imagePaths, options = {}) {
+  const turnStartedAt = Date.now();
   const isFork = !!displayMessage;
   const forceNew = options.forceNew === true;
   const quiet = options.quiet === true;
+  const composerSnapshot = options.composerSnapshot || null;
+  const queueOwner = options.queueOwner || activeCodeQueueOwner;
+  let snapshotUrlBlock = '';
+  let turnSucceeded = false;
 
   // Gemini-style: fetch detected URLs at send time
-  if (!isFork && urlContext.size > 0) {
+  if (!isFork && composerSnapshot?.urlEntries?.length) {
+    snapshotUrlBlock = await composeUrlContextEntries(composerSnapshot.urlEntries);
+  } else if (!isFork && urlContext.size > 0) {
     sendBtn.disabled = true;
     await fetchAllPendingUrls();
     sendBtn.disabled = false;
@@ -13253,13 +13959,17 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let actualDisplay = displayMessage;
   // Snapshot doc metadata before clearDocs() so we can both render badges and persist to server.
   const docMetadata = !isFork
-    ? pendingDocs.filter(d => d.status !== 'error' && (d.path || d.content))
+    ? (composerSnapshot?.docs || pendingDocs.filter(d => d.status !== 'error' && (d.path || d.content)))
         .map(d => ({ name: d.name, size: d.size, length: d.length, path: d.path || null }))
     : [];
   if (!isFork) {
-    const urlBlock = composeUrlContext();
-    const docBlock = composeDocContext();
-    const wsPrefix = webSearchPrefix();
+    const urlBlock = composerSnapshot ? snapshotUrlBlock : composeUrlContext();
+    const docBlock = composerSnapshot
+      ? (!codeMode && composerSnapshot.docs?.length
+          ? composerSnapshot.docs.filter(doc => doc.content).map(doc => `【文档: ${doc.name}】\n---\n${doc.content}\n---`).join('\n\n') + '\n\n'
+          : '')
+      : composeDocContext();
+    const wsPrefix = composerSnapshot ? (composerSnapshot.webSearchPrefix || '') : webSearchPrefix();
     if (urlBlock || docBlock || wsPrefix) {
       actualDisplay = message;
       actualMessage = wsPrefix + docBlock + urlBlock + message;
@@ -13268,10 +13978,12 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
 
   if (!isFork) {
     addUserMessage(message, imagePaths, { docs: docMetadata, fullText: actualMessage !== message ? actualMessage : '' });
-    clearPendingImages();
-    clearDraft();
-    clearUrlContext();
-    clearDocs();
+    if (!composerSnapshot) {
+      clearPendingImages();
+      clearDraft();
+      clearUrlContext();
+      clearDocs();
+    }
   } else {
     addUserMessage(displayMessage, imagePaths);
   }
@@ -13280,12 +13992,15 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   resetToolUseRuntimeState();
 
   const container = newAssistantBubble();
-  showThinking(container, '正在思考');
+  container.dataset.turnStartedAt = String(turnStartedAt);
+  showThinking(container, codeMode ? '正在生成响应…' : '正在思考');
   forceScrollBottom();
 
-  sendBtn.disabled = true;
+  sendBtn.disabled = !codeMode;
   stopBtn.classList.remove('hidden');
-  currentController = new AbortController();
+  const turnController = new AbortController();
+  currentController = turnController;
+  currentControllerQueueOwner = queueOwner;
   let lastResultEvent = null;
   let collectedAssistantText = '';
   let streamErrorEvent = null;
@@ -13295,7 +14010,11 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   if (cwd === null) {
     sendBtn.disabled = false;
     stopBtn.classList.add('hidden');
-    return;
+    if (currentController === turnController) {
+      currentController = null;
+      currentControllerQueueOwner = '';
+    }
+    return { ok: false, invalidCwd: true, text: '', usage: null };
   }
 
   try {
@@ -13318,7 +14037,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         disallowed_tools: perm.disallowed_tools,
         force_new: forceNew || null,
       }),
-      signal: currentController.signal,
+      signal: turnController.signal,
     });
     if (!resp.ok || !resp.body) {
       hideThinking(container);
@@ -13357,7 +14076,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
           } else if (obj.type === 'assistant') {
             collectedAssistantText += '\n' + assistantTextFromEvent(obj);
           }
-          const result = handleEvent(obj, asstContainer);
+          const result = handleEvent(obj, asstContainer, { queueOwner });
           if (result) asstContainer = result;
         } catch (e) { console.warn('parse fail', line, e); }
       }
@@ -13372,6 +14091,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       beep();
     }
     fetchFollowupSuggestions();
+    turnSucceeded = true;
     return { ok: true, result: lastResultEvent, usage: lastResultEvent?.usage || null, text: collectedAssistantText.trim() };
   } catch (e) {
     hideThinking(container);
@@ -13384,14 +14104,18 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     }
     return { ok: false, error: e, aborted: e.name === 'AbortError', text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
   } finally {
-    sendBtn.disabled = agentLoopRunning;
-    stopBtn.classList.add('hidden');
-    currentController = null;
+    sendBtn.disabled = agentLoopRunning || contextCompactionRunning;
+    if (currentController === turnController) {
+      stopBtn.classList.add('hidden');
+      currentController = null;
+      currentControllerQueueOwner = '';
+    }
     input.focus();
     refreshSessions();
     if (milestoneView) renderMilestones();
     refreshCwds();
     refreshGitStatus();
+    const willAutoRetryPermission = !!pendingPermissionAutoRetry;
     if (pendingPermissionAutoRetry) {
       const retry = pendingPermissionAutoRetry;
       pendingPermissionAutoRetry = null;
@@ -13401,6 +14125,11 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         });
       }, 0);
     }
+    if (!options.queueManaged && !willAutoRetryPermission) {
+      if (turnSucceeded) scheduleCodeQueueDrain(queueOwner);
+      else pauseCodeMessageQueue(queueOwner, '上一轮未完成，队列已暂停');
+    }
+    renderCodeMessageQueue();
   }
 }
 
@@ -13427,9 +14156,9 @@ function stopCurrentRunForPlan() {
   try { toast('计划已就绪 · 已暂停运行，等待你审批'); } catch {}
 }
 
-form.addEventListener('submit', (e) => {
+form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (contextCompactionRunning) {
+  if (contextCompactionRunning && !codeMode) {
     toast('正在压缩上下文，完成后会自动继续当前任务');
     return;
   }
@@ -13442,12 +14171,32 @@ form.addEventListener('submit', (e) => {
   const readyDocs = pendingDocs.filter(isReadyDocForSend).length;
   const loadingDocs = pendingDocs.filter(d => d.status === 'loading').length;
   if (!text && pendingImages.length === 0 && activeImageUploadPromises.size === 0 && readyDocs === 0 && loadingDocs === 0) return;
+  const owner = activeCodeQueueOwner;
+  const slashPayload = pendingSlashFork && pendingImages.length === 0 && readyDocs === 0 && loadingDocs === 0
+    ? slashForkPayloadFor(text)
+    : null;
   input.value = '';
   updateTokenCount();
   autosizeTextarea();
   syncComposerDraftState();
+  if (codeMode) {
+    pendingSlashFork = null;
+    const entry = await captureCodeComposerEntry(
+      text,
+      owner,
+      slashPayload,
+    );
+    const hasPendingQueue = codeQueueFor(owner).length > 0;
+    if (owner !== activeCodeQueueOwner || isCodeQueueOwnerBusy(owner) || hasPendingQueue || codeQueuePauseReasons.has(owner)) {
+      enqueueCodeMessage(entry, { silent: owner !== activeCodeQueueOwner });
+    } else {
+      dispatchCodeQueueEntry(entry);
+    }
+    input.focus();
+    return;
+  }
   if (pendingSlashFork && pendingImages.length === 0 && readyDocs === 0 && loadingDocs === 0) {
-    const payload = slashForkPayloadFor(text);
+    const payload = slashPayload || slashForkPayloadFor(text);
     pendingSlashFork = null;
     clearDraft();
     sendRaw(payload.sent, payload.display, [], { forceNew: !payload.native });
@@ -13494,6 +14243,7 @@ newSessionBtn.addEventListener('click', () => {
 function startNewSession() {
   stopNativeTurnRecovery();
   hidePicker();
+  activateNewCodeQueueOwner();
   pendingNativeRewind = null;
   sessionId = null;
   currentCodeRuntime = 'unknown';
@@ -14043,6 +14793,7 @@ async function loadSession(id) {
     if (!r.ok) return;
     const data = await r.json();
     sessionId = data.id;
+    activateCodeQueueForSession(data.id);
     currentCodeRuntime = data.runtime_origin || 'unknown';
     sessionFeedback = data.feedback || {};
     if (milestoneView) renderMilestones();
@@ -14341,9 +15092,14 @@ function renderCodeReviewPanel() {
       const persistedChangeSet = /^[0-9a-f]{32}$/.test(set.id);
       return `<section class="cw-review-set" data-review-set="${escapeHtml(set.id)}">
         <div class="cw-review-set-head">
-          <span class="cw-review-set-title">${escapeHtml(codeReviewTurnLabel(set.userIndex))}</span>
-          <span class="cw-review-set-meta">${set.files.length} 文件 · +${setAdd} / -${setDel}${set.rewound ? ' · 已整体回退' : ''}</span>
-          <button type="button" class="cw-review-btn cw-review-rewind" data-review-rewind="${set.userIndex}" ${set.rewound || set.userIndex < 0 ? 'disabled' : ''}>回退整轮</button>
+          <div class="cw-review-set-copy">
+            <span class="cw-review-set-title">${escapeHtml(codeReviewTurnLabel(set.userIndex))}</span>
+            <span class="cw-review-set-meta">${set.files.length} 文件 · +${setAdd} / -${setDel}${set.rewound ? ' · 已整体回退' : ''}</span>
+          </div>
+          <button type="button" class="cw-review-btn cw-review-rewind" data-review-rewind="${set.userIndex}" ${set.rewound || set.userIndex < 0 ? 'disabled' : ''} aria-label="回退${escapeHtml(codeReviewTurnLabel(set.userIndex))}的全部文件修改">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>
+            <span>回退本轮</span>
+          </button>
         </div>
         <div>${set.files.map(file => {
           const state = set.rewound ? 'rewound' : (file.review_state || 'pending');
@@ -14607,8 +15363,8 @@ function renderSessionStatsBar() {
   if (!bar) return;
   const agents = subagentCards.size;
   const files = sessionStatsState.changedFiles.length;
-  const hasAny = sessionStatsState.tasksTotal > 0 || agents > 0 || files > 0;
-  if (!codeMode || !hasAny) {
+  const isEmpty = document.body.classList.contains('cw-empty');
+  if (!codeMode || isEmpty) {
     bar.classList.add('hidden');
     return;
   }
@@ -14618,21 +15374,32 @@ function renderSessionStatsBar() {
   const tasksItem = $('cwStatsTasks');
   if (tasksCount) {
     tasksCount.textContent = sessionStatsState.tasksTotal
-      ? `${sessionStatsState.tasksDone}/${sessionStatsState.tasksTotal}` : '';
+      ? `${sessionStatsState.tasksDone}/${sessionStatsState.tasksTotal}` : '0';
   }
-  if (tasksItem) tasksItem.style.display = sessionStatsState.tasksTotal ? '' : 'none';
+  if (tasksItem) {
+    tasksItem.disabled = !sessionStatsState.tasksTotal;
+    tasksItem.title = sessionStatsState.tasksTotal ? '查看任务清单' : '暂无任务';
+  }
 
   const agentsCount = $('cwStatsAgentsCount');
   const agentsItem = $('cwStatsAgents');
-  if (agentsCount) agentsCount.textContent = agents ? String(agents) : '';
-  if (agentsItem) agentsItem.style.display = agents ? '' : 'none';
+  if (agentsCount) agentsCount.textContent = String(agents);
+  if (agentsItem) {
+    agentsItem.disabled = !agents;
+    agentsItem.title = agents ? '查看子代理' : '暂无子代理';
+  }
 
   const editsItem = $('cwStatsEdits');
+  const editsCount = $('cwStatsEditsCount');
   const addEl = $('cwStatsAdd');
   const delEl = $('cwStatsDel');
+  if (editsCount) editsCount.textContent = String(files);
   if (addEl) addEl.textContent = sessionStatsState.addLines ? `+${sessionStatsState.addLines}` : '';
   if (delEl) delEl.textContent = sessionStatsState.delLines ? `-${sessionStatsState.delLines}` : '';
-  if (editsItem) editsItem.style.display = files ? '' : 'none';
+  if (editsItem) {
+    editsItem.disabled = !files;
+    editsItem.title = files ? `查看 ${files} 个变更文件` : '暂无文件变更';
+  }
 }
 
 async function refreshSessionStatsDiff() {
@@ -14853,7 +15620,7 @@ function agentSdkVersionOptions(status, catalog) {
     .sort((left, right) => compareAgentSdkVersions(right, left))
     .map(version => {
       const badges = [];
-      if (version === recommended) badges.push('推荐');
+      if (version === recommended) badges.push('应用锁定');
       if (version === installed) badges.push('当前');
       if (catalog?.source === 'registry' && version === latest && version !== recommended) badges.push('最新');
       return { version, label: badges.length ? `${version}（${badges.join(' · ')}）` : version };
@@ -14916,13 +15683,13 @@ function renderAgentSdkVersionControls() {
       agentSdkVersionHelp.textContent = '未找到 npm，暂时不能下载或切换 SDK 版本。';
       agentSdkVersionHelp.classList.add('is-error');
     } else if (agentSdkVersionCatalog?.source === 'fallback' && agentSdkVersionCatalog?.error) {
-      agentSdkVersionHelp.textContent = 'npm 版本列表暂不可用，仅显示推荐版和当前安装版。';
+      agentSdkVersionHelp.textContent = 'npm 版本列表暂不可用，仅显示应用锁定版和当前安装版。';
       agentSdkVersionHelp.classList.add('is-warning');
     } else if (target && recommended && target !== recommended) {
-      agentSdkVersionHelp.textContent = `这是自选版本；推荐版 ${recommended} 经过当前应用验证，切换失败会自动恢复。`;
+      agentSdkVersionHelp.textContent = `这是自选版本；应用锁定版 ${recommended} 已完成完整验证，切换失败会自动恢复。`;
       agentSdkVersionHelp.classList.add('is-warning');
     } else {
-      agentSdkVersionHelp.textContent = '推荐版经过当前应用验证；其他稳定版本会在激活前进行启动检查。';
+      agentSdkVersionHelp.textContent = '应用锁定版经过完整验证；其他稳定版本会在激活前进行启动检查。';
     }
   }
 
@@ -14983,9 +15750,9 @@ async function refreshAgentSdkStatus(forceVersions = false) {
     const source = agentSdkSourceLabel(data.active_source);
     agentSdkStatusText.textContent = data.running
       ? (data.active_recommended
-        ? `运行中 ${active} · ${source} · 推荐版`
-        : `运行中 ${active} · ${source} · 自选版（推荐 ${required}）`)
-      : `未运行 · 推荐 ${required}${data.error ? ` · ${data.error}` : ''}`;
+        ? `运行中 ${active} · ${source} · 应用锁定版`
+        : `运行中 ${active} · ${source} · 当前版本（应用锁定版 ${required}）`)
+      : `未运行 · 应用锁定版 ${required}${data.error ? ` · ${data.error}` : ''}`;
     if (agentSdkCard) {
       agentSdkCard.dataset.status = data.running && data.active_compatible && data.active_recommended
         ? 'ready'
@@ -15033,7 +15800,7 @@ if (agentSdkInstallBtn) agentSdkInstallBtn.addEventListener('click', async () =>
   const verb = ({ install: '安装', update: '更新', rollback: '降级', reinstall: '重新安装' })[action] || '安装';
   const recommended = normalizeAgentSdkVersion(status.required_version);
   const warning = target !== recommended
-    ? `\n\n${target} 不是当前应用推荐版 ${recommended}，将先启动验证，失败时自动恢复原版本。`
+    ? `\n\n${target} 不是当前应用锁定版 ${recommended}，将先启动验证，失败时自动恢复原版本。`
     : '';
   if (!confirm(`将${verb} Claude Agent SDK ${target}。安装期间不能有正在运行的 Code 任务。${warning}\n\n继续吗？`)) return;
   agentSdkInstallBusy = true;
@@ -16971,6 +17738,28 @@ function composeUrlContext() {
   return blocks.length ? blocks.join('\n\n') + '\n\n' : '';
 }
 
+async function composeUrlContextEntries(entries) {
+  const blocks = [];
+  for (const [url, initialState] of (entries || [])) {
+    let state = { ...(initialState || {}) };
+    if (state.status !== 'ready' || !state.content) {
+      try {
+        const response = await fetch('/api/fetch-url', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ url, max_chars: MAX_URL_CHARS }),
+        });
+        if (response.ok) state = { ...(await response.json()), status: 'ready' };
+      } catch {}
+    }
+    if (state.status !== 'ready' || !state.content) continue;
+    const title = state.title || url;
+    const suffix = state.truncated ? `\n(已截断，原文共约 ${state.length} 字)` : '';
+    blocks.push(`【网页: ${title}】\n${url}\n---\n${state.content}\n---${suffix}`);
+  }
+  return blocks.length ? blocks.join('\n\n') + '\n\n' : '';
+}
+
 function clearUrlContext() {
   urlContext.clear();
   renderUrlChips();
@@ -17923,6 +18712,7 @@ function setCodeMode(enabled, options = {}) {
   updateWelcomeCopy();
   updateSettingsLabel();
   updateShellNav(codeMode ? 'code' : undefined);
+  renderCodeMessageQueue();
   scheduleConversationRailUpdate();
 }
 
@@ -17954,6 +18744,7 @@ function syncEmptyShellState() {
   const empty = !!(welcome && chatInner && welcome.parentElement === chatInner);
   document.body.classList.toggle('cw-empty', empty);
   syncComposerDraftState();
+  renderSessionStatsBar();
   scheduleConversationRailUpdate();
   return empty;
 }
