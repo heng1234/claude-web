@@ -74,6 +74,105 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
         finally:
             self._cleanup_session(session_id)
 
+    async def test_agent_sdk_install_endpoint_forwards_selected_version(self):
+        request = Request({
+            "type": "http", "method": "POST", "path": "/api/agent-sdk/install", "headers": [],
+            "client": ("127.0.0.1", 12345),
+        })
+        selected = "0.2.111"
+        with tempfile.TemporaryDirectory() as temp:
+            staging = server.Path(temp) / "staging"
+            staging.mkdir()
+            with patch.dict(os.environ, {"CLAUDE_WEB_CODE_RUNTIME": "agent-sdk"}), \
+                    patch.object(server, "_is_local_request", return_value=True), \
+                    patch.object(
+                        server,
+                        "install_version",
+                        AsyncMock(
+                            return_value={
+                                "staging": staging,
+                                "version": selected,
+                                "recommended": False,
+                            }
+                        ),
+                    ) as install, \
+                    patch.object(server._claude_agent_bridge, "shutdown", AsyncMock()), \
+                    patch.object(server._claude_agent_bridge, "ensure_started", AsyncMock(return_value=True)), \
+                    patch.object(server._claude_agent_bridge, "sdk_info", {"version": selected}), \
+                    patch.object(server, "activate_staging", return_value=None), \
+                    patch.object(server, "discard_backup"), \
+                    patch.object(
+                        server,
+                        "_agent_sdk_management_status",
+                        return_value={"active_version": selected},
+                    ):
+                result = await server.install_agent_sdk(
+                    request,
+                    server.AgentSdkInstallRequest(version=f"v{selected}"),
+                )
+        install.assert_awaited_once_with(selected)
+        self.assertTrue(result["ok"])
+        self.assertEqual(selected, result["installed_version"])
+        self.assertFalse(result["recommended"])
+
+    async def test_agent_sdk_install_endpoint_rejects_non_semver_target(self):
+        request = Request({
+            "type": "http", "method": "POST", "path": "/api/agent-sdk/install", "headers": [],
+            "client": ("127.0.0.1", 12345),
+        })
+        with patch.object(server, "_is_local_request", return_value=True), \
+                patch.object(server, "install_version", AsyncMock()) as install:
+            with self.assertRaises(HTTPException) as raised:
+                await server.install_agent_sdk(
+                    request,
+                    server.AgentSdkInstallRequest(version="latest --force"),
+                )
+        self.assertEqual(400, raised.exception.status_code)
+        install.assert_not_awaited()
+
+    async def test_agent_sdk_install_rolls_back_when_bridge_loads_a_different_version(self):
+        request = Request({
+            "type": "http", "method": "POST", "path": "/api/agent-sdk/install", "headers": [],
+            "client": ("127.0.0.1", 12345),
+        })
+        selected = "0.2.111"
+        with tempfile.TemporaryDirectory() as temp:
+            staging = server.Path(temp) / "staging"
+            staging.mkdir()
+            backup = server.Path(temp) / "backup"
+            backup.mkdir()
+            with patch.dict(os.environ, {"CLAUDE_WEB_CODE_RUNTIME": "agent-sdk"}), \
+                    patch.object(server, "_is_local_request", return_value=True), \
+                    patch.object(
+                        server,
+                        "install_version",
+                        AsyncMock(
+                            return_value={
+                                "staging": staging,
+                                "version": selected,
+                                "recommended": False,
+                            }
+                        ),
+                    ), \
+                    patch.object(server._claude_agent_bridge, "shutdown", AsyncMock()), \
+                    patch.object(
+                        server._claude_agent_bridge,
+                        "ensure_started",
+                        AsyncMock(side_effect=[True, True]),
+                    ), \
+                    patch.object(server._claude_agent_bridge, "sdk_info", {"version": "0.2.112"}), \
+                    patch.object(server, "activate_staging", return_value=backup), \
+                    patch.object(server, "rollback_activation") as rollback, \
+                    patch.object(server, "discard_backup"):
+                with self.assertRaises(HTTPException) as raised:
+                    await server.install_agent_sdk(
+                        request,
+                        server.AgentSdkInstallRequest(version=selected),
+                    )
+        self.assertEqual(502, raised.exception.status_code)
+        self.assertIn("failed activation verification", str(raised.exception.detail))
+        rollback.assert_called_once_with(backup)
+
     async def test_running_agent_loop_owns_session_between_turns(self):
         session_id = "loop-owner-" + uuid.uuid4().hex
         job_id = "job-" + uuid.uuid4().hex

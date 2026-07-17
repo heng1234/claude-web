@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import shutil
 import tempfile
@@ -324,6 +325,87 @@ class AgentSdkRuntimeLimitTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
         self.assertIn("runtime limit reached (8)", str(raised.exception))
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is required for the selected SDK version test")
+class AgentSdkSelectedVersionTest(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.managed_root = Path(self.temp_dir.name) / "managed-sdk"
+        self.sdk_dir = (
+            self.managed_root / "node_modules" / "@anthropic-ai" / "claude-agent-sdk"
+        )
+        self.sdk_dir.mkdir(parents=True)
+        self.selected_version = "0.2.111"
+        (self.sdk_dir / "package.json").write_text(
+            json.dumps(
+                {
+                    "name": "@anthropic-ai/claude-agent-sdk",
+                    "version": self.selected_version,
+                    "type": "module",
+                    "exports": "./sdk.mjs",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.managed_root / ".claude-web-sdk.json").write_text(
+            json.dumps(
+                {
+                    "package": "@anthropic-ai/claude-agent-sdk",
+                    "version": self.selected_version,
+                    "selectionMode": "custom",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.sdk_dir / "sdk.mjs").write_text(
+            textwrap.dedent(
+                """
+                export function query({prompt}) {
+                  return (async function* () {
+                    for await (const _message of prompt) {
+                      yield {type: 'system', subtype: 'init', session_id: 'selected-native'};
+                      yield {type: 'result', subtype: 'success', is_error: false,
+                        session_id: 'selected-native', usage: {input_tokens: 1, output_tokens: 1}};
+                    }
+                  })();
+                }
+                export async function forkSession() { return {sessionId: 'forked'}; }
+                export async function getSessionMessages() { return []; }
+                """
+            ),
+            encoding="utf-8",
+        )
+        self.env = patch.dict(
+            os.environ,
+            {
+                "CLAUDE_AGENT_SDK_PATH": "",
+                "CLAUDE_WEB_AGENT_SDK_HOME": str(self.managed_root),
+                "CLAUDE_WEB_CODE_RUNTIME": "agent-sdk",
+            },
+        )
+        self.env.start()
+        self.bridge = AgentSdkBridge()
+
+    async def asyncTearDown(self):
+        await self.bridge.shutdown()
+        self.env.stop()
+        self.temp_dir.cleanup()
+
+    async def test_explicit_managed_version_is_loaded_and_smoke_tested(self):
+        self.assertTrue(await self.bridge.ensure_started())
+        status = self.bridge.status()
+        self.assertEqual(self.selected_version, status["sdk"]["version"])
+        self.assertTrue(status["sdk"]["compatible"])
+        self.assertFalse(status["sdk"]["recommended"])
+        self.assertTrue(status["sdk"]["selected"])
+
+        turn = await self.bridge.open_turn(
+            "selected-session",
+            {"content": [{"type": "text", "text": "hello"}], "cwd": self.temp_dir.name},
+        )
+        envelopes = [item async for item in turn.events()]
+        self.assertEqual("done", envelopes[-1]["type"])
 
 
 if __name__ == "__main__":

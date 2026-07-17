@@ -13,6 +13,7 @@
 - **FEATURE** Code 手动与高水位压缩改为 Claude Code 原生 `/compact`，保持原 Session ID，并消费 `compact_boundary` 的压缩前后 Token；普通聊天仍保留本地摘要路径
 - **FEATURE** 搬入 ccgui 风格的 `PreToolUse` 权限策略，并接通 Web 运行中审批：允许一次、本会话始终允许、拒绝和 AskUserQuestion 回答都会恢复同一个 SDK turn
 - **FEATURE** claude-web 建立自己的 Agent SDK 安装机制：独立用户目录、精确 `package-lock`、临时校验、原子切换、启动失败回滚和设置页显式升级；ccgui 安装只作为迁移兼容
+- **FEATURE** Claude Agent SDK 设置卡新增稳定版本目录和版本选择器，可显式更新、降级或重装；推荐版继续使用应用锁文件，自选版精确锁定版本，激活时校验实际加载版本并在失败时恢复原安装
 - **FIX** Git checkpoint v2 保存 tracked、staged 和 untracked 全部状态，以专用 Git ref 防 GC；禁止运行中回滚，并在恢复失败时事务式恢复点击时现场
 - **REFACTOR** `claude_web/server.py` 成为唯一后端实现，根目录 `server.py` 只保留兼容启动转发
 - **FEATURE** 已通过访问码或 Authenticator 认证的远程设备现在可使用与电脑端相同的工具权限、Agent Loop 测试命令和自动模式；Code 模式默认使用 `bypassPermissions`

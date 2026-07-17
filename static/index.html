@@ -1316,8 +1316,78 @@
     line-height: 1.45;
     overflow-wrap: anywhere;
   }
+  .agent-sdk-version-panel {
+    margin: 12px 0 0 42px;
+    display: grid;
+    gap: 7px;
+  }
+  .agent-sdk-version-meta {
+    min-height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .agent-sdk-version-label {
+    color: #514b46;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .agent-sdk-version-source {
+    color: #8a827a;
+    font-size: 11px;
+    text-align: right;
+  }
+  .agent-sdk-version-select-wrap {
+    position: relative;
+    min-width: 0;
+  }
+  .agent-sdk-version-select {
+    width: 100%;
+    min-height: 44px;
+    appearance: none;
+    padding: 0 42px 0 12px;
+    border: 1px solid #ded7cf;
+    border-radius: 10px;
+    background: #fff;
+    color: #332f2b;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .agent-sdk-version-select:hover:not(:disabled) { border-color: #cfc4ba; }
+  .agent-sdk-version-select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .agent-sdk-version-select:disabled {
+    background: #f5f2ef;
+    color: #9a928b;
+    cursor: not-allowed;
+  }
+  .agent-sdk-version-chevron {
+    position: absolute;
+    top: 50%;
+    right: 13px;
+    width: 16px;
+    height: 16px;
+    color: #756e67;
+    pointer-events: none;
+    transform: translateY(-50%);
+  }
+  .agent-sdk-version-select:disabled + .agent-sdk-version-chevron { opacity: .45; }
+  .agent-sdk-version-help {
+    min-height: 18px;
+    color: #8a827a;
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+  .agent-sdk-version-help.is-warning { color: #9b5d24; }
+  .agent-sdk-version-help.is-error { color: #a9443d; }
   .agent-sdk-action.settings-btn {
-    min-height: 40px;
+    min-height: 44px;
     flex: 0 0 auto;
     padding: 0 14px;
     border-color: #332f2b;
@@ -1480,7 +1550,8 @@
     .sidebar-footer-action { min-width: 44px; min-height: 44px; }
     .agent-sdk-main { grid-template-columns: 1fr; gap: 13px; }
     .agent-sdk-action.settings-btn { width: 100%; min-height: 44px; }
-    .agent-sdk-path { margin-left: 0; }
+    .agent-sdk-path,
+    .agent-sdk-version-panel { margin-left: 0; }
   }
 
   /* ===== Prompt optimizer ===== */
@@ -6902,6 +6973,21 @@
                       </div>
                     </div>
                   </div>
+                  <div class="agent-sdk-version-panel">
+                    <div class="agent-sdk-version-meta">
+                      <label class="agent-sdk-version-label" for="agentSdkVersionSelect">目标版本</label>
+                      <span id="agentSdkVersionSource" class="agent-sdk-version-source">读取版本列表…</span>
+                    </div>
+                    <div class="agent-sdk-version-select-wrap">
+                      <select id="agentSdkVersionSelect" class="agent-sdk-version-select" aria-describedby="agentSdkVersionHelp agentSdkStatusText" disabled>
+                        <option>读取中…</option>
+                      </select>
+                      <svg class="agent-sdk-version-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="m7 10 5 5 5-5" />
+                      </svg>
+                    </div>
+                    <div id="agentSdkVersionHelp" class="agent-sdk-version-help" role="status" aria-live="polite">推荐版经过当前应用验证；其他版本会在激活前进行启动检查。</div>
+                  </div>
                   <div id="agentSdkPathText" class="agent-sdk-path"></div>
                 </div>
                 <button id="agentSdkInstallBtn" type="button" class="settings-btn agent-sdk-action" aria-describedby="agentSdkStatusText agentSdkPathText">
@@ -6913,7 +6999,7 @@
                   <span id="agentSdkInstallLabel">安装 SDK</span>
                 </button>
               </div>
-              <div class="settings-hint agent-sdk-description">claude-web 使用自己的 <code>~/.claude-web</code> 安装目录和精确版本锁；不会自动跟随外部 SDK 或全局 Claude CLI 升级。应用升级改变锁定版本后，可在这里显式升级。</div>
+              <div class="settings-hint agent-sdk-description">默认使用应用验证的推荐版本，也可以显式选择其他稳定版本更新或降级。所有切换都使用临时安装、启动校验和失败回滚，不会自动升级。</div>
             </div>
           </div>
         </section>
@@ -7934,6 +8020,9 @@ const agentSdkStatusText = $('agentSdkStatusText');
 const agentSdkPathText = $('agentSdkPathText');
 const agentSdkInstallBtn = $('agentSdkInstallBtn');
 const agentSdkInstallLabel = $('agentSdkInstallLabel');
+const agentSdkVersionSelect = $('agentSdkVersionSelect');
+const agentSdkVersionSource = $('agentSdkVersionSource');
+const agentSdkVersionHelp = $('agentSdkVersionHelp');
 const notificationMasterEnabled = $('notificationMasterEnabled');
 const notificationChannelsEl = $('notificationChannels');
 const notificationSearch = $('notificationSearch');
@@ -14724,6 +14813,53 @@ function agentSdkSourceLabel(source) {
   })[source] || '未加载';
 }
 
+let agentSdkStatusSnapshot = null;
+let agentSdkVersionCatalog = null;
+let agentSdkVersionLoading = false;
+let agentSdkInstallBusy = false;
+
+function normalizeAgentSdkVersion(value) {
+  const normalized = String(value || '').trim().replace(/^v/i, '');
+  return /^\d+\.\d+\.\d+$/.test(normalized) ? normalized : '';
+}
+
+function compareAgentSdkVersions(left, right) {
+  const a = normalizeAgentSdkVersion(left).split('.').map(Number);
+  const b = normalizeAgentSdkVersion(right).split('.').map(Number);
+  if (a.length !== 3 || b.length !== 3) return 0;
+  for (let index = 0; index < 3; index += 1) {
+    if (a[index] !== b[index]) return a[index] - b[index];
+  }
+  return 0;
+}
+
+function agentSdkTargetAction(status, target) {
+  const installed = normalizeAgentSdkVersion(status?.installed_version);
+  if (!installed) return 'install';
+  const comparison = compareAgentSdkVersions(target, installed);
+  if (comparison > 0) return 'update';
+  if (comparison < 0) return 'rollback';
+  return 'reinstall';
+}
+
+function agentSdkVersionOptions(status, catalog) {
+  const recommended = normalizeAgentSdkVersion(status?.required_version);
+  const installed = normalizeAgentSdkVersion(status?.installed_version);
+  const latest = normalizeAgentSdkVersion(catalog?.latest_version);
+  const seen = new Set();
+  return [...(catalog?.versions || []), recommended, installed]
+    .map(normalizeAgentSdkVersion)
+    .filter(version => version && !seen.has(version) && seen.add(version))
+    .sort((left, right) => compareAgentSdkVersions(right, left))
+    .map(version => {
+      const badges = [];
+      if (version === recommended) badges.push('推荐');
+      if (version === installed) badges.push('当前');
+      if (catalog?.source === 'registry' && version === latest && version !== recommended) badges.push('最新');
+      return { version, label: badges.length ? `${version}（${badges.join(' · ')}）` : version };
+    });
+}
+
 function setAgentSdkInstallButton(label, loading = false) {
   if (!agentSdkInstallBtn) return;
   if (agentSdkInstallLabel) agentSdkInstallLabel.textContent = label;
@@ -14731,7 +14867,112 @@ function setAgentSdkInstallButton(label, loading = false) {
   agentSdkInstallBtn.setAttribute('aria-busy', loading ? 'true' : 'false');
 }
 
-async function refreshAgentSdkStatus() {
+function renderAgentSdkVersionControls() {
+  const status = agentSdkStatusSnapshot;
+  if (!agentSdkVersionSelect || !agentSdkInstallBtn) return;
+  if (!status) {
+    agentSdkVersionSelect.disabled = true;
+    agentSdkInstallBtn.disabled = true;
+    return;
+  }
+
+  const previous = normalizeAgentSdkVersion(agentSdkVersionSelect.value);
+  const options = agentSdkVersionOptions(status, agentSdkVersionCatalog);
+  const preferred = previous && options.some(item => item.version === previous)
+    ? previous
+    : (normalizeAgentSdkVersion(status.installed_version)
+      || normalizeAgentSdkVersion(status.required_version)
+      || options[0]?.version
+      || '');
+  agentSdkVersionSelect.replaceChildren(...options.map(item => {
+    const option = document.createElement('option');
+    option.value = item.version;
+    option.textContent = item.label;
+    option.selected = item.version === preferred;
+    return option;
+  }));
+
+  const localReady = !!status.local && !!status.npm_available && !!status.node_compatible;
+  agentSdkVersionSelect.disabled = agentSdkInstallBusy || agentSdkVersionLoading || !localReady || options.length === 0;
+  const target = normalizeAgentSdkVersion(agentSdkVersionSelect.value || preferred);
+  const recommended = normalizeAgentSdkVersion(status.required_version);
+  const action = agentSdkTargetAction(status, target);
+
+  if (agentSdkVersionSource) {
+    agentSdkVersionSource.textContent = agentSdkVersionLoading
+      ? '正在读取…'
+      : (agentSdkVersionCatalog?.source === 'registry'
+        ? `npm · ${options.length} 个稳定版本`
+        : (status.local ? '本地可用版本' : '仅本机可管理'));
+  }
+  if (agentSdkVersionHelp) {
+    agentSdkVersionHelp.classList.remove('is-warning', 'is-error');
+    if (!status.local) {
+      agentSdkVersionHelp.textContent = '版本切换只能在运行服务的本机浏览器中操作。';
+    } else if (!status.node_compatible) {
+      agentSdkVersionHelp.textContent = `需要 Node.js 18+，当前 ${status.node_version || '未检测到可用版本'}。`;
+      agentSdkVersionHelp.classList.add('is-error');
+    } else if (!status.npm_available) {
+      agentSdkVersionHelp.textContent = '未找到 npm，暂时不能下载或切换 SDK 版本。';
+      agentSdkVersionHelp.classList.add('is-error');
+    } else if (agentSdkVersionCatalog?.source === 'fallback' && agentSdkVersionCatalog?.error) {
+      agentSdkVersionHelp.textContent = 'npm 版本列表暂不可用，仅显示推荐版和当前安装版。';
+      agentSdkVersionHelp.classList.add('is-warning');
+    } else if (target && recommended && target !== recommended) {
+      agentSdkVersionHelp.textContent = `这是自选版本；推荐版 ${recommended} 经过当前应用验证，切换失败会自动恢复。`;
+      agentSdkVersionHelp.classList.add('is-warning');
+    } else {
+      agentSdkVersionHelp.textContent = '推荐版经过当前应用验证；其他稳定版本会在激活前进行启动检查。';
+    }
+  }
+
+  if (agentSdkInstallBusy) {
+    agentSdkInstallBtn.disabled = true;
+    setAgentSdkInstallButton('正在切换…', true);
+    return;
+  }
+  const actionLabel = ({
+    install: `安装 ${target}`,
+    update: `更新到 ${target}`,
+    rollback: `降级到 ${target}`,
+    reinstall: `重新安装 ${target}`,
+  })[action] || '安装 SDK';
+  setAgentSdkInstallButton(actionLabel);
+  agentSdkInstallBtn.disabled = !localReady || !target;
+  agentSdkInstallBtn.title = !status.local
+    ? '只能在本机浏览器中安装'
+    : (!status.node_compatible
+      ? `需要 Node.js 18+（当前 ${status.node_version || '未检测到'}）`
+      : (!status.npm_available ? '未找到 npm' : actionLabel));
+}
+
+async function refreshAgentSdkVersions(force = false) {
+  if (!agentSdkStatusSnapshot?.local) {
+    renderAgentSdkVersionControls();
+    return agentSdkVersionCatalog;
+  }
+  agentSdkVersionLoading = true;
+  renderAgentSdkVersionControls();
+  try {
+    const response = await fetch(`/api/agent-sdk/versions${force ? '?force=true' : ''}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || response.status);
+    agentSdkVersionCatalog = data;
+    return data;
+  } catch (error) {
+    agentSdkVersionCatalog = {
+      source: 'fallback',
+      versions: [],
+      error: error.message || String(error),
+    };
+    return agentSdkVersionCatalog;
+  } finally {
+    agentSdkVersionLoading = false;
+    renderAgentSdkVersionControls();
+  }
+}
+
+async function refreshAgentSdkStatus(forceVersions = false) {
   if (!agentSdkStatusText) return null;
   try {
     const response = await fetch('/api/agent-sdk/status');
@@ -14741,34 +14982,39 @@ async function refreshAgentSdkStatus() {
     const active = data.active_version || '未加载';
     const source = agentSdkSourceLabel(data.active_source);
     agentSdkStatusText.textContent = data.running
-      ? `运行中 ${active} · ${source} · 锁定 ${required}`
-      : `未运行 · 锁定 ${required}${data.error ? ` · ${data.error}` : ''}`;
+      ? (data.active_recommended
+        ? `运行中 ${active} · ${source} · 推荐版`
+        : `运行中 ${active} · ${source} · 自选版（推荐 ${required}）`)
+      : `未运行 · 推荐 ${required}${data.error ? ` · ${data.error}` : ''}`;
     if (agentSdkCard) {
-      agentSdkCard.dataset.status = data.running && data.active_compatible
+      agentSdkCard.dataset.status = data.running && data.active_compatible && data.active_recommended
         ? 'ready'
-        : (data.error ? 'error' : 'attention');
+        : (data.running && data.active_compatible
+          ? 'attention'
+          : (data.error ? 'error' : 'attention'));
     }
     if (agentSdkPathText) {
       agentSdkPathText.textContent = data.active_path
         ? `当前：${data.active_path}`
         : `安装到：${data.install_root || '~/.claude-web/dependencies/claude-sdk'}`;
     }
-    if (agentSdkInstallBtn) {
-      agentSdkInstallBtn.disabled = !data.local || !data.npm_available || !data.node_compatible;
-      agentSdkInstallBtn.title = !data.local
-        ? '只能在本机浏览器中安装'
-        : (!data.node_compatible
-          ? `需要 Node.js 18+（当前 ${data.node_version || '未检测到'}）`
-          : (!data.npm_available ? '未找到 npm' : '安装并激活 claude-web 锁定的精确版本'));
-      const actionLabel = data.installed_compatible
-        ? '重新安装'
-        : (data.installed_version && required !== '未知' ? `升级到 ${required}` : '安装锁定版');
-      setAgentSdkInstallButton(actionLabel);
+    agentSdkStatusSnapshot = data;
+    renderAgentSdkVersionControls();
+    if (data.local && (!agentSdkVersionCatalog || forceVersions)) {
+      await refreshAgentSdkVersions(forceVersions);
     }
     return data;
   } catch (error) {
-    agentSdkStatusText.textContent = `检测失败：${error.message || error}`;
+    agentSdkStatusSnapshot = null;
+    agentSdkStatusText.textContent = '无法连接 claude-web 服务，请确认服务正在运行后重试。';
     if (agentSdkCard) agentSdkCard.dataset.status = 'error';
+    if (agentSdkVersionSource) agentSdkVersionSource.textContent = '服务未连接';
+    if (agentSdkVersionHelp) {
+      agentSdkVersionHelp.textContent = `状态接口不可用：${error.message || error}`;
+      agentSdkVersionHelp.classList.remove('is-warning');
+      agentSdkVersionHelp.classList.add('is-error');
+    }
+    if (agentSdkVersionSelect) agentSdkVersionSelect.disabled = true;
     if (agentSdkInstallBtn) {
       agentSdkInstallBtn.disabled = true;
       setAgentSdkInstallButton('暂不可用');
@@ -14777,19 +15023,35 @@ async function refreshAgentSdkStatus() {
   }
 }
 
+if (agentSdkVersionSelect) agentSdkVersionSelect.addEventListener('change', renderAgentSdkVersionControls);
+
 if (agentSdkInstallBtn) agentSdkInstallBtn.addEventListener('click', async () => {
-  if (!confirm('将下载并安装 claude-web 锁定的 Claude Agent SDK 版本。安装期间不能有正在运行的 Code 任务。继续吗？')) return;
-  agentSdkInstallBtn.disabled = true;
-  setAgentSdkInstallButton('正在安装…', true);
-  if (agentSdkStatusText) agentSdkStatusText.textContent = '正在通过 npm 安装并校验锁定版本…';
+  const target = normalizeAgentSdkVersion(agentSdkVersionSelect?.value);
+  const status = agentSdkStatusSnapshot;
+  if (!target || !status || agentSdkInstallBusy) return;
+  const action = agentSdkTargetAction(status, target);
+  const verb = ({ install: '安装', update: '更新', rollback: '降级', reinstall: '重新安装' })[action] || '安装';
+  const recommended = normalizeAgentSdkVersion(status.required_version);
+  const warning = target !== recommended
+    ? `\n\n${target} 不是当前应用推荐版 ${recommended}，将先启动验证，失败时自动恢复原版本。`
+    : '';
+  if (!confirm(`将${verb} Claude Agent SDK ${target}。安装期间不能有正在运行的 Code 任务。${warning}\n\n继续吗？`)) return;
+  agentSdkInstallBusy = true;
+  renderAgentSdkVersionControls();
+  if (agentSdkStatusText) agentSdkStatusText.textContent = `正在下载、校验并激活 ${target}…`;
   try {
-    const response = await fetch('/api/agent-sdk/install', { method: 'POST' });
-    const data = await response.json();
+    const response = await fetch('/api/agent-sdk/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version: target }),
+    });
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.detail || response.status);
-    toast(`Claude Agent SDK ${data.active_version || data.required_version} 已激活`);
+    toast(`Claude Agent SDK ${data.active_version || data.installed_version || target} 已激活`);
   } catch (error) {
     toast(`Agent SDK 安装失败：${error.message || error}`, { timeout: 7000 });
   } finally {
+    agentSdkInstallBusy = false;
     await refreshAgentSdkStatus();
   }
 });

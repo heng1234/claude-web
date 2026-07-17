@@ -72,6 +72,19 @@ function packageDir(root) {
   return join(root, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
 }
 
+function managedSelectedVersion(root) {
+  try {
+    const metadata = JSON.parse(readFileSync(join(root, '.claude-web-sdk.json'), 'utf8'));
+    if (metadata?.package !== PACKAGE_NAME) return null;
+    const version = String(metadata?.version || '').trim();
+    return /^\d+\.\d+\.\d+$/.test(version)
+      ? version
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function packageEntry(candidate) {
   let location = resolve(candidate);
   if (!existsSync(location)) return null;
@@ -101,22 +114,42 @@ function sdkCandidates() {
     || join(homedir(), '.claude-web', 'dependencies', 'claude-sdk');
   const candidates = [];
   if (configured) {
-    candidates.push(configured);
-    candidates.push(packageDir(configured));
+    candidates.push({ path: configured, source: 'environment_override', selectedVersion: null });
+    candidates.push({ path: packageDir(configured), source: 'environment_override', selectedVersion: null });
   }
-  candidates.push(join(managedRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk'));
-  candidates.push(join(BRIDGE_DIR, 'node_modules', '@anthropic-ai', 'claude-agent-sdk'));
-  candidates.push(join(homedir(), '.codemoss', 'dependencies', 'claude-sdk', 'node_modules', '@anthropic-ai', 'claude-agent-sdk'));
-  return [...new Set(candidates.map((item) => isAbsolute(item) ? item : resolve(item)))];
+  candidates.push({
+    path: join(managedRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
+    source: 'managed',
+    selectedVersion: managedSelectedVersion(managedRoot),
+  });
+  candidates.push({
+    path: join(BRIDGE_DIR, 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
+    source: 'bundled',
+    selectedVersion: null,
+  });
+  candidates.push({
+    path: join(homedir(), '.codemoss', 'dependencies', 'claude-sdk', 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
+    source: 'migration',
+    selectedVersion: null,
+  });
+  const unique = new Map();
+  for (const candidate of candidates) {
+    const path = isAbsolute(candidate.path) ? candidate.path : resolve(candidate.path);
+    const previous = unique.get(path);
+    if (!previous || candidate.selectedVersion) unique.set(path, { ...candidate, path });
+  }
+  return [...unique.values()];
 }
 
 async function loadSdk() {
   if (sdk) return sdk;
   const rejectedVersions = [];
   for (const candidate of sdkCandidates()) {
-    const found = packageEntry(candidate);
+    const found = packageEntry(candidate.path);
     if (!found) continue;
-    if (!ALLOW_UNSUPPORTED_SDK && found.version !== EXPECTED_SDK_VERSION) {
+    const recommended = found.version === EXPECTED_SDK_VERSION;
+    const approvedSelection = !!candidate.selectedVersion && found.version === candidate.selectedVersion;
+    if (!ALLOW_UNSUPPORTED_SDK && !recommended && !approvedSelection) {
       rejectedVersions.push(`${found.packageDir} (${found.version || 'unknown'})`);
       log(`skipping unsupported SDK ${found.version || 'unknown'} at ${found.packageDir}; expected ${EXPECTED_SDK_VERSION}`);
       continue;
@@ -131,7 +164,10 @@ async function loadSdk() {
         path: found.packageDir,
         version: found.version,
         expectedVersion: EXPECTED_SDK_VERSION,
-        compatible: found.version === EXPECTED_SDK_VERSION,
+        compatible: recommended || approvedSelection,
+        recommended,
+        selected: approvedSelection,
+        source: candidate.source,
       };
       return sdk;
     } catch (error) {
