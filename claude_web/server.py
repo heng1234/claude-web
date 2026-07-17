@@ -42,10 +42,12 @@ from claude_web.agent_sdk_manager import (
     AgentSdkInstallError,
     activate_staging,
     discard_backup,
-    install_pinned,
+    install_version,
     install_root as agent_sdk_install_root,
+    normalize_requested_version,
     rollback_activation,
     status_payload as agent_sdk_status_payload,
+    version_catalog,
 )
 
 _log = logging.getLogger("claude_web")
@@ -87,6 +89,12 @@ _LOCAL_CLIENT_NETWORKS = tuple(
     for value in (
         "127.0.0.0/8",
         "::1/128",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16",
+        "fc00::/7",
+        "fe80::/10",
     )
 )
 _mobile_login_failures: Dict[str, List[float]] = {}
@@ -1189,6 +1197,10 @@ class NativeCompactRequest(BaseModel):
     permission_mode: Optional[str] = None
     allowed_tools: Optional[List[str]] = None
     disallowed_tools: Optional[List[str]] = None
+
+
+class AgentSdkInstallRequest(BaseModel):
+    version: Optional[str] = None
 
 
 class PermissionDecisionRequest(BaseModel):
@@ -5487,13 +5499,18 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 turn = await _claude_agent_bridge.open_turn(session_id, agent_params)
             except asyncio.TimeoutError as exc:
                 try:
-                    await _claude_agent_bridge.close_session(session_id)
+                    await _claude_agent_bridge.restart(
+                        "Claude Agent SDK bridge did not queue the turn within the acknowledgement window"
+                    )
                 except Exception:
                     pass
                 await discard_git_checkpoint(checkpoint, work_dir)
                 raise HTTPException(
                     status_code=504,
-                    detail="Claude Agent SDK did not acknowledge the turn; CLI fallback was blocked to prevent duplicate execution.",
+                    detail=(
+                        "Claude Agent SDK bridge did not queue the turn; the bridge was restarted "
+                        "without replaying the request. Check recent file/tool state before sending it again."
+                    ),
                 ) from exc
             except AgentSdkBridgeError as exc:
                 message = str(exc)
@@ -6792,10 +6809,18 @@ async def compact_agent_sdk_session(session_id: str, req: NativeCompactRequest):
         turn = await _claude_agent_bridge.open_turn(session_id, params)
     except asyncio.TimeoutError as exc:
         try:
-            await _claude_agent_bridge.close_session(session_id)
+            await _claude_agent_bridge.restart(
+                "Claude Agent SDK bridge did not queue native compact within the acknowledgement window"
+            )
         except Exception:
             pass
-        raise HTTPException(status_code=504, detail="Claude Agent SDK did not acknowledge native compact") from exc
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "Claude Agent SDK bridge did not queue native compact; the bridge was restarted "
+                "without replaying the request"
+            ),
+        ) from exc
     except AgentSdkBridgeError as exc:
         message = str(exc)
         status_code = (
@@ -10332,10 +10357,23 @@ async def agent_sdk_install_status(request: Request):
     return {**_agent_sdk_management_status(), "local": _is_local_request(request)}
 
 
+@app.get("/api/agent-sdk/versions")
+async def agent_sdk_versions(request: Request, force: bool = Query(default=False)):
+    if not _is_local_request(request):
+        raise HTTPException(status_code=403, detail="Agent SDK versions are available only from localhost")
+    return {"ok": True, **await version_catalog(force=force)}
+
+
 @app.post("/api/agent-sdk/install")
-async def install_agent_sdk(request: Request):
+async def install_agent_sdk(request: Request, req: Optional[AgentSdkInstallRequest] = None):
     if not _is_local_request(request):
         raise HTTPException(status_code=403, detail="Agent SDK installation is allowed only from localhost")
+    requested_version = None
+    if req is not None and req.version:
+        try:
+            requested_version = normalize_requested_version(req.version)
+        except AgentSdkInstallError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if _agent_sdk_install_lock.locked():
         raise HTTPException(status_code=409, detail="Agent SDK installation is already running")
     if (
@@ -10352,24 +10390,32 @@ async def install_agent_sdk(request: Request):
         bridge_stopped = False
         activated = False
         try:
-            installed = await install_pinned()
+            installed = await install_version(requested_version)
             staging = Path(installed["staging"])
             await _claude_agent_bridge.shutdown()
             bridge_stopped = True
             backup = activate_staging(staging)
             activated = True
             staging = None
-            if _claude_agent_bridge.enabled and not await _claude_agent_bridge.ensure_started():
-                error = _claude_agent_bridge.last_error or "installed SDK failed to start"
-                await _claude_agent_bridge.shutdown()
-                rollback_activation(backup)
-                activated = False
-                backup = None
-                await _claude_agent_bridge.ensure_started()
-                raise AgentSdkInstallError(error)
+            if _claude_agent_bridge.enabled:
+                bridge_ready = await _claude_agent_bridge.ensure_started()
+                activated_version = str((_claude_agent_bridge.sdk_info or {}).get("version") or "")
+                expected_version = str(installed.get("version") or "")
+                if not bridge_ready or activated_version != expected_version:
+                    error = _claude_agent_bridge.last_error or (
+                        f"installed SDK {expected_version or 'unknown'} failed activation verification; "
+                        f"bridge loaded {activated_version or 'no SDK'}"
+                    )
+                    await _claude_agent_bridge.shutdown()
+                    rollback_activation(backup)
+                    activated = False
+                    backup = None
+                    raise AgentSdkInstallError(error)
             response = {
                 "ok": True,
                 "message": "Claude Agent SDK installed and activated",
+                "installed_version": installed.get("version"),
+                "recommended": bool(installed.get("recommended")),
                 **_agent_sdk_management_status(),
             }
             discard_backup(backup)

@@ -119,9 +119,9 @@ npm install -g @anthropic-ai/claude-code
 claude
 ```
 
-首次启动后，在「设置 → 通用 → Claude Agent SDK」点击「安装锁定版」；已经安装时也可以点击「重新安装」。claude-web 会按随应用发布的 `package-lock.json` 安装到 `~/.claude-web/dependencies/claude-sdk/`，先在临时目录校验，再原子切换；不会自动跟随外部 SDK 或全局 CLI 升级。
+首次启动后，在「设置 → 通用 → Claude Agent SDK」选择目标版本并安装。应用锁定版使用随应用发布的精确 `package-lock.json`，也可以从 npm 稳定版目录显式选择其他版本更新或降级。claude-web 会先安装到临时目录，校验精确版本并启动 SDK bridge，成功后才原子切换到 `~/.claude-web/dependencies/claude-sdk/`；失败会恢复原版本，也不会自动升级。
 
-`CLAUDE_AGENT_SDK_PATH=/path/to/@anthropic-ai/claude-agent-sdk` 可用于开发覆盖，但版本仍必须与应用锁定版本完全一致。`~/.codemoss/dependencies/claude-sdk/` 只作为旧版安装迁移兼容路径；缺失或版本不匹配时 Code 模式会明确报错，不会隐式回退 CLI。只有显式设置 `CLAUDE_WEB_CODE_RUNTIME=cli` 才会让新的 Code 会话使用 CLI，已经归属 SDK 的会话仍不会切换。
+`CLAUDE_AGENT_SDK_PATH=/path/to/@anthropic-ai/claude-agent-sdk` 可用于开发覆盖；未带 claude-web 版本选择元数据的外部目录仍必须与应用锁定版本完全一致。旧安装目录只作为迁移兼容路径；缺失或版本不匹配时 Code 模式会明确报错，不会隐式回退 CLI。只有显式设置 `CLAUDE_WEB_CODE_RUNTIME=cli` 才会让新的 Code 会话使用 CLI，已经归属 SDK 的会话仍不会切换。
 
 ### pip 安装
 
@@ -219,7 +219,7 @@ python3 scripts/check_sensitive_info.py --paths \
         │  HTTP + SSE
         ▼
 FastAPI (Python)
-        ├── Code 模式 ── NDJSON ── Node bridge ── Claude Agent SDK 持久 Query
+        ├── Code 模式 ── NDJSON 命令 / 长度帧事件 ── Node bridge ── Claude Agent SDK 持久 Query
         └── Chat / 显式 CLI ─────── Claude Code CLI stream-json
         │
         ├── claude-web.db        会话元数据、设置、费用、授权设备
