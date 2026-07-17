@@ -1,6 +1,6 @@
 # Claude Code Web
 
-[![Version](https://img.shields.io/badge/version-2.0.4-c65f31.svg)](https://github.com/heng1234/claude-web)
+[![Version](https://img.shields.io/badge/version-2.0.5-c65f31.svg)](https://github.com/heng1234/claude-web)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![CSDN Blog](https://img.shields.io/badge/博客-CSDN-red.svg)](https://blog.csdn.net/qq_39313596?type=blog)
@@ -14,7 +14,7 @@ claude-web --open
 
 > 🔒 **隐私说明**：本工具只是 `claude` CLI 的本地 GUI 包装器，不上传任何数据到第三方服务。所有对话、图片、会话历史都存在本机 `history/` `uploads/` `claude-web.db` 中。认证沿用你本地 `claude` 的登录态（`~/.claude/`），本工具不接触任何 API Key。
 
-> 当前文档对应 `2.0.4`。历史变更见 [CHANGELOG.md](CHANGELOG.md)，Authenticator 配置见 [TOTP_SETUP.md](TOTP_SETUP.md)。
+> 当前文档对应 `2.0.5`。历史变更见 [CHANGELOG.md](CHANGELOG.md)，Authenticator 配置见 [TOTP_SETUP.md](TOTP_SETUP.md)。
 
 ## 📸 截图
 

@@ -2,6 +2,19 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.0.5",
+      "date": "2026-07-18",
+      "highlights": [
+        { "type": "feature", "text": "Claude Agent SDK 设置新增完整稳定版本目录，可显式更新、降级或重装；精确校验实际加载版本，失败时自动恢复原安装" },
+        { "type": "feature", "text": "Code 模式新增会话级待发送队列，运行中继续发送不会打断当前任务；上下文按消息快照，失败或停止后保留队列等待继续" },
+        { "type": "feature", "text": "Code 运行中显示“正在生成响应”和本轮耗时，工具调用之间保持连续计时，超过一分钟显示分秒，刷新恢复会话后重新显示" },
+        { "type": "fix", "text": "Node bridge 的 SDK 事件改用 4 字节长度帧，解除 64 KiB 行读取上限；大工具结果和图片不再触发 Separator is not found" },
+        { "type": "fix", "text": "bridge 异常会标记 runtime 不健康并换新 daemon；SDK 接管本轮后立即返回 queued ACK，避免误判超时和 CLI 重放" },
+        { "type": "fix", "text": "Code 状态条、文件审查面板、回退按钮和验证区改为更紧凑的分层布局，桌面减少视觉重量，手机保留完整触控尺寸" },
+        { "type": "feature", "text": "本机回环、RFC1918 局域网、链路本地和可信私网来源可免登录使用完整 Code 工具权限；公网来源仍须认证" }
+      ]
+    },
+    {
       "version": "2.0.4",
       "date": "2026-07-17",
       "highlights": [
