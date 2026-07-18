@@ -21,6 +21,7 @@ class CodeWorkspaceLoopTest(unittest.IsolatedAsyncioTestCase):
             conn.execute("DELETE FROM code_message_queue WHERE session_id = ?", (self.session_id,))
             conn.execute("DELETE FROM code_turn_requests WHERE session_id = ?", (self.session_id,))
             conn.execute("DELETE FROM code_project_settings WHERE cwd = ?", (str(Path(self.cwd).resolve()),))
+            conn.execute("DELETE FROM code_permission_rules WHERE session_id = ?", (self.session_id,))
             conn.execute("DELETE FROM sessions WHERE id = ?", (self.session_id,))
 
     async def test_persistent_queue_reorders_and_turn_idempotency_removes_accepted_item(self):
@@ -104,6 +105,69 @@ class CodeWorkspaceLoopTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("@@ -1 +1 @@", hunks[0]["patch"])
         self.assertNotIn("@@ -5 +5 @@", hunks[0]["patch"])
 
+    async def test_prewrite_diff_preview_is_code_scoped_and_does_not_write(self):
+        target = Path(self.cwd) / "demo.txt"
+        target.write_text("before\nkeep\n", encoding="utf-8")
+
+        preview = await server.preview_code_tool_change(
+            self.session_id,
+            server.CodeToolPreviewRequest(
+                tool_name="Edit",
+                input={"file_path": "demo.txt", "old_string": "before", "new_string": "after"},
+            ),
+        )
+
+        self.assertTrue(preview["supported"])
+        self.assertEqual("before\nkeep\n", preview["old_text"])
+        self.assertEqual("after\nkeep\n", preview["new_text"])
+        self.assertEqual("before\nkeep\n", target.read_text(encoding="utf-8"))
+        with self.assertRaises(HTTPException) as raised:
+            await server.preview_code_tool_change(
+                self.session_id,
+                server.CodeToolPreviewRequest(
+                    tool_name="Write",
+                    input={"file_path": "../outside.txt", "content": "blocked"},
+                ),
+            )
+        self.assertEqual(400, raised.exception.status_code)
+
+    async def test_code_file_reader_resolves_lines_and_tracks_real_file_updates(self):
+        target = Path(self.cwd) / "demo.py"
+        target.write_text("first = 1\nsecond = 2\nthird = 3\n", encoding="utf-8")
+
+        payload = await server.read_code_file(self.session_id, "demo.py:2-3", line_start=None, line_end=None)
+        self.assertTrue(payload["ok"])
+        self.assertEqual("demo.py", payload["path"])
+        self.assertEqual("python", payload["language"])
+        self.assertEqual((2, 3), (payload["line_start"], payload["line_end"]))
+        self.assertIn("second = 2", payload["content"])
+        old_etag = payload["etag"]
+
+        target.write_text("first = 1\nsecond = 20\nthird = 3\n", encoding="utf-8")
+        stat = await server.stat_code_file(self.session_id, "demo.py")
+        self.assertNotEqual(old_etag, stat["etag"])
+
+    async def test_code_file_reader_stays_inside_project_and_reports_ambiguous_names(self):
+        (Path(self.cwd) / "src").mkdir()
+        (Path(self.cwd) / "tests").mkdir()
+        (Path(self.cwd) / "src" / "shared.py").write_text("SOURCE = True\n", encoding="utf-8")
+        (Path(self.cwd) / "tests" / "shared.py").write_text("TEST = True\n", encoding="utf-8")
+
+        ambiguous = await server.read_code_file(self.session_id, "shared.py")
+        self.assertFalse(ambiguous["ok"])
+        self.assertTrue(ambiguous["ambiguous"])
+        self.assertEqual(["src/shared.py", "tests/shared.py"], [item["path"] for item in ambiguous["candidates"]])
+        with self.assertRaises(HTTPException) as raised:
+            await server.read_code_file(self.session_id, "../outside.py")
+        self.assertEqual(400, raised.exception.status_code)
+
+    async def test_code_file_reader_marks_binary_files_without_leaking_content(self):
+        (Path(self.cwd) / "sample.bin").write_bytes(b"abc\x00secret")
+        payload = server._code_file_payload(self.cwd, Path(self.cwd) / "sample.bin", include_content=True)
+        self.assertTrue(payload["binary"])
+        self.assertEqual("", payload["content"])
+        self.assertEqual("binary", payload["encoding"])
+
 
 class CodeWorkspaceStaticContractTest(unittest.TestCase):
     def test_light_context_stays_default_on_and_permission_copy_is_current(self):
@@ -113,6 +177,47 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         self.assertIn("LS.set('lightContextMode', true)", source)
         self.assertNotIn("Web 版不能在运行中批准权限", source)
         self.assertIn("替我审批", source)
+        self.assertIn('id="cwModeAutoApprove"', source)
+        self.assertNotIn('id="cwStatsApproval"', source)
+
+    def test_ten_ccgui_borrowed_features_are_code_only_contracts(self):
+        source = (Path(__file__).parents[1] / "static" / "index.html").read_text(encoding="utf-8")
+        required = [
+            'id="cwContextUsageModal"',
+            'data-mcp-health=',
+            'id="cwConversationSearch"',
+            'codeInputHistoryV1',
+            '/permissions/preview-change',
+            'cw-tool-group',
+            'id="cwPermissionRulesModal"',
+            'cw-code-diagnostic',
+            'id="cwWorkspacePresetsModal"',
+        ]
+        for marker in required:
+            self.assertIn(marker, source)
+        server_source = (Path(__file__).parents[1] / "claude_web" / "server.py").read_text(encoding="utf-8")
+        self.assertIn('"code.question_pending"', server_source)
+        self.assertIn('body:not(.code-mode) .cw-code-only', source)
+        self.assertIn("if (!codeMode) return el;", source)
+
+    def test_code_inspector_is_code_only_and_uses_project_scoped_file_api(self):
+        source = (Path(__file__).parents[1] / "static" / "index.html").read_text(encoding="utf-8")
+        for marker in [
+            'id="cwCodeInspector"',
+            'id="cwOpenCodeFileBtn"',
+            'function openCodeFileInspector',
+            '/code-file/stat?',
+            '/code-file/open-external',
+            "body.code-mode.cw-code-inspector-open",
+            "if (codeMode) return openCodeDiffInspector",
+        ]:
+            self.assertIn(marker, source)
+        self.assertIn('class="cw-code-inspector cw-code-only"', source)
+
+        server_source = (Path(__file__).parents[1] / "claude_web" / "server.py").read_text(encoding="utf-8")
+        self.assertIn('def _resolve_code_file_target', server_source)
+        self.assertIn('@app.get("/api/sessions/{session_id}/code-file")', server_source)
+        self.assertIn('_require_not_mobile_access(request, "远程设备不能启动电脑上的本机编辑器")', server_source)
 
 
 if __name__ == "__main__":

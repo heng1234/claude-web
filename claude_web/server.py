@@ -121,6 +121,8 @@ MAX_UPLOAD_MB = 20
 IGNORED_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", ".next", "dist", "build", ".cache", ".idea", ".vscode"}
 _CODE_DIFF_FILE_LIMIT = 80_000
 _CODE_DIFF_TURN_LIMIT = 240_000
+_CODE_FILE_MAX_BYTES = 2_000_000
+_CODE_FILE_SEARCH_LIMIT = 24
 KNOWN_TOOL_NAMES = {
     "Bash", "Read", "Write", "Edit", "MultiEdit", "Grep", "Glob",
     "LS", "WebFetch", "WebSearch", "TodoWrite", "Task", "NotebookEdit",
@@ -809,6 +811,34 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS code_workspace_presets (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                cwd TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                effort TEXT NOT NULL DEFAULT '',
+                permission_mode TEXT NOT NULL DEFAULT 'default',
+                light_context INTEGER NOT NULL DEFAULT 1,
+                validation_command TEXT NOT NULL DEFAULT '',
+                validation_mode TEXT NOT NULL DEFAULT 'ask',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS code_permission_rules (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                suggestions_json TEXT NOT NULL DEFAULT '[]',
+                created_at REAL NOT NULL
+            )
+            """
+        )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session_usage_session ON session_usage(session_id, turn_idx)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session_usage_ts ON session_usage(ts)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id)")
@@ -827,6 +857,7 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prompt_optimizer_feedback_rewrite ON prompt_optimizer_feedback(rewrite_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_code_queue_session ON code_message_queue(session_id, state, position)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_code_turn_session ON code_turn_requests(session_id, updated_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_code_permission_rules_session ON code_permission_rules(session_id, created_at)")
 
 
 init_db()
@@ -1341,6 +1372,28 @@ class CodeProjectSettingsRequest(BaseModel):
     validation_command: Optional[str] = ""
     validation_mode: Optional[str] = "ask"
     validation_timeout: Optional[int] = 120
+
+
+class CodeToolPreviewRequest(BaseModel):
+    tool_name: str
+    input: dict
+
+
+class CodeFileOpenExternalRequest(BaseModel):
+    path: str
+    line: Optional[int] = None
+    editor: Optional[str] = "system"
+
+
+class CodeWorkspacePresetRequest(BaseModel):
+    name: str
+    cwd: Optional[str] = ""
+    model: Optional[str] = ""
+    effort: Optional[str] = ""
+    permission_mode: Optional[str] = "default"
+    light_context: Optional[bool] = True
+    validation_command: Optional[str] = ""
+    validation_mode: Optional[str] = "ask"
 
 
 class GitCheckoutRequest(BaseModel):
@@ -3974,6 +4027,7 @@ _NOTIFICATION_CHANNEL_PRESETS = [
     {"id": "custom", "type": "custom", "name": "自定义 Webhook"},
 ]
 _NOTIFICATION_EVENT_OPTIONS = [
+    {"id": "code.question_pending", "name": "Code 等待回答"},
     {"id": "agent_loop.done", "name": "Agent Loop 完成"},
     {"id": "agent_loop.blocked", "name": "Agent Loop 阻塞"},
     {"id": "agent_loop.stuck", "name": "Agent Loop 重复失败"},
@@ -3982,6 +4036,7 @@ _NOTIFICATION_EVENT_OPTIONS = [
     {"id": "chat.error", "name": "聊天错误"},
 ]
 _NOTIFICATION_DEFAULT_EVENTS = [
+    "code.question_pending",
     "agent_loop.done",
     "agent_loop.blocked",
     "agent_loop.stuck",
@@ -4421,6 +4476,25 @@ def _notification_send_chat_error(session_id: str, cwd: str, err_event: dict) ->
             session_id=session_id,
             cwd=cwd,
             error_type=(err_event or {}).get("type") or "error",
+        ),
+    )
+
+
+def _notification_send_code_question(session_id: str, cwd: str, envelope: dict) -> None:
+    if str(envelope.get("toolName") or "") != "AskUserQuestion":
+        return
+    input_data = envelope.get("input") if isinstance(envelope.get("input"), dict) else {}
+    questions = input_data.get("questions") if isinstance(input_data.get("questions"), list) else []
+    first = questions[0] if questions else {}
+    prompt = str(first.get("question") or first.get("text") or "Claude 有问题需要你回答") if isinstance(first, dict) else "Claude 有问题需要你回答"
+    _notification_fire_and_forget(
+        "code.question_pending",
+        _notification_payload(
+            "Code 会话等待回答",
+            prompt[:400],
+            session_id=session_id,
+            cwd=cwd,
+            approval_id=str(envelope.get("approvalId") or ""),
         ),
     )
 
@@ -5265,6 +5339,7 @@ async def _drain_detached_agent_sdk_turn(
             # through /permissions/pending. They are transient UI state, not
             # conversation history.
             if envelope_type == "permission_request":
+                _notification_send_code_question(session_id, work_dir, envelope)
                 await _maybe_auto_approve_permission(session_id, envelope)
                 continue
             if envelope_type != "event" or not isinstance(envelope.get("event"), dict):
@@ -5378,6 +5453,7 @@ def _agent_sdk_streaming_response(
                     yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
                     continue
                 if envelope_type == "permission_request":
+                    _notification_send_code_question(session_id, work_dir, envelope)
                     if await _maybe_auto_approve_permission(session_id, envelope):
                         auto_event = {
                             "type": "permission_auto_approved",
@@ -6712,6 +6788,19 @@ async def resolve_agent_sdk_permission(
     row = _agent_sdk_session_row(session_id)
     if session_id not in _agent_sdk_running_sessions:
         raise HTTPException(status_code=409, detail="session has no active permission request")
+    remembered_rule = None
+    if req.allow and req.always_allow:
+        try:
+            pending_response = await _claude_agent_bridge.pending_permissions(session_id)
+            remembered_rule = next(
+                (
+                    item for item in (pending_response.get("pending") or [])
+                    if str(item.get("approvalId") or "") == approval_id
+                ),
+                None,
+            )
+        except (AgentSdkBridgeError, asyncio.TimeoutError):
+            remembered_rule = None
     try:
         result = await _claude_agent_bridge.respond_permission(
             session_id,
@@ -6724,7 +6813,62 @@ async def resolve_agent_sdk_permission(
         )
     except (AgentSdkBridgeError, asyncio.TimeoutError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if remembered_rule and remembered_rule.get("suggestions"):
+        with db_connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO code_permission_rules(id, session_id, tool_name, suggestions_json, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    uuid.uuid4().hex,
+                    session_id,
+                    str(remembered_rule.get("toolName") or "工具")[:160],
+                    json.dumps(remembered_rule.get("suggestions") or [], ensure_ascii=False),
+                    time.time(),
+                ),
+            )
     return {"ok": True, "runtime": _RUNTIME_ORIGIN_AGENT_SDK, "response": result, "session_id": row["id"]}
+
+
+@app.get("/api/sessions/{session_id}/permissions/rules")
+async def list_agent_sdk_permission_rules(session_id: str):
+    _agent_sdk_session_row(session_id)
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, tool_name, suggestions_json, created_at
+            FROM code_permission_rules WHERE session_id = ? ORDER BY created_at DESC
+            """,
+            (session_id,),
+        ).fetchall()
+    rules = []
+    for row in rows:
+        try:
+            suggestions = json.loads(row["suggestions_json"] or "[]")
+        except Exception:
+            suggestions = []
+        rules.append({
+            "id": row["id"],
+            "tool_name": row["tool_name"],
+            "suggestions": suggestions,
+            "created_at": row["created_at"],
+        })
+    return {"ok": True, "rules": rules}
+
+
+@app.delete("/api/sessions/{session_id}/permissions/rules")
+async def clear_agent_sdk_permission_rules(session_id: str):
+    _agent_sdk_session_row(session_id)
+    if session_id in _agent_sdk_running_sessions:
+        raise HTTPException(status_code=409, detail="请等待当前 Code 回合结束后再撤销授权规则")
+    try:
+        await _claude_agent_bridge.close_session(session_id)
+    except Exception:
+        pass
+    with db_connect() as conn:
+        conn.execute("DELETE FROM code_permission_rules WHERE session_id = ?", (session_id,))
+    return {"ok": True, "runtime_rebuilt": True}
 
 
 @app.get("/api/sessions/{session_id}/context-usage")
@@ -7039,6 +7183,408 @@ async def set_code_project_settings(session_id: str, req: CodeProjectSettingsReq
             (cwd, command, mode, timeout, time.time()),
         )
     return {"ok": True, **_code_project_settings(cwd)}
+
+
+def _code_preview_target(cwd: str, raw_path: str) -> Path:
+    root = Path(os.path.expanduser(cwd or "~")).resolve()
+    target = Path(os.path.expanduser(raw_path or ""))
+    if not target.is_absolute():
+        target = root / target
+    target = target.resolve()
+    try:
+        inside = os.path.commonpath((str(root), str(target))) == str(root)
+    except ValueError:
+        inside = False
+    if not inside:
+        raise HTTPException(status_code=400, detail="文件不在当前 Code 项目目录内")
+    return target
+
+
+def _split_code_file_target(raw_path: str) -> Tuple[str, Optional[int], Optional[int]]:
+    value = str(raw_path or "").strip().strip("`")
+    if not value:
+        return "", None, None
+    hash_match = re.match(r"^(.*)#L(\d+)(?:-L?(\d+))?$", value, flags=re.IGNORECASE)
+    if hash_match and hash_match.group(1):
+        return hash_match.group(1), int(hash_match.group(2)), int(hash_match.group(3) or hash_match.group(2))
+    line_match = re.match(r"^(.*):(\d+)(?:-(\d+))?$", value)
+    if line_match and line_match.group(1):
+        return line_match.group(1), int(line_match.group(2)), int(line_match.group(3) or line_match.group(2))
+    return value, None, None
+
+
+def _code_file_language(path: Path) -> str:
+    suffix = path.suffix.lower().lstrip(".")
+    aliases = {
+        "py": "python", "pyw": "python", "js": "javascript", "mjs": "javascript", "cjs": "javascript",
+        "ts": "typescript", "tsx": "typescript", "jsx": "javascript", "html": "html", "htm": "html",
+        "css": "css", "scss": "scss", "sass": "scss", "less": "less", "json": "json", "jsonl": "json",
+        "md": "markdown", "markdown": "markdown", "sh": "bash", "zsh": "bash", "bash": "bash",
+        "yml": "yaml", "yaml": "yaml", "toml": "ini", "ini": "ini", "cfg": "ini", "conf": "ini",
+        "java": "java", "kt": "kotlin", "kts": "kotlin", "go": "go", "rs": "rust", "rb": "ruby",
+        "php": "php", "swift": "swift", "c": "c", "h": "c", "cc": "cpp", "cpp": "cpp", "hpp": "cpp",
+        "cs": "csharp", "sql": "sql", "xml": "xml", "vue": "html", "svelte": "html", "dockerfile": "dockerfile",
+    }
+    if path.name.lower() == "dockerfile":
+        return "dockerfile"
+    return aliases.get(suffix, suffix or "plaintext")
+
+
+def _code_file_search_candidates(root: Path, raw_path: str) -> List[Path]:
+    normalized = str(raw_path or "").replace("\\", "/").lstrip("./")
+    file_name = Path(normalized).name
+    if not file_name:
+        return []
+    matches: List[Path] = []
+    try:
+        for current_root, dirs, files in os.walk(root):
+            dirs[:] = [name for name in dirs if name not in IGNORED_DIRS and not name.startswith(".")]
+            if file_name not in files:
+                continue
+            candidate = (Path(current_root) / file_name).resolve()
+            try:
+                relative = candidate.relative_to(root).as_posix()
+            except ValueError:
+                continue
+            if normalized and "/" in normalized and not relative.endswith(normalized):
+                continue
+            matches.append(candidate)
+            if len(matches) >= _CODE_FILE_SEARCH_LIMIT:
+                break
+    except OSError:
+        return []
+    source_markers = ("/src/", "/app/", "/lib/", "/claude_web/")
+    matches.sort(key=lambda item: (
+        0 if item.relative_to(root).as_posix() == normalized else 1,
+        0 if any(marker in f"/{item.relative_to(root).as_posix()}" for marker in source_markers) else 1,
+        len(item.relative_to(root).parts),
+        item.relative_to(root).as_posix(),
+    ))
+    return matches
+
+
+def _resolve_code_file_target(cwd: str, raw_path: str) -> Tuple[Path, List[Path]]:
+    root = Path(os.path.expanduser(cwd or "~")).resolve()
+    if not root.is_dir():
+        raise HTTPException(status_code=400, detail="Code 项目目录不存在")
+    path_value, _, _ = _split_code_file_target(raw_path)
+    if not path_value:
+        raise HTTPException(status_code=400, detail="文件路径不能为空")
+    exact = _code_preview_target(str(root), path_value)
+    if exact.is_file():
+        return exact, []
+    if exact.exists() and exact.is_dir():
+        raise HTTPException(status_code=400, detail="目标路径是目录，不是文件")
+    if Path(os.path.expanduser(path_value)).is_absolute():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    matches = _code_file_search_candidates(root, path_value)
+    if not matches:
+        raise HTTPException(status_code=404, detail="当前项目中没有找到该文件")
+    if len(matches) == 1:
+        return matches[0], []
+    return matches[0], matches
+
+
+def _code_file_etag(path: Path, stat: os.stat_result) -> str:
+    raw = f"{path}:{stat.st_mtime_ns}:{stat.st_size}".encode("utf-8", errors="replace")
+    return hashlib.sha256(raw).hexdigest()[:24]
+
+
+def _code_file_candidate_payload(root: Path, candidates: List[Path]) -> List[dict]:
+    return [
+        {
+            "path": item.relative_to(root).as_posix(),
+            "name": item.name,
+            "language": _code_file_language(item),
+        }
+        for item in candidates
+    ]
+
+
+def _code_file_payload(cwd: str, path: Path, *, include_content: bool) -> dict:
+    root = Path(os.path.expanduser(cwd or "~")).resolve()
+    target = path.resolve()
+    try:
+        relative = target.relative_to(root).as_posix()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="文件不在当前 Code 项目目录内") from exc
+    try:
+        stat = target.stat()
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail=f"无法读取文件状态：{exc}") from exc
+    payload = {
+        "ok": True,
+        "path": relative,
+        "name": target.name,
+        "language": _code_file_language(target),
+        "size": stat.st_size,
+        "mtime": stat.st_mtime,
+        "etag": _code_file_etag(target, stat),
+        "binary": False,
+    }
+    if not include_content:
+        return payload
+    if stat.st_size > _CODE_FILE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="文件超过 2MB，不能在 Code 检查器中直接打开")
+    try:
+        data = target.read_bytes()
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"无法读取文件：{exc}") from exc
+    if b"\x00" in data[:8192]:
+        payload.update({"binary": True, "content": "", "line_count": 0, "encoding": "binary"})
+        return payload
+    encoding = "utf-8"
+    try:
+        content = data.decode("utf-8")
+    except UnicodeDecodeError:
+        encoding = "utf-8-replace"
+        content = data.decode("utf-8", errors="replace")
+    payload.update({"content": content, "line_count": content.count("\n") + 1, "encoding": encoding})
+    return payload
+
+
+def _code_editor_catalog() -> List[dict]:
+    is_macos = sys.platform == "darwin"
+    applications = Path("/Applications")
+    options = [
+        {"id": "system", "name": "系统默认应用", "available": bool(shutil.which("open") or shutil.which("xdg-open") or sys.platform == "win32")},
+        {"id": "vscode", "name": "Visual Studio Code", "available": bool(shutil.which("code") or (is_macos and (applications / "Visual Studio Code.app").exists()))},
+        {"id": "cursor", "name": "Cursor", "available": bool(shutil.which("cursor") or (is_macos and (applications / "Cursor.app").exists()))},
+        {"id": "jetbrains", "name": "JetBrains IDE", "available": bool(
+            shutil.which("idea") or shutil.which("pycharm") or shutil.which("webstorm")
+            or (is_macos and any(applications.glob("*IntelliJ IDEA*.app")))
+            or (is_macos and any(applications.glob("*PyCharm*.app")))
+            or (is_macos and any(applications.glob("*WebStorm*.app")))
+        )},
+        {"id": "zed", "name": "Zed", "available": bool(shutil.which("zed") or (is_macos and (applications / "Zed.app").exists()))},
+    ]
+    if is_macos:
+        options.append({"id": "finder", "name": "在 Finder 中显示", "available": True})
+    return options
+
+
+def _code_editor_command(editor: str, target: Path, line: Optional[int]) -> List[str]:
+    editor_id = str(editor or "system").strip().lower()
+    line_number = max(1, int(line or 1))
+    target_spec = f"{target}:{line_number}"
+    if editor_id == "vscode":
+        executable = shutil.which("code")
+        if executable:
+            return [executable, "--goto", target_spec]
+        if sys.platform == "darwin" and (Path("/Applications") / "Visual Studio Code.app").exists():
+            return ["open", "-a", "Visual Studio Code", "--args", "-g", target_spec]
+    elif editor_id == "cursor":
+        executable = shutil.which("cursor")
+        if executable:
+            return [executable, "--goto", target_spec]
+        if sys.platform == "darwin" and (Path("/Applications") / "Cursor.app").exists():
+            return ["open", "-a", "Cursor", "--args", "-g", target_spec]
+    elif editor_id == "jetbrains":
+        for binary in ("idea", "pycharm", "webstorm"):
+            executable = shutil.which(binary)
+            if executable:
+                return [executable, "--line", str(line_number), str(target)]
+        if sys.platform == "darwin":
+            for pattern in ("*IntelliJ IDEA*.app", "*PyCharm*.app", "*WebStorm*.app"):
+                match = next(iter(Path("/Applications").glob(pattern)), None)
+                if match:
+                    return ["open", "-a", match.stem, str(target)]
+    elif editor_id == "zed":
+        executable = shutil.which("zed")
+        if executable:
+            return [executable, target_spec]
+        if sys.platform == "darwin" and (Path("/Applications") / "Zed.app").exists():
+            return ["open", "-a", "Zed", str(target)]
+    elif editor_id == "finder" and sys.platform == "darwin":
+        return ["open", "-R", str(target)]
+    elif editor_id == "system":
+        if sys.platform == "darwin":
+            return ["open", str(target)]
+        if sys.platform == "win32":
+            return ["cmd", "/c", "start", "", str(target)]
+        executable = shutil.which("xdg-open")
+        if executable:
+            return [executable, str(target)]
+    raise HTTPException(status_code=400, detail="所选编辑器不可用")
+
+
+@app.get("/api/sessions/{session_id}/code-file")
+async def read_code_file(
+    session_id: str,
+    path: str = Query(...),
+    line_start: Optional[int] = Query(default=None),
+    line_end: Optional[int] = Query(default=None),
+):
+    row = _agent_sdk_session_row(session_id)
+    raw_path, embedded_start, embedded_end = _split_code_file_target(path)
+    target, candidates = _resolve_code_file_target(row["cwd"] or os.path.expanduser("~"), raw_path)
+    root = Path(os.path.expanduser(row["cwd"] or "~")).resolve()
+    if candidates:
+        return {
+            "ok": False,
+            "ambiguous": True,
+            "query": raw_path,
+            "candidates": _code_file_candidate_payload(root, candidates),
+            "line_start": line_start or embedded_start,
+            "line_end": line_end or embedded_end,
+        }
+    payload = _code_file_payload(str(root), target, include_content=True)
+    payload["line_start"] = line_start or embedded_start
+    payload["line_end"] = line_end or embedded_end or payload["line_start"]
+    return payload
+
+
+@app.get("/api/sessions/{session_id}/code-file/stat")
+async def stat_code_file(session_id: str, path: str = Query(...)):
+    row = _agent_sdk_session_row(session_id)
+    raw_path, _, _ = _split_code_file_target(path)
+    target, candidates = _resolve_code_file_target(row["cwd"] or os.path.expanduser("~"), raw_path)
+    root = Path(os.path.expanduser(row["cwd"] or "~")).resolve()
+    if candidates:
+        return {"ok": False, "ambiguous": True, "candidates": _code_file_candidate_payload(root, candidates)}
+    return _code_file_payload(str(root), target, include_content=False)
+
+
+@app.get("/api/sessions/{session_id}/code-file/editors")
+async def list_code_file_editors(request: Request, session_id: str):
+    _agent_sdk_session_row(session_id)
+    _require_not_mobile_access(request, "远程设备不能启动电脑上的本机编辑器")
+    return {"ok": True, "editors": _code_editor_catalog()}
+
+
+@app.post("/api/sessions/{session_id}/code-file/open-external")
+async def open_code_file_external(request: Request, session_id: str, req: CodeFileOpenExternalRequest):
+    row = _agent_sdk_session_row(session_id)
+    _require_not_mobile_access(request, "远程设备不能启动电脑上的本机编辑器")
+    raw_path, embedded_start, _ = _split_code_file_target(req.path)
+    target, candidates = _resolve_code_file_target(row["cwd"] or os.path.expanduser("~"), raw_path)
+    root = Path(os.path.expanduser(row["cwd"] or "~")).resolve()
+    if candidates:
+        return {
+            "ok": False,
+            "ambiguous": True,
+            "candidates": _code_file_candidate_payload(root, candidates),
+        }
+    command = _code_editor_command(req.editor or "system", target, req.line or embedded_start)
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            _, stderr = await asyncio.wait_for(process.communicate(), timeout=8.0)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            raise HTTPException(status_code=504, detail="启动本机编辑器超时")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail="本机编辑器命令不存在") from exc
+    if process.returncode != 0:
+        detail = stderr.decode("utf-8", errors="replace").strip()[:1000] or "本机编辑器启动失败"
+        raise HTTPException(status_code=400, detail=detail)
+    return {"ok": True, "editor": req.editor or "system", "path": target.relative_to(root).as_posix()}
+
+
+@app.post("/api/sessions/{session_id}/permissions/preview-change")
+async def preview_code_tool_change(session_id: str, req: CodeToolPreviewRequest):
+    row = _agent_sdk_session_row(session_id)
+    tool_name = str(req.tool_name or "").strip()
+    input_data = req.input if isinstance(req.input, dict) else {}
+    raw_path = input_data.get("file_path") or input_data.get("path") or input_data.get("notebook_path") or ""
+    if tool_name not in {"Write", "Edit", "MultiEdit"} or not raw_path:
+        return {"ok": True, "supported": False, "reason": "这个工具暂不支持写入前 Diff"}
+    target = _code_preview_target(row["cwd"] or os.path.expanduser("~"), str(raw_path))
+    if target.exists() and target.stat().st_size > 2_000_000:
+        raise HTTPException(status_code=413, detail="文件超过 2MB，无法生成写入前 Diff")
+    try:
+        old_text = target.read_text(encoding="utf-8") if target.exists() else ""
+    except (OSError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=400, detail=f"无法读取文本文件：{exc}") from exc
+    new_text = old_text
+    if tool_name == "Write":
+        new_text = str(input_data.get("content") or "")
+    elif tool_name == "Edit":
+        old_string = str(input_data.get("old_string") or "")
+        replacement = str(input_data.get("new_string") or "")
+        if not old_string or old_string not in new_text:
+            return {"ok": True, "supported": False, "reason": "old_string 与当前文件不匹配，无法安全预览"}
+        new_text = new_text.replace(old_string, replacement, -1 if input_data.get("replace_all") else 1)
+    else:
+        edits = input_data.get("edits") if isinstance(input_data.get("edits"), list) else []
+        if not edits:
+            return {"ok": True, "supported": False, "reason": "MultiEdit 没有可预览的编辑"}
+        for edit in edits:
+            if not isinstance(edit, dict):
+                continue
+            old_string = str(edit.get("old_string") or "")
+            replacement = str(edit.get("new_string") or "")
+            if not old_string or old_string not in new_text:
+                return {"ok": True, "supported": False, "reason": "某个 old_string 与当前文件不匹配"}
+            new_text = new_text.replace(old_string, replacement, -1 if edit.get("replace_all") else 1)
+    return {
+        "ok": True,
+        "supported": True,
+        "path": str(target.relative_to(Path(os.path.expanduser(row["cwd"] or "~")).resolve())),
+        "old_text": old_text,
+        "new_text": new_text,
+        "created": not target.exists(),
+    }
+
+
+@app.get("/api/code-workspace/presets")
+async def list_code_workspace_presets(request: Request):
+    _require_not_mobile_access(request)
+    with db_connect() as conn:
+        rows = conn.execute("SELECT * FROM code_workspace_presets ORDER BY updated_at DESC").fetchall()
+    return {"presets": [{**dict(row), "light_context": bool(row["light_context"])} for row in rows]}
+
+
+@app.post("/api/code-workspace/presets")
+async def create_code_workspace_preset(request: Request, req: CodeWorkspacePresetRequest):
+    _require_not_mobile_access(request)
+    name = str(req.name or "").strip()[:80]
+    if not name:
+        raise HTTPException(status_code=400, detail="预设名称不能为空")
+    mode = _effective_permission_mode_for_workspace("code", req.permission_mode)
+    validation_mode = str(req.validation_mode or "ask").strip().lower()
+    if validation_mode not in {"off", "ask", "auto"}:
+        validation_mode = "ask"
+    now = time.time()
+    preset_id = uuid.uuid4().hex
+    with db_connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO code_workspace_presets
+                (id, name, cwd, model, effort, permission_mode, light_context,
+                 validation_command, validation_mode, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                preset_id,
+                name,
+                str(req.cwd or "")[:2000],
+                str(req.model or "")[:160],
+                str(req.effort or "")[:40],
+                mode,
+                1 if req.light_context else 0,
+                _normalize_agent_loop_test_command(req.validation_command or ""),
+                validation_mode,
+                now,
+                now,
+            ),
+        )
+    return {"ok": True, "id": preset_id}
+
+
+@app.delete("/api/code-workspace/presets/{preset_id}")
+async def delete_code_workspace_preset(request: Request, preset_id: str):
+    _require_not_mobile_access(request)
+    if not re.fullmatch(r"[0-9a-f]{32}", preset_id):
+        raise HTTPException(status_code=400, detail="invalid preset id")
+    with db_connect() as conn:
+        conn.execute("DELETE FROM code_workspace_presets WHERE id = ?", (preset_id,))
+    return {"ok": True}
 
 
 @app.post("/api/sessions/{session_id}/changes/review")
@@ -9992,6 +10538,111 @@ async def delete_mcp_server(
         target["disabled_servers"].pop(name, None)
         _save_mcp_source(target)
     return {"ok": True}
+
+
+async def _mcp_read_json_line(stream: asyncio.StreamReader, request_id: int, timeout: float) -> dict:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        remaining = max(0.1, deadline - time.monotonic())
+        raw = await asyncio.wait_for(stream.readline(), timeout=remaining)
+        if not raw:
+            raise RuntimeError("MCP 进程在响应前退出")
+        try:
+            payload = json.loads(raw.decode("utf-8", errors="replace"))
+        except Exception:
+            continue
+        if isinstance(payload, dict) and payload.get("id") == request_id:
+            return payload
+    raise asyncio.TimeoutError
+
+
+@app.post("/api/mcp/servers/{name}/health")
+async def check_mcp_server_health(
+    request: Request,
+    name: str,
+    cwd: Optional[str] = Query(default=None),
+    scope: Optional[str] = Query(default=None),
+):
+    _require_not_mobile_access(request)
+    target = _find_mcp_source(name, scope, cwd)
+    cfg = _mcp_config_in_source(target, name)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail=f"server '{name}' not found")
+    if _is_mcp_disabled(target, name):
+        return {"ok": False, "status": "disabled", "error": "MCP Server 当前已禁用", "tools": []}
+    if _mcp_transport(cfg) != "stdio":
+        return {"ok": False, "status": "unsupported", "error": "当前仅支持检测 stdio MCP Server", "tools": []}
+    command = str(cfg.get("command") or "").strip()
+    args = [str(item) for item in (cfg.get("args") or [])]
+    if not command:
+        raise HTTPException(status_code=400, detail="MCP command is empty")
+    env = os.environ.copy()
+    env.update({str(k): str(v) for k, v in (cfg.get("env") or {}).items()})
+    started = time.monotonic()
+    process = None
+    try:
+        process = await asyncio.create_subprocess_exec(
+            command,
+            *args,
+            cwd=str(_resolve_mcp_cwd(cwd)),
+            env=env,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        initialize = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "claude-web", "version": __version__},
+            },
+        }
+        process.stdin.write((json.dumps(initialize) + "\n").encode())
+        await process.stdin.drain()
+        init_response = await _mcp_read_json_line(process.stdout, 1, 8.0)
+        if init_response.get("error"):
+            raise RuntimeError(str(init_response["error"]))
+        process.stdin.write((json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n").encode())
+        process.stdin.write((json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}) + "\n").encode())
+        await process.stdin.drain()
+        tools_response = await _mcp_read_json_line(process.stdout, 2, 8.0)
+        if tools_response.get("error"):
+            raise RuntimeError(str(tools_response["error"]))
+        tools = (tools_response.get("result") or {}).get("tools") or []
+        return {
+            "ok": True,
+            "status": "ready",
+            "latency_ms": round((time.monotonic() - started) * 1000),
+            "server_info": (init_response.get("result") or {}).get("serverInfo") or {},
+            "tools": [
+                {"name": str(item.get("name") or ""), "description": str(item.get("description") or "")[:1000]}
+                for item in tools if isinstance(item, dict)
+            ],
+        }
+    except (asyncio.TimeoutError, FileNotFoundError, OSError, RuntimeError) as exc:
+        stderr = ""
+        if process and process.stderr:
+            try:
+                stderr = (await asyncio.wait_for(process.stderr.read(4000), timeout=0.2)).decode("utf-8", errors="replace").strip()
+            except Exception:
+                stderr = ""
+        message = "连接超时" if isinstance(exc, asyncio.TimeoutError) else str(exc)
+        if stderr:
+            message = f"{message} · {stderr[:1200]}"
+        return {"ok": False, "status": "error", "error": message, "tools": []}
+    finally:
+        if process and process.returncode is None:
+            try:
+                process.terminate()
+                await asyncio.wait_for(process.wait(), timeout=1.0)
+            except Exception:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
 
 
 # ===== Config Center: Settings / Hooks / Skills / Permissions =====

@@ -5495,6 +5495,106 @@
     font-size: 11px;
     margin-top: 1px;
   }
+  .cw-mode-menu-divider {
+    height: 1px;
+    margin: 4px 5px;
+    background: #ebe6e1;
+  }
+  .cw-mode-auto-approve {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 48px;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #3d3935;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, opacity .15s ease;
+  }
+  .cw-mode-auto-approve:hover,
+  .cw-mode-auto-approve:focus-visible {
+    background: #f7f5f3;
+    outline: 0;
+  }
+  .cw-mode-auto-approve[aria-checked="true"] {
+    background: #f0f7f2;
+    color: #285d3d;
+  }
+  .cw-mode-auto-approve:disabled {
+    cursor: not-allowed;
+    opacity: .48;
+  }
+  .cw-mode-auto-approve-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    color: #817970;
+    background: #f3f0ed;
+  }
+  .cw-mode-auto-approve-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+  .cw-mode-auto-approve[aria-checked="true"] .cw-mode-auto-approve-icon {
+    color: #23834b;
+    background: #fff;
+    box-shadow: inset 0 0 0 1px #cfe2d5;
+  }
+  .cw-mode-auto-approve .cw-mode-option-title {
+    font-size: 12.5px;
+  }
+  .cw-mode-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 34px;
+    height: 20px;
+    padding: 2px;
+    border-radius: 999px;
+    background: #d9d4cf;
+    box-sizing: border-box;
+    transition: background .16s ease;
+  }
+  .cw-mode-auto-approve-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .cw-mode-auto-approve-state {
+    min-width: 22px;
+    color: #8d867f;
+    font-size: 10.5px;
+    font-weight: 650;
+    text-align: right;
+  }
+  .cw-mode-auto-approve[aria-checked="true"] .cw-mode-auto-approve-state {
+    color: #23834b;
+  }
+  .cw-mode-switch::after {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(38, 31, 26, .24);
+    transform: translateX(0);
+    transition: transform .16s ease;
+  }
+  .cw-mode-auto-approve[aria-checked="true"] .cw-mode-switch {
+    background: #32a35f;
+  }
+  .cw-mode-auto-approve[aria-checked="true"] .cw-mode-switch::after {
+    transform: translateX(14px);
+  }
   :root.dark .cw-mode-menu {
     border-color: #494744;
     background: #242424;
@@ -5524,6 +5624,29 @@
   :root.dark .cw-mode-option.active .cw-mode-option-description {
     color: #bbb3ac;
   }
+  :root.dark .cw-mode-menu-divider {
+    background: #3e3b38;
+  }
+  :root.dark .cw-mode-auto-approve {
+    color: #e7e5e2;
+  }
+  :root.dark .cw-mode-auto-approve:hover,
+  :root.dark .cw-mode-auto-approve:focus-visible {
+    background: #333230;
+  }
+  :root.dark .cw-mode-auto-approve[aria-checked="true"] {
+    color: #b9e5c8;
+    background: #253a2c;
+  }
+  :root.dark .cw-mode-auto-approve-icon {
+    color: #a8a39e;
+    background: #302e2c;
+  }
+  :root.dark .cw-mode-auto-approve[aria-checked="true"] .cw-mode-auto-approve-icon {
+    color: #72d694;
+    background: #1f2b23;
+    box-shadow: inset 0 0 0 1px #3b6548;
+  }
   @media (max-width: 768px) {
     body {
       --cw-sidebar-width: 286px;
@@ -5540,6 +5663,16 @@
       max-width: 100% !important;
     }
     .cw-mode-menu {
+      position: fixed;
+      right: 12px;
+      bottom: 82px;
+      left: 12px;
+      width: auto;
+      max-height: calc(100vh - 106px);
+      overflow-y: auto;
+    }
+    .cw-workspace-context-mode .cw-mode-menu,
+    body.code-mode.cw-empty .cw-workspace-context-mode .cw-mode-menu {
       position: fixed;
       right: 12px;
       bottom: 82px;
@@ -6557,7 +6690,7 @@
 
   /* ===== Session Stats Bar (code workspace) ===== */
   .cw-session-stats-bar {
-    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: stretch; width: 100%; margin: 0 0 8px; gap: 3px;
     min-height: 38px; border: 0; border-radius: 12px;
     box-sizing: border-box; padding: 3px;
@@ -6601,7 +6734,6 @@
   .cw-stats-diff-add { margin-left: 1px; font-size: 11px; font-weight: 650; color: #10b981; }
   .cw-stats-diff-del { font-size: 11px; font-weight: 650; color: #ef4444; }
   .cw-stats-item.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(28,25,23,.08); }
-  .cw-stats-item.approval-on { color:#16834a; background:color-mix(in srgb,#16834a 9%,var(--surface)); }
   .cw-workspace-activity {
     position:relative; z-index:24; margin:-2px 0 8px; overflow:hidden;
     border:1px solid var(--border); border-radius:12px; background:var(--surface);
@@ -6707,9 +6839,162 @@
     .cw-code-queue-resume { min-height: 44px; padding-inline: 11px; }
     .cw-code-queue-state { display: none; }
   }
+
+  /* ===== Code-only productivity overlays ===== */
+  body:not(.code-mode) .cw-conversation-search,
+  body:not(.code-mode) .cw-code-only { display:none !important; }
+  .cw-conversation-search {
+    position:fixed; top:74px; left:50%; z-index:72; transform:translateX(-50%);
+    display:flex; align-items:center; gap:6px; width:min(620px,calc(100vw - 28px));
+    min-height:46px; padding:5px 7px 5px 12px; border:1px solid var(--border-strong);
+    border-radius:13px; background:var(--surface); box-shadow:0 12px 34px rgba(31,27,24,.16);
+  }
+  .cw-conversation-search.hidden { display:none; }
+  .cw-conversation-search input { min-width:0; flex:1; border:0; outline:0; background:transparent; color:var(--text); font:500 13px/1.4 inherit; }
+  .cw-conversation-search-count { min-width:54px; color:var(--text-subtle); font-size:11px; text-align:center; font-variant-numeric:tabular-nums; }
+  .cw-conversation-search button { display:grid; place-items:center; width:36px; height:36px; border:0; border-radius:9px; background:transparent; color:var(--text-muted); cursor:pointer; }
+  .cw-conversation-search button:hover,.cw-conversation-search button:focus-visible { background:var(--surface-2); color:var(--text); outline:0; }
+  .cw-conversation-match { outline:2px solid color-mix(in srgb,var(--accent) 56%,transparent); outline-offset:3px; border-radius:8px; }
+  .cw-conversation-match.active { outline-color:var(--accent); background:color-mix(in srgb,var(--accent) 7%,transparent); }
+
+  #tokenCounter.cw-context-known { cursor:pointer; border-radius:8px; padding:4px 6px; transition:background .16s ease,color .16s ease; }
+  #tokenCounter.cw-context-known:hover,#tokenCounter.cw-context-known:focus-visible { background:var(--surface-2); color:var(--text) !important; outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent); outline-offset:1px; }
+  .cw-context-overview { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:14px; }
+  .cw-context-metric { padding:12px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); }
+  .cw-context-metric span { display:block; color:var(--text-subtle); font-size:11px; }
+  .cw-context-metric strong { display:block; margin-top:3px; color:var(--text); font-size:17px; font-variant-numeric:tabular-nums; }
+  .cw-context-list { display:flex; flex-direction:column; gap:5px; max-height:48vh; overflow:auto; }
+  .cw-context-row { display:grid; grid-template-columns:minmax(120px,1fr) minmax(100px,2fr) auto; align-items:center; gap:10px; min-height:34px; padding:5px 8px; border-radius:8px; }
+  .cw-context-row:hover { background:var(--surface-2); }
+  .cw-context-row-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-muted); font-size:12px; }
+  .cw-context-row-bar { height:6px; overflow:hidden; border-radius:999px; background:var(--border); }
+  .cw-context-row-bar i { display:block; height:100%; border-radius:inherit; background:var(--accent); }
+  .cw-context-row-value { color:var(--text); font:600 11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
+
+  .cw-prewrite-preview { margin-top:10px; overflow:hidden; border:1px solid var(--border); border-radius:10px; background:var(--surface); }
+  .cw-prewrite-head { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:38px; padding:0 10px; border-bottom:1px solid var(--border); color:var(--text); font-size:11px; font-weight:650; }
+  .cw-prewrite-body { max-height:320px; overflow:auto; background:var(--surface-2); }
+  .cw-prewrite-body .cw-code-diff { margin:0; border:0; border-radius:0; }
+  .cw-prewrite-note { padding:9px 10px; color:var(--text-muted); font-size:11px; }
+
+  .cw-tool-group { overflow:hidden; border:1px solid color-mix(in srgb,var(--border) 72%,transparent); border-radius:10px; background:color-mix(in srgb,var(--surface) 86%,transparent); }
+  .cw-tool-group + .cw-tool-group { margin-top:6px; }
+  .cw-tool-group-head { display:flex; align-items:center; gap:8px; width:100%; min-height:38px; padding:0 10px; border:0; background:transparent; color:var(--text-muted); cursor:pointer; text-align:left; }
+  .cw-tool-group-head:hover,.cw-tool-group-head:focus-visible { background:var(--surface-2); color:var(--text); outline:0; }
+  .cw-tool-group-head strong { color:var(--text); font-size:12px; }
+  .cw-tool-group-head span:last-child { margin-left:auto; font:600 10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .cw-tool-group-items { padding:0 5px 5px; }
+  .cw-tool-group.collapsed .cw-tool-group-items { display:none; }
+  .cw-tool-group .tool-card-list { margin:0; }
+
+  .cw-code-diagnostic { margin:8px 0; padding:12px; border:1px solid color-mix(in srgb,#dc2626 32%,var(--border)); border-radius:12px; background:color-mix(in srgb,#dc2626 5%,var(--surface)); color:var(--text); }
+  .cw-code-diagnostic-title { font-size:13px; font-weight:700; }
+  .cw-code-diagnostic-copy { margin-top:4px; color:var(--text-muted); font-size:12px; line-height:1.55; }
+  .cw-code-diagnostic-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .cw-code-diagnostic-actions button,.cw-code-compact-btn { min-height:36px; padding:0 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--text); font:600 11px/1 inherit; cursor:pointer; }
+  .cw-code-diagnostic-actions button:hover,.cw-code-compact-btn:hover { border-color:var(--border-strong); background:var(--surface-2); }
+
+  .cw-code-list { display:flex; flex-direction:column; gap:7px; max-height:48vh; overflow:auto; }
+  .cw-code-list-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; min-height:52px; padding:8px 10px; border:1px solid var(--border); border-radius:11px; background:var(--surface-2); }
+  .cw-code-list-row strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-size:12px; }
+  .cw-code-list-row small { display:block; margin-top:3px; color:var(--text-muted); font-size:10.5px; }
+  .cw-code-list-actions { display:flex; gap:6px; }
+  .cw-code-list-actions button { min-height:36px; padding:0 11px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--text); font:600 11px/1 inherit; cursor:pointer; }
+  .cw-code-list-actions button.danger { color:#c83a35; }
+  .cw-code-form-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-top:12px; }
+  .cw-code-form-row input { min-height:42px; padding:0 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); font-size:13px; }
+  .cw-code-form-row button { min-height:42px; padding:0 14px; border:0; border-radius:10px; background:#2f2c29; color:#fff; font-weight:650; cursor:pointer; }
+  :root.dark .cw-code-form-row button { background:#eee9e3; color:#24211f; }
+  @media (max-width:640px) {
+    .cw-conversation-search { top:58px; }
+    .cw-context-overview { grid-template-columns:1fr; }
+    .cw-context-row { grid-template-columns:minmax(90px,1fr) auto; }
+    .cw-context-row-bar { display:none; }
+    .cw-code-list-row { grid-template-columns:1fr; }
+    .cw-code-list-actions button,.cw-code-compact-btn { min-height:44px; }
+  }
+
+  /* Code source / diff inspector: dense desktop split view, full-screen mobile drawer. */
+  :root { --cw-code-inspector-width:620px; }
+  #mainPane { transition:margin-right .18s ease; }
+  body.code-mode.cw-code-inspector-open #mainPane { margin-right:var(--cw-code-inspector-width); }
+  .cw-code-inspector { position:fixed; inset:0 0 0 auto; z-index:74; display:none; width:var(--cw-code-inspector-width); min-width:420px; max-width:min(760px,72vw); flex-direction:column; overflow:hidden; border-left:1px solid var(--border); background:var(--bg); box-shadow:-14px 0 34px rgba(31,25,20,.08); }
+  body.code-mode.cw-code-inspector-open .cw-code-inspector { display:flex; }
+  .cw-code-inspector-resizer { position:absolute; inset:0 auto 0 -4px; z-index:3; width:9px; border:0; background:transparent; cursor:col-resize; touch-action:none; }
+  .cw-code-inspector-resizer::after { content:""; position:absolute; inset:0 auto 0 4px; width:1px; background:transparent; }
+  .cw-code-inspector-resizer:hover::after,.cw-code-inspector-resizer:focus-visible::after,.cw-code-inspector-resizer.dragging::after { background:var(--accent); }
+  .cw-code-inspector-tabs { display:flex; align-items:flex-end; gap:2px; min-height:46px; padding:7px 44px 0 10px; overflow-x:auto; border-bottom:1px solid var(--border); background:var(--surface-2); scrollbar-width:thin; }
+  .cw-code-inspector-tab { display:flex; align-items:center; gap:7px; min-width:0; max-width:210px; height:38px; padding:0 8px 0 11px; border:1px solid transparent; border-bottom:0; border-radius:9px 9px 0 0; background:transparent; color:var(--text-muted); cursor:pointer; }
+  .cw-code-inspector-tab:hover { background:color-mix(in srgb,var(--surface) 65%,transparent); color:var(--text); }
+  .cw-code-inspector-tab.active { border-color:var(--border); background:var(--bg); color:var(--text); }
+  .cw-code-inspector-tab-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:600 11.5px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .cw-code-inspector-tab-state { width:7px; height:7px; flex:0 0 auto; border-radius:999px; background:#d28b2c; }
+  .cw-code-inspector-tab-close,.cw-code-inspector-close { display:grid; place-items:center; min-width:30px; min-height:30px; padding:0; border:0; border-radius:7px; background:transparent; color:var(--text-muted); cursor:pointer; }
+  .cw-code-inspector-tab-close:hover,.cw-code-inspector-close:hover { background:var(--surface-3); color:var(--text); }
+  .cw-code-inspector-close { position:absolute; top:8px; right:8px; z-index:4; }
+  .cw-code-inspector-head { display:flex; align-items:center; gap:10px; min-height:48px; padding:6px 10px 6px 14px; border-bottom:1px solid var(--border); background:var(--bg); }
+  .cw-code-inspector-breadcrumb { display:flex; align-items:center; min-width:0; flex:1; gap:5px; overflow:hidden; color:var(--text-muted); font-size:11.5px; }
+  .cw-code-inspector-breadcrumb span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cw-code-inspector-breadcrumb strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font:650 11.5px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .cw-code-inspector-actions { display:flex; align-items:center; flex:0 0 auto; gap:5px; }
+  .cw-code-inspector-action,.cw-code-inspector-mode button { min-height:32px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text-muted); font:600 11px/1 inherit; cursor:pointer; }
+  .cw-code-inspector-action.icon { width:34px; padding:0; }
+  .cw-code-inspector-action:hover,.cw-code-inspector-action:focus-visible,.cw-code-inspector-mode button:hover { border-color:var(--border-strong); color:var(--text); outline:0; }
+  .cw-code-inspector-mode { display:flex; gap:2px; padding:2px; border:1px solid var(--border); border-radius:9px; background:var(--surface-2); }
+  .cw-code-inspector-mode button { min-height:28px; padding:0 9px; border:0; background:transparent; }
+  .cw-code-inspector-mode button.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(24,20,17,.09); }
+  .cw-code-inspector-body { position:relative; min-height:0; flex:1; overflow:auto; background:var(--bg); overscroll-behavior:contain; }
+  .cw-code-inspector-empty,.cw-code-inspector-error { display:grid; place-items:center; min-height:100%; padding:40px; color:var(--text-muted); text-align:center; font-size:12px; line-height:1.6; }
+  .cw-code-inspector-error { color:#bb3d38; }
+  .cw-code-source { min-width:max-content; padding:8px 0 32px; font:12px/1.62 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; tab-size:2; }
+  .cw-code-source-line { display:grid; grid-template-columns:58px minmax(0,1fr); min-height:20px; }
+  .cw-code-source-line:hover { background:color-mix(in srgb,var(--accent) 5%,transparent); }
+  .cw-code-source-line.selected { background:color-mix(in srgb,var(--accent) 12%,transparent); }
+  .cw-code-source-number { position:sticky; left:0; z-index:1; padding:0 12px 0 8px; border-right:1px solid color-mix(in srgb,var(--border) 65%,transparent); background:var(--bg); color:var(--text-subtle); text-align:right; user-select:none; cursor:pointer; }
+  .cw-code-source-line.selected .cw-code-source-number { color:var(--accent); font-weight:700; }
+  .cw-code-source-code { display:block; min-width:max-content; padding:0 18px 0 13px; white-space:pre; color:var(--text); }
+  .cw-code-inspector-diff { min-width:max-content; padding:8px 0 30px; }
+  .cw-code-inspector-diff .git-diff-content { margin:0; border:0; border-radius:0; background:transparent; font-size:11.5px; }
+  .cw-code-inspector-status { display:flex; align-items:center; gap:10px; min-height:29px; padding:0 12px; border-top:1px solid var(--border); background:var(--surface-2); color:var(--text-subtle); font:10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .cw-code-inspector-status span:last-child { margin-left:auto; }
+  .cw-code-inspector-chooser { padding:16px; }
+  .cw-code-inspector-chooser h3 { margin:0 0 4px; color:var(--text); font-size:13px; }
+  .cw-code-inspector-chooser p { margin:0 0 12px; color:var(--text-muted); font-size:11px; }
+  .cw-code-inspector-candidate { display:flex; align-items:center; width:100%; min-height:42px; padding:0 11px; border:0; border-bottom:1px solid var(--border); background:transparent; color:var(--text); text-align:left; cursor:pointer; }
+  .cw-code-inspector-candidate:hover,.cw-code-inspector-candidate:focus-visible { background:var(--surface-2); outline:0; }
+  .cw-code-inspector-candidate code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11.5px; }
+  .cw-code-inspector-external { position:absolute; z-index:6; top:43px; right:10px; min-width:190px; padding:5px; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:0 14px 34px rgba(25,21,18,.16); }
+  .cw-code-inspector-external button { display:flex; align-items:center; width:100%; min-height:36px; padding:0 10px; border:0; border-radius:7px; background:transparent; color:var(--text); font-size:11.5px; cursor:pointer; }
+  .cw-code-inspector-external button:hover { background:var(--surface-2); }
+  .cw-code-file-link { cursor:pointer; text-decoration:underline; text-decoration-color:color-mix(in srgb,var(--accent) 40%,transparent); text-underline-offset:3px; }
+  .cw-code-file-link:hover { color:var(--accent); }
+  body.cw-code-inspector-resizing { cursor:col-resize; user-select:none; }
+  @media (max-width:900px) {
+    body.code-mode.cw-code-inspector-open #mainPane { margin-right:0; }
+    .cw-code-inspector { inset:0; z-index:92; width:100%; min-width:0; max-width:none; border-left:0; box-shadow:none; }
+    .cw-code-inspector-resizer { display:none; }
+    .cw-code-inspector-tabs { min-height:52px; padding:8px 48px 0 8px; }
+    .cw-code-inspector-tab { height:44px; }
+    .cw-code-inspector-tab-close,.cw-code-inspector-close { min-width:44px; min-height:44px; }
+    .cw-code-inspector-close { top:4px; right:4px; }
+    .cw-code-inspector-head { min-height:54px; padding:5px 8px 5px 12px; }
+    .cw-code-inspector-action { min-height:44px; }
+    .cw-code-inspector-mode button { min-height:38px; }
+    .cw-code-inspector-action.icon { width:44px; }
+    .cw-code-inspector-breadcrumb { font-size:10.5px; }
+    .cw-code-source { font-size:11.5px; }
+  }
+  @media (prefers-reduced-motion:reduce) { #mainPane { transition:none; } }
 </style>
 </head>
 <body class="h-screen flex">
+<div id="cwConversationSearch" class="cw-conversation-search hidden cw-code-only" role="search" aria-label="搜索当前 Code 会话">
+  <input id="cwConversationSearchInput" type="search" autocomplete="off" placeholder="搜索当前会话" aria-label="搜索当前会话内容" />
+  <span id="cwConversationSearchCount" class="cw-conversation-search-count" aria-live="polite">0 / 0</span>
+  <button type="button" id="cwConversationSearchPrev" title="上一个匹配" aria-label="上一个匹配">↑</button>
+  <button type="button" id="cwConversationSearchNext" title="下一个匹配" aria-label="下一个匹配">↓</button>
+  <button type="button" id="cwConversationSearchClose" title="关闭搜索" aria-label="关闭搜索">×</button>
+</div>
 
 <!-- Sidebar -->
 <aside id="sidebar" class="w-64 flex flex-col flex-shrink-0" style="background:var(--surface-2);">
@@ -6856,6 +7141,9 @@
       </div>
     </div>
     <div class="flex items-center gap-1 flex-shrink-0">
+      <button id="cwOpenCodeFileBtn" class="sb-icon-btn cw-code-only" title="打开项目文件" aria-label="打开项目文件">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h7v11.5A2.5 2.5 0 0 1 16.5 20h-10A2.5 2.5 0 0 1 4 17.5z"/><path d="M12 10v6M9 13h6"/></svg>
+      </button>
       <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions" aria-label="配置中心">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h10"/><path d="M8 12h10"/><path d="M8 18h10"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
       </button>
@@ -7007,11 +7295,6 @@
           <span class="cw-stats-diff-add" id="cwStatsAdd"></span>
           <span class="cw-stats-diff-del" id="cwStatsDel"></span>
         </button>
-        <button type="button" class="cw-stats-item" id="cwStatsApproval" title="让服务端自动批准本会话的工具请求">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
-          <span class="cw-stats-label">替我审批</span>
-          <span class="cw-stats-count" id="cwStatsApprovalState">关</span>
-        </button>
       </div>
       <section id="cwWorkspaceActivity" class="cw-workspace-activity hidden" aria-label="Code 工作区活动">
         <div class="cw-activity-head">
@@ -7104,6 +7387,18 @@
                       <button type="button" class="cw-mode-option cw-mode-option-compact" data-permission-mode="bypassPermissions" role="menuitemradio" aria-checked="false">
                         <span class="cw-mode-option-copy"><span class="cw-mode-option-title">自动模式</span><span class="cw-mode-option-description">完全自动化，绕过所有权限检查【谨慎使用】</span></span>
                         <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                      </button>
+                      <span class="cw-mode-menu-divider" role="separator"></span>
+                      <button type="button" id="cwModeAutoApprove" class="cw-mode-auto-approve" role="menuitemcheckbox" aria-checked="false">
+                        <span class="cw-mode-auto-approve-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg></span>
+                        <span class="cw-mode-option-copy"><span class="cw-mode-option-title">替我审批</span><span id="cwModeAutoApproveDescription" class="cw-mode-option-description">自动批准此会话的工具请求；提问仍需回答</span></span>
+                        <span class="cw-mode-auto-approve-control" aria-hidden="true"><span id="cwModeAutoApproveState" class="cw-mode-auto-approve-state">关闭</span><span class="cw-mode-switch"></span></span>
+                      </button>
+                      <button type="button" id="cwPermissionRulesBtn" class="cw-mode-option" role="menuitem">
+                        <span class="cw-mode-option-copy"><span class="cw-mode-option-title">本会话授权规则</span><span class="cw-mode-option-description">查看或撤销 SDK 记住的权限</span></span>
+                      </button>
+                      <button type="button" id="cwWorkspacePresetsBtn" class="cw-mode-option" role="menuitem">
+                        <span class="cw-mode-option-copy"><span class="cw-mode-option-title">工作区预设</span><span class="cw-mode-option-description">保存项目、模型、模式和验证命令</span></span>
                       </button>
                     </span>
                   </span>
@@ -7219,6 +7514,26 @@
     </form>
   </footer>
 </div>
+
+<aside id="cwCodeInspector" class="cw-code-inspector cw-code-only" aria-label="源码与差异检查器" aria-hidden="true">
+  <button id="cwCodeInspectorResizer" class="cw-code-inspector-resizer" type="button" aria-label="调整检查器宽度"></button>
+  <button id="cwCodeInspectorClose" class="cw-code-inspector-close" type="button" title="关闭检查器" aria-label="关闭检查器">×</button>
+  <div id="cwCodeInspectorTabs" class="cw-code-inspector-tabs" role="tablist" aria-label="已打开文件"></div>
+  <div class="cw-code-inspector-head">
+    <div id="cwCodeInspectorBreadcrumb" class="cw-code-inspector-breadcrumb"></div>
+    <div class="cw-code-inspector-actions">
+      <div id="cwCodeInspectorMode" class="cw-code-inspector-mode" aria-label="查看模式">
+        <button type="button" data-inspector-mode="source" class="active">源码</button>
+        <button type="button" data-inspector-mode="diff">Diff</button>
+      </div>
+      <button id="cwCodeInspectorReference" class="cw-code-inspector-action icon" type="button" title="引用当前行到输入框" aria-label="引用当前行">@</button>
+      <button id="cwCodeInspectorExternal" class="cw-code-inspector-action" type="button" title="用本机编辑器打开">打开⌄</button>
+    </div>
+  </div>
+  <div id="cwCodeInspectorBody" class="cw-code-inspector-body"><div class="cw-code-inspector-empty">从回答、工具调用或改动列表中打开文件</div></div>
+  <div id="cwCodeInspectorStatus" class="cw-code-inspector-status"><span>Code 项目内只读预览</span><span></span></div>
+  <div id="cwCodeInspectorExternalMenu" class="cw-code-inspector-external hidden" role="menu"></div>
+</aside>
 
 <!-- Agent Loop modal -->
 <div id="agentLoopModal" class="modal-backdrop hidden">
@@ -7957,6 +8272,34 @@
   </div>
 </div>
 
+<div id="cwContextUsageModal" class="modal-backdrop hidden cw-code-only">
+  <div class="modal-box lg p-0" role="dialog" aria-modal="true" aria-labelledby="cwContextUsageTitle" style="max-width:760px;overflow:hidden;">
+    <div class="cw-code-review-head">
+      <div class="min-w-0"><div id="cwContextUsageTitle" class="cw-code-review-title">上下文占用</div><div id="cwContextUsageSubtitle" class="cw-code-review-sub">来自 Claude Agent SDK 的实时统计</div></div>
+      <button data-close class="cw-code-review-close" aria-label="关闭上下文明细">×</button>
+    </div>
+    <div class="cw-code-review-body">
+      <div id="cwContextUsageOverview" class="cw-context-overview"></div>
+      <div id="cwContextUsageList" class="cw-context-list" aria-live="polite"></div>
+      <div class="mt-3 flex justify-end gap-2"><button type="button" id="cwContextCompactBtn" class="cw-code-compact-btn">立即原生压缩</button><button type="button" id="cwContextRefreshBtn" class="cw-code-compact-btn">刷新统计</button></div>
+    </div>
+  </div>
+</div>
+
+<div id="cwPermissionRulesModal" class="modal-backdrop hidden cw-code-only">
+  <div class="modal-box lg p-0" role="dialog" aria-modal="true" aria-labelledby="cwPermissionRulesTitle" style="max-width:680px;overflow:hidden;">
+    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwPermissionRulesTitle" class="cw-code-review-title">本会话授权规则</div><div class="cw-code-review-sub">撤销后会在下一次工具调用时重新询问</div></div><button data-close class="cw-code-review-close" aria-label="关闭授权规则">×</button></div>
+    <div class="cw-code-review-body"><div id="cwPermissionRulesList" class="cw-code-list"></div><div class="mt-3 flex justify-end"><button type="button" id="cwPermissionRulesClear" class="cw-code-compact-btn">撤销全部授权</button></div></div>
+  </div>
+</div>
+
+<div id="cwWorkspacePresetsModal" class="modal-backdrop hidden cw-code-only">
+  <div class="modal-box lg p-0" role="dialog" aria-modal="true" aria-labelledby="cwWorkspacePresetsTitle" style="max-width:720px;overflow:hidden;">
+    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorkspacePresetsTitle" class="cw-code-review-title">Code 工作区预设</div><div class="cw-code-review-sub">一键恢复项目、模型、运行模式、轻上下文和验证策略</div></div><button data-close class="cw-code-review-close" aria-label="关闭工作区预设">×</button></div>
+    <div class="cw-code-review-body"><div id="cwWorkspacePresetsList" class="cw-code-list"></div><div class="cw-code-form-row"><input id="cwWorkspacePresetName" maxlength="80" placeholder="预设名称，例如：claude-web 开发" aria-label="预设名称" /><button type="button" id="cwWorkspacePresetSave">保存当前配置</button></div></div>
+  </div>
+</div>
+
 <div id="statsModal" class="modal-backdrop hidden">
   <div class="modal-box lg p-0" style="max-width:720px; overflow:hidden;">
     <div class="flex items-center justify-between px-5 pt-4 pb-3" style="border-bottom:1px solid var(--border);">
@@ -8308,7 +8651,15 @@ const codeQueuePauseReasons = new Map();
 let codeQueueDrainTimer = null;
 let codeQueueSyncSerial = 0;
 let currentCodeAutoApprove = false;
+let currentCodeAutoApproveUpdating = false;
 let currentCodeProjectSettings = { validation_command: '', validation_mode: 'ask', validation_timeout: 120 };
+let latestNativeContextUsage = null;
+let codeConversationMatches = [];
+let codeConversationMatchIndex = -1;
+let codeInputHistory = LS.get('codeInputHistoryV1', []);
+let codeInputHistoryIndex = -1;
+let codeInputHistoryDraft = '';
+let pendingWorkspacePresetSettings = null;
 let currentWorkspaceActivityTab = 'tasks';
 let latestTodoItems = [];
 const sessionHistoryTurns = new Map();
@@ -8377,6 +8728,30 @@ const cwComposerPermBtn = $('cwComposerPermBtn');
 const cwComposerContextBtn = $('cwComposerContextBtn');
 const cwComposerContextMenu = $('cwComposerContextMenu');
 const cwPermissionModeMenu = $('cwPermissionModeMenu');
+const cwModeAutoApprove = $('cwModeAutoApprove');
+const cwModeAutoApproveDescription = $('cwModeAutoApproveDescription');
+const cwModeAutoApproveState = $('cwModeAutoApproveState');
+const cwPermissionRulesBtn = $('cwPermissionRulesBtn');
+const cwWorkspacePresetsBtn = $('cwWorkspacePresetsBtn');
+const cwConversationSearch = $('cwConversationSearch');
+const cwConversationSearchInput = $('cwConversationSearchInput');
+const cwConversationSearchCount = $('cwConversationSearchCount');
+const cwConversationSearchPrev = $('cwConversationSearchPrev');
+const cwConversationSearchNext = $('cwConversationSearchNext');
+const cwConversationSearchClose = $('cwConversationSearchClose');
+const cwContextUsageModal = $('cwContextUsageModal');
+const cwContextUsageOverview = $('cwContextUsageOverview');
+const cwContextUsageList = $('cwContextUsageList');
+const cwContextUsageSubtitle = $('cwContextUsageSubtitle');
+const cwContextRefreshBtn = $('cwContextRefreshBtn');
+const cwContextCompactBtn = $('cwContextCompactBtn');
+const cwPermissionRulesModal = $('cwPermissionRulesModal');
+const cwPermissionRulesList = $('cwPermissionRulesList');
+const cwPermissionRulesClear = $('cwPermissionRulesClear');
+const cwWorkspacePresetsModal = $('cwWorkspacePresetsModal');
+const cwWorkspacePresetsList = $('cwWorkspacePresetsList');
+const cwWorkspacePresetName = $('cwWorkspacePresetName');
+const cwWorkspacePresetSave = $('cwWorkspacePresetSave');
 const cwProjectManagerPanel = $('cwProjectManagerPanel');
 const cwProjectManagerClose = $('cwProjectManagerClose');
 const cwProjectManagerInput = $('cwProjectManagerInput');
@@ -8557,13 +8932,19 @@ const gitDiffModal = $('gitDiffModal'), gitDiffPath = $('gitDiffPath'), gitDiffC
 const codeReviewModal = $('codeReviewModal'), codeReviewList = $('codeReviewList'), codeReviewSummary = $('codeReviewSummary');
 const codeReviewKeepAll = $('codeReviewKeepAll'), codeReviewRevertAll = $('codeReviewRevertAll');
 const codeValidationCommand = $('codeValidationCommand'), codeValidationMode = $('codeValidationMode'), codeValidationRun = $('codeValidationRun'), codeValidationResult = $('codeValidationResult');
+const cwOpenCodeFileBtn = $('cwOpenCodeFileBtn');
+const cwCodeInspector = $('cwCodeInspector'), cwCodeInspectorTabs = $('cwCodeInspectorTabs');
+const cwCodeInspectorBody = $('cwCodeInspectorBody'), cwCodeInspectorBreadcrumb = $('cwCodeInspectorBreadcrumb');
+const cwCodeInspectorStatus = $('cwCodeInspectorStatus'), cwCodeInspectorMode = $('cwCodeInspectorMode');
+const cwCodeInspectorClose = $('cwCodeInspectorClose'), cwCodeInspectorReference = $('cwCodeInspectorReference');
+const cwCodeInspectorExternal = $('cwCodeInspectorExternal'), cwCodeInspectorExternalMenu = $('cwCodeInspectorExternalMenu');
+const cwCodeInspectorResizer = $('cwCodeInspectorResizer');
 const rewindPreviewModal = $('rewindPreviewModal'), rewindPreviewSummary = $('rewindPreviewSummary');
 const rewindPreviewList = $('rewindPreviewList'), rewindPreviewConfirm = $('rewindPreviewConfirm');
 const cwFileContextChips = $('cwFileContextChips');
 const cwCodeMessageQueue = $('cwCodeMessageQueue');
 const cwCodeQueueTitle = $('cwCodeQueueTitle'), cwCodeQueueState = $('cwCodeQueueState');
 const cwCodeQueueResume = $('cwCodeQueueResume'), cwCodeQueueList = $('cwCodeQueueList');
-const cwStatsApproval = $('cwStatsApproval'), cwStatsApprovalState = $('cwStatsApprovalState');
 const cwWorkspaceActivity = $('cwWorkspaceActivity'), cwWorkspaceActivityBody = $('cwWorkspaceActivityBody'), cwWorkspaceActivityClose = $('cwWorkspaceActivityClose');
 const memoryBar = $('memoryBar');
 const tokenBar = $('tokenBar');
@@ -8610,6 +8991,266 @@ function renderMarkdown(text) {
     return DOMPurify.sanitize(marked.parse(source));
   }
   return escapeHtml(source).replace(/\n/g, '<br>');
+}
+
+const codeInspectorState = {
+  tabs: [], activeId: '', sessionId: '', pollTimer: null, openingQuery: '',
+};
+
+function parseCodeFileTarget(raw) {
+  let value = String(raw || '').trim().replace(/^`|`$/g, '');
+  if (!value || /^(?:https?:|mailto:|javascript:|data:)/i.test(value)) return null;
+  try { value = decodeURIComponent(value); } catch {}
+  value = value.replace(/^file:\/\//i, '');
+  if (value.startsWith(location.origin)) value = value.slice(location.origin.length);
+  if (/^\/(?:api|uploads|static)\//.test(value)) return null;
+  value = value.split('?')[0];
+  const match = value.match(/^(.*?)(?:#L(\d+)(?:-L?(\d+))?|:(\d+)(?:-(\d+))?)?$/i);
+  const path = String(match?.[1] || '').trim();
+  const known = /(?:^|\/)(?:Dockerfile|Makefile|CMakeLists\.txt|[^/\s]+\.(?:py|pyw|js|mjs|cjs|ts|tsx|jsx|html?|css|scss|sass|less|json|jsonl|md|markdown|sh|zsh|bash|ya?ml|toml|ini|cfg|conf|java|kt|kts|go|rs|rb|php|swift|c|h|cc|cpp|hpp|cs|sql|xml|vue|svelte))$/i;
+  if (!path || !known.test(path)) return null;
+  const lineStart = Number(match?.[2] || match?.[4] || 0) || null;
+  const lineEnd = Number(match?.[3] || match?.[5] || lineStart || 0) || lineStart;
+  return { path, lineStart, lineEnd };
+}
+
+function codeInspectorTabId(path) { return String(path || '').replace(/\\/g, '/'); }
+function activeCodeInspectorTab() { return codeInspectorState.tabs.find(tab => tab.id === codeInspectorState.activeId) || null; }
+
+function setCodeInspectorOpen(open) {
+  const enabled = !!open && codeMode;
+  document.body.classList.toggle('cw-code-inspector-open', enabled);
+  cwCodeInspector?.setAttribute('aria-hidden', enabled ? 'false' : 'true');
+  if (enabled) {
+    if (!codeInspectorState.pollTimer) codeInspectorState.pollTimer = setInterval(pollCodeInspectorFile, 2500);
+  } else if (codeInspectorState.pollTimer) {
+    clearInterval(codeInspectorState.pollTimer);
+    codeInspectorState.pollTimer = null;
+    cwCodeInspectorExternalMenu?.classList.add('hidden');
+  }
+}
+
+function resetCodeInspector() {
+  codeInspectorState.tabs = [];
+  codeInspectorState.activeId = '';
+  codeInspectorState.sessionId = sessionId || '';
+  renderCodeInspectorTabs();
+  if (cwCodeInspectorBody) cwCodeInspectorBody.innerHTML = '<div class="cw-code-inspector-empty">从回答、工具调用或改动列表中打开文件</div>';
+  setCodeInspectorOpen(false);
+}
+
+function renderCodeInspectorTabs() {
+  if (!cwCodeInspectorTabs) return;
+  cwCodeInspectorTabs.innerHTML = codeInspectorState.tabs.map(tab => `<button type="button" class="cw-code-inspector-tab ${tab.id === codeInspectorState.activeId ? 'active' : ''}" role="tab" aria-selected="${tab.id === codeInspectorState.activeId ? 'true' : 'false'}" data-inspector-tab="${escapeHtml(tab.id)}" title="${escapeHtml(tab.path || tab.query || '')}">
+    ${tab.stale ? '<span class="cw-code-inspector-tab-state" title="文件已更新"></span>' : ''}<span class="cw-code-inspector-tab-label">${escapeHtml(pathBasename(tab.path || tab.query || '文件'))}</span><span class="cw-code-inspector-tab-close" role="button" tabindex="0" data-inspector-tab-close="${escapeHtml(tab.id)}" aria-label="关闭">×</span>
+  </button>`).join('');
+  cwCodeInspectorTabs.querySelectorAll('[data-inspector-tab]').forEach(button => button.addEventListener('click', event => {
+    if (event.target.closest('[data-inspector-tab-close]')) return;
+    codeInspectorState.activeId = button.dataset.inspectorTab;
+    renderCodeInspector();
+  }));
+  cwCodeInspectorTabs.querySelectorAll('[data-inspector-tab-close]').forEach(button => {
+    const close = event => {
+      event.stopPropagation();
+      if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+      const index = codeInspectorState.tabs.findIndex(tab => tab.id === button.dataset.inspectorTabClose);
+      if (index < 0) return;
+      const wasActive = codeInspectorState.activeId === codeInspectorState.tabs[index].id;
+      codeInspectorState.tabs.splice(index, 1);
+      if (wasActive) codeInspectorState.activeId = codeInspectorState.tabs[Math.max(0, index - 1)]?.id || codeInspectorState.tabs[0]?.id || '';
+      if (!codeInspectorState.tabs.length) { resetCodeInspector(); return; }
+      renderCodeInspector();
+    };
+    button.addEventListener('click', close);
+    button.addEventListener('keydown', close);
+  });
+}
+
+function codeInspectorBreadcrumb(path) {
+  const parts = String(path || '').split('/').filter(Boolean);
+  const file = parts.pop() || path || '';
+  return `${parts.length ? `<span>${escapeHtml(parts.join(' › '))}</span><span>›</span>` : ''}<strong>${escapeHtml(file)}</strong>`;
+}
+
+function highlightCodeInspectorLine(line, language, allowHighlight) {
+  if (!allowHighlight || !window.hljs) return escapeHtml(line || ' ');
+  try { return hljs.highlight(line || ' ', { language, ignoreIllegals:true }).value; }
+  catch { return escapeHtml(line || ' '); }
+}
+
+function renderCodeInspectorSource(tab) {
+  if (tab.binary) return '<div class="cw-code-inspector-empty">这是二进制文件，不能显示源码</div>';
+  const lines = String(tab.content || '').split('\n');
+  const allowHighlight = String(tab.content || '').length < 220000;
+  return `<div class="cw-code-source" role="region" aria-label="${escapeHtml(tab.path)} 源码">${lines.map((line, index) => {
+    const number = index + 1;
+    const selected = tab.lineStart && number >= tab.lineStart && number <= (tab.lineEnd || tab.lineStart);
+    return `<div class="cw-code-source-line ${selected ? 'selected' : ''}" data-code-line="${number}"><span class="cw-code-source-number" title="选择第 ${number} 行">${number}</span><code class="cw-code-source-code hljs">${highlightCodeInspectorLine(line, tab.language, allowHighlight)}</code></div>`;
+  }).join('')}</div>`;
+}
+
+function renderCodeInspectorDiff(tab) {
+  const review = tab.changeSetId ? `<div class="cw-inline-review-actions" style="position:sticky;top:0;z-index:3;padding:7px 10px;border-bottom:1px solid var(--border);background:var(--surface-2)"><span class="cw-inline-review-state ${escapeHtml(tab.reviewState || 'pending')}">${tab.reviewState === 'kept' ? '已保留' : tab.reviewState === 'reverted' ? '已撤销' : '待审查'}</span><button class="cw-review-btn primary" data-inspector-review="keep" ${tab.reviewState && tab.reviewState !== 'pending' ? 'disabled' : ''}>保留</button><button class="cw-review-btn danger" data-inspector-review="revert" ${tab.truncated || (tab.reviewState && tab.reviewState !== 'pending') ? 'disabled' : ''}>撤销</button></div>` : '';
+  return `<div class="cw-code-inspector-diff">${review}<pre class="git-diff-content">${renderGitDiffHtml(tab.diff || '', tab.path)}</pre></div>`;
+}
+
+function renderCodeInspector() {
+  renderCodeInspectorTabs();
+  const tab = activeCodeInspectorTab();
+  if (!tab || !cwCodeInspectorBody) return;
+  setCodeInspectorOpen(true);
+  if (cwCodeInspectorBreadcrumb) cwCodeInspectorBreadcrumb.innerHTML = codeInspectorBreadcrumb(tab.path || tab.query);
+  cwCodeInspectorMode?.querySelectorAll('[data-inspector-mode]').forEach(button => button.classList.toggle('active', button.dataset.inspectorMode === tab.mode));
+  if (tab.loading) cwCodeInspectorBody.innerHTML = '<div class="cw-code-inspector-empty">正在读取文件…</div>';
+  else if (tab.error) cwCodeInspectorBody.innerHTML = `<div class="cw-code-inspector-error">${escapeHtml(tab.error)}</div>`;
+  else cwCodeInspectorBody.innerHTML = tab.mode === 'diff' ? renderCodeInspectorDiff(tab) : renderCodeInspectorSource(tab);
+  const statusLeft = cwCodeInspectorStatus?.firstElementChild;
+  const statusRight = cwCodeInspectorStatus?.lastElementChild;
+  if (statusLeft) statusLeft.textContent = tab.binary ? 'binary' : `${tab.language || 'text'} · ${tab.lineCount || 0} 行`;
+  if (statusRight) statusRight.textContent = tab.size !== undefined ? `${Math.max(0, Number(tab.size) || 0).toLocaleString()} bytes${tab.stale ? ' · 已刷新' : ''}` : '';
+  cwCodeInspectorBody.querySelectorAll('[data-code-line]').forEach(row => row.querySelector('.cw-code-source-number')?.addEventListener('click', event => {
+    const line = Number(row.dataset.codeLine);
+    if (event.shiftKey && tab.lineStart) {
+      tab.lineEnd = Math.max(line, tab.lineStart);
+      tab.lineStart = Math.min(line, tab.lineStart);
+    } else tab.lineStart = tab.lineEnd = line;
+    renderCodeInspector();
+  }));
+  cwCodeInspectorBody.querySelectorAll('[data-inspector-review]').forEach(button => button.addEventListener('click', async () => {
+    const applied = await reviewCodeChange(tab.changeSetId, tab.path, button.dataset.inspectorReview, button);
+    if (!applied) return;
+    tab.reviewState = button.dataset.inspectorReview === 'revert' ? 'reverted' : 'kept';
+    if (tab.reviewState === 'reverted') await reloadCodeInspectorTab(tab, { preserveMode:true });
+    else renderCodeInspector();
+  }));
+  if (tab.mode === 'source' && tab.lineStart) requestAnimationFrame(() => cwCodeInspectorBody.querySelector(`[data-code-line="${tab.lineStart}"]`)?.scrollIntoView({ block:'center' }));
+}
+
+function renderCodeInspectorCandidates(tab, data) {
+  setCodeInspectorOpen(true);
+  renderCodeInspectorTabs();
+  if (cwCodeInspectorBreadcrumb) cwCodeInspectorBreadcrumb.innerHTML = `<strong>${escapeHtml(tab.query)}</strong>`;
+  cwCodeInspectorBody.innerHTML = `<div class="cw-code-inspector-chooser"><h3>找到多个同名文件</h3><p>请选择要打开的项目文件。</p>${(data.candidates || []).map(item => `<button type="button" class="cw-code-inspector-candidate" data-code-candidate="${escapeHtml(item.path)}"><code>${escapeHtml(item.path)}</code></button>`).join('')}</div>`;
+  cwCodeInspectorBody.querySelectorAll('[data-code-candidate]').forEach(button => button.addEventListener('click', () => {
+    codeInspectorState.tabs = codeInspectorState.tabs.filter(item => item !== tab);
+    codeInspectorState.activeId = '';
+    openCodeFileInspector(button.dataset.codeCandidate, { mode:tab.mode, diff:tab.diff, changeSetId:tab.changeSetId, truncated:tab.truncated, lineStart:tab.lineStart, lineEnd:tab.lineEnd });
+  }));
+}
+
+async function reloadCodeInspectorTab(tab, options = {}) {
+  if (!tab || !sessionId) return;
+  tab.loading = true; tab.error = '';
+  if (!options.background) renderCodeInspector();
+  try {
+    const query = new URLSearchParams({ path:tab.query || tab.path });
+    if (tab.lineStart) query.set('line_start', String(tab.lineStart));
+    if (tab.lineEnd) query.set('line_end', String(tab.lineEnd));
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/code-file?${query}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || '读取文件失败');
+    if (data.ambiguous) { tab.loading = false; renderCodeInspectorCandidates(tab, data); return; }
+    const oldId = tab.id;
+    Object.assign(tab, { id:codeInspectorTabId(data.path), query:data.path, path:data.path, content:data.content || '', language:data.language || 'plaintext', binary:!!data.binary, size:data.size, lineCount:data.line_count, etag:data.etag, lineStart:data.line_start || tab.lineStart, lineEnd:data.line_end || tab.lineEnd, loading:false, error:'', stale:!!options.background });
+    if (codeInspectorState.activeId === oldId) codeInspectorState.activeId = tab.id;
+    if (tab.mode === 'diff' && typeof tab.diff !== 'string') await loadCodeInspectorDiff(tab, true);
+    renderCodeInspector();
+  } catch (error) {
+    tab.loading = false; tab.error = error.message || '读取文件失败'; renderCodeInspector();
+  }
+}
+
+async function loadCodeInspectorDiff(tab, quiet = false) {
+  if (!tab || typeof tab.diff === 'string') return;
+  try {
+    const query = new URLSearchParams({ cwd:cwdInput.value.trim(), path:tab.path });
+    const response = await fetch('/api/git/diff?' + query.toString());
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || '读取差异失败');
+    tab.diff = data.diff || '';
+  } catch (error) {
+    tab.diff = `读取 Diff 失败：${error.message || error}`;
+    if (!quiet) toast(error.message || '读取差异失败');
+  }
+}
+
+async function openCodeFileInspector(rawPath, options = {}) {
+  if (!codeMode || !sessionId) { toast('请先打开一个 Code 会话'); return; }
+  if (codeInspectorState.sessionId && codeInspectorState.sessionId !== sessionId) resetCodeInspector();
+  codeInspectorState.sessionId = sessionId;
+  const parsed = parseCodeFileTarget(rawPath) || { path:String(rawPath || '').trim(), lineStart:null, lineEnd:null };
+  if (!parsed.path) return;
+  const id = codeInspectorTabId(parsed.path);
+  let tab = codeInspectorState.tabs.find(item => item.id === id || item.path === parsed.path);
+  if (!tab) {
+    tab = { id, query:parsed.path, path:parsed.path, mode:options.mode || (typeof options.diff === 'string' ? 'diff' : 'source'), diff:options.diff, changeSetId:options.changeSetId || '', truncated:!!options.truncated, reviewState:options.reviewState || 'pending', lineStart:options.lineStart || parsed.lineStart, lineEnd:options.lineEnd || parsed.lineEnd, loading:true };
+    codeInspectorState.tabs.push(tab);
+  } else {
+    if (options.mode) tab.mode = options.mode;
+    if (typeof options.diff === 'string') tab.diff = options.diff;
+    Object.assign(tab, { changeSetId:options.changeSetId || tab.changeSetId, truncated:options.truncated ?? tab.truncated, lineStart:options.lineStart || parsed.lineStart || tab.lineStart, lineEnd:options.lineEnd || parsed.lineEnd || tab.lineEnd });
+  }
+  codeInspectorState.activeId = tab.id;
+  setCodeInspectorOpen(true);
+  if (tab.mode === 'diff' && typeof tab.diff === 'string') {
+    tab.loading = false;
+    renderCodeInspector();
+  } else if (!tab.content && !tab.binary) await reloadCodeInspectorTab(tab);
+  else {
+    if (tab.mode === 'diff') await loadCodeInspectorDiff(tab);
+    renderCodeInspector();
+  }
+}
+
+async function openCodeDiffInspector(path, diff, options = {}) {
+  return openCodeFileInspector(path, { ...options, mode:'diff', diff });
+}
+
+async function pollCodeInspectorFile() {
+  const tab = activeCodeInspectorTab();
+  if (!codeMode || !sessionId || !tab || tab.loading || document.hidden) return;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/code-file/stat?` + new URLSearchParams({ path:tab.path }));
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data.ok && data.etag && tab.etag && data.etag !== tab.etag) {
+      if (!tab.changeSetId) tab.diff = undefined;
+      await reloadCodeInspectorTab(tab, { background:true, preserveMode:true });
+    }
+  } catch {}
+}
+
+function refreshCodeInspectorPath(path) {
+  const parsed = parseCodeFileTarget(path);
+  if (!parsed) return;
+  const tab = codeInspectorState.tabs.find(item => item.path === parsed.path || item.query === parsed.path);
+  if (tab) {
+    if (!tab.changeSetId) tab.diff = undefined;
+    setTimeout(() => reloadCodeInspectorTab(tab, { background:true, preserveMode:true }), 180);
+  }
+}
+
+function decorateCodeFileLinks(root) {
+  if (!codeMode || !root) return;
+  root.querySelectorAll('a,code').forEach(element => {
+    if (element.matches('pre code') || element.closest('.cw-code-source,.git-diff-content')) return;
+    const raw = element.tagName === 'A' ? (element.getAttribute('href') || element.textContent) : element.textContent;
+    const parsed = parseCodeFileTarget(raw);
+    if (!parsed) return;
+    element.classList.add('cw-code-file-link');
+    element.dataset.codeFileTarget = `${parsed.path}${parsed.lineStart ? `:${parsed.lineStart}${parsed.lineEnd && parsed.lineEnd !== parsed.lineStart ? `-${parsed.lineEnd}` : ''}` : ''}`;
+    if (element.tagName === 'A') element.title = '在 Code 检查器中打开';
+  });
+}
+
+function openCodeInspectorPicker() {
+  if (!codeMode || !sessionId) { toast('请先打开一个 Code 会话'); return; }
+  setCodeInspectorOpen(true);
+  if (cwCodeInspectorBreadcrumb) cwCodeInspectorBreadcrumb.innerHTML = '<strong>打开项目文件</strong>';
+  cwCodeInspectorBody.innerHTML = '<div class="cw-code-inspector-chooser"><h3>打开项目文件</h3><p>支持相对路径、绝对路径、文件名模糊匹配和 server.py:120 行号。</p><form class="cw-code-form-row" id="cwCodeInspectorPickerForm"><input id="cwCodeInspectorPickerInput" autocomplete="off" spellcheck="false" placeholder="例如：claude_web/server.py:120" aria-label="项目文件路径"><button type="submit">打开</button></form></div>';
+  const form = $('cwCodeInspectorPickerForm'), picker = $('cwCodeInspectorPickerInput');
+  form?.addEventListener('submit', event => { event.preventDefault(); openCodeFileInspector(picker?.value || ''); });
+  requestAnimationFrame(() => picker?.focus());
 }
 function pathBasename(p) { const i = p.lastIndexOf('/'); return i >= 0 ? p.slice(i+1) : p; }
 function normalizeToolNames(list) {
@@ -10299,9 +10940,14 @@ function updateStripProgress(strip) {
 function setToolChipStatus(chip, status) {
   if (!chip) return;
   chip.classList.toggle('error', status === 'error');
+  chip.classList.toggle('done', status === 'done' || status === 'error' || status === 'stopped');
   // support both old .tool-chip-status and new .tool-card-dot
   const dot = chip.querySelector('.tool-chip-status, .tool-card-dot');
   if (dot) dot.className = (dot.classList.contains('tool-card-dot') ? 'tool-card-dot' : 'tool-chip-status') + ` ${status}`;
+  updateCodeToolGroup(chip.closest('.cw-tool-group'));
+  if (codeMode && ['done', 'error', 'stopped'].includes(status) && chip.dataset.codeFilePath) {
+    refreshCodeInspectorPath(chip.dataset.codeFilePath);
+  }
 }
 
 function renderToolDetail(detailEl, info) {
@@ -10428,6 +11074,42 @@ function getOrCreateToolCardList(container) {
   return list;
 }
 
+function codeToolGroupKind(name) {
+  if (['Read','Glob','Grep','LS','NotebookRead'].includes(name)) return { key:'read', label:'读取与搜索' };
+  if (['Write','Edit','MultiEdit','NotebookEdit'].includes(name)) return { key:'edit', label:'文件修改' };
+  if (['Bash','BashOutput'].includes(name)) return { key:'bash', label:'命令执行' };
+  if (['Task','Agent','TaskCreate','TaskUpdate','TaskOutput'].includes(name)) return { key:'agent', label:'子代理与任务' };
+  if (['WebFetch','WebSearch'].includes(name)) return { key:'web', label:'Web 工具' };
+  return { key:'other', label:'其他工具' };
+}
+function updateCodeToolGroup(group) {
+  if (!group) return;
+  const cards = [...group.querySelectorAll(':scope > .cw-tool-group-items > .tool-card')];
+  const done = cards.filter(card => card.classList.contains('done') || card.classList.contains('error')).length;
+  const errors = cards.filter(card => card.classList.contains('error')).length;
+  const count = group.querySelector('[data-code-tool-group-count]');
+  if (count) count.textContent = `${done}/${cards.length}${errors ? ` · ${errors} 错误` : ''}`;
+  if (cards.length >= 4 && done === cards.length && group.dataset.userExpanded !== '1') group.classList.add('collapsed');
+}
+function getOrCreateCodeToolGroup(list, name) {
+  const kind = codeToolGroupKind(name);
+  let group = list.lastElementChild;
+  if (!group || !group.classList.contains('cw-tool-group') || group.dataset.toolGroup !== kind.key) {
+    group = document.createElement('section');
+    group.className = 'cw-tool-group';
+    group.dataset.toolGroup = kind.key;
+    group.innerHTML = `<button type="button" class="cw-tool-group-head" aria-expanded="true"><strong>${escapeHtml(kind.label)}</strong><span data-code-tool-group-count>0/0</span></button><div class="cw-tool-group-items"></div>`;
+    const head = group.querySelector('.cw-tool-group-head');
+    head.addEventListener('click', () => {
+      const collapsed = group.classList.toggle('collapsed');
+      group.dataset.userExpanded = collapsed ? '0' : '1';
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    });
+    list.appendChild(group);
+  }
+  return { wrap:group, items:group.querySelector('.cw-tool-group-items') };
+}
+
 function addToolChip(container, name, inputData, options = {}) {
   const id = options.id || '';
   const input = inputData || {};
@@ -10467,6 +11149,7 @@ function addToolChip(container, name, inputData, options = {}) {
 
   // Code mode: use new vertical card style
   const list = getOrCreateToolCardList(container);
+  const codeGroup = getOrCreateCodeToolGroup(list, name);
   // Each Code tool owns its detail panel so multiple edit diffs can remain
   // expanded in the conversation at the same time as inline Edit blocks.
   const detail = document.createElement('div');
@@ -10476,6 +11159,9 @@ function addToolChip(container, name, inputData, options = {}) {
   card.type = 'button';
   card.className = 'tool-card' + (isPending ? '' : ' done');
   if (id) card.dataset.toolId = id;
+
+  const inspectedPath = String(input.file_path || input.notebook_path || ((name === 'Read' || name === 'Grep') ? (input.path || '') : '')).trim();
+  if (inspectedPath && parseCodeFileTarget(inspectedPath)) card.dataset.codeFilePath = inspectedPath;
 
   const { file, lines, arg } = extractToolCardParts(name, input);
   const displayName = getToolCardDisplayName(name);
@@ -10490,8 +11176,18 @@ function addToolChip(container, name, inputData, options = {}) {
     <span class="tool-card-spacer"></span>
     <span class="tool-card-dot ${dotClass}"></span>
   `;
-  list.appendChild(card);
-  list.appendChild(detail);
+  const fileTarget = card.querySelector('.tool-card-file');
+  if (fileTarget && card.dataset.codeFilePath) {
+    fileTarget.classList.add('cw-code-file-link');
+    fileTarget.title = '在 Code 检查器中打开';
+    fileTarget.addEventListener('click', event => {
+      event.preventDefault(); event.stopPropagation();
+      const offset = name === 'Read' && input.offset != null ? Number(input.offset) + 1 : null;
+      openCodeFileInspector(card.dataset.codeFilePath, { lineStart:offset, lineEnd:offset });
+    });
+  }
+  codeGroup.items.appendChild(card);
+  codeGroup.items.appendChild(detail);
 
   if (id) {
     if (toolUseBlocks.has(id)) {
@@ -10529,6 +11225,7 @@ function addToolChip(container, name, inputData, options = {}) {
       detail.classList.remove('hidden');
     }
   }
+  updateCodeToolGroup(codeGroup.wrap);
   return card;
 }
 
@@ -10959,10 +11656,76 @@ function applyNativeContextUsage(data) {
   latestContextTokens = total;
   latestContextLimit = max;
   latestContextExact = true;
+  latestNativeContextUsage = data;
   renderSessionTokens();
   updateTokenCount();
   return true;
 }
+
+function nativeContextCategoryEntries(data) {
+  const entries = [];
+  const seen = new Set();
+  const add = (label, tokens) => {
+    const value = Number(tokens || 0);
+    const key = String(label || '').trim();
+    if (!key || !Number.isFinite(value) || value <= 0 || seen.has(key)) return;
+    seen.add(key);
+    entries.push({ label:key, tokens:value });
+  };
+  const categories = Array.isArray(data?.categories) ? data.categories : [];
+  categories.forEach(item => add(item?.name || item?.label || item?.category, item?.tokens || item?.tokenCount || item?.totalTokens));
+  const collections = [
+    ['MCP · ', data?.mcpTools], ['Memory · ', data?.memoryFiles], ['Skill · ', data?.skills], ['Agent · ', data?.agents],
+  ];
+  collections.forEach(([prefix, items]) => (Array.isArray(items) ? items : []).forEach(item => add(prefix + (item?.name || item?.path || item?.serverName || '项目'), item?.tokens)));
+  const labels = {
+    systemPromptTokens:'系统提示词', system_prompt_tokens:'系统提示词', messagesTokens:'会话消息', messageTokens:'会话消息',
+    toolsTokens:'内置工具', toolTokens:'内置工具', mcpTokens:'MCP 工具', memoryTokens:'Memory 文件',
+    skillsTokens:'Skills', agentsTokens:'子代理', autoCompactBufferTokens:'原生 compact 预留',
+  };
+  Object.entries(labels).forEach(([key,label]) => add(label, data?.[key]));
+  return entries.sort((a,b) => b.tokens - a.tokens);
+}
+
+function renderNativeContextUsage(data = latestNativeContextUsage) {
+  if (!cwContextUsageOverview || !cwContextUsageList) return;
+  const total = Number(data?.totalTokens ?? data?.total_tokens ?? latestContextTokens ?? 0);
+  const max = Number(data?.maxTokens ?? data?.max_tokens ?? data?.rawMaxTokens ?? latestContextLimit ?? 0);
+  const remaining = Math.max(0, max - total);
+  const percent = max > 0 ? Math.min(100, Math.round(total / max * 100)) : 0;
+  cwContextUsageOverview.innerHTML = [
+    ['已使用', `${_fmtTokens(total)} · ${percent}%`], ['剩余', _fmtTokens(remaining)], ['模型窗口', _fmtTokens(max)],
+  ].map(([label,value]) => `<div class="cw-context-metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+  const entries = nativeContextCategoryEntries(data);
+  cwContextUsageList.innerHTML = entries.length ? entries.map(item => `
+    <div class="cw-context-row"><span class="cw-context-row-label" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span><span class="cw-context-row-bar"><i style="width:${Math.min(100, max ? item.tokens/max*100 : 0)}%"></i></span><span class="cw-context-row-value">${_fmtTokens(item.tokens)}</span></div>
+  `).join('') : '<div class="cw-activity-empty">SDK 当前只返回总量；升级 SDK 后若提供分类，会自动显示在这里。</div>';
+  if (cwContextUsageSubtitle) cwContextUsageSubtitle.textContent = `Claude Agent SDK 实时统计 · ${percent}% 已使用`;
+}
+
+async function openNativeContextUsage() {
+  if (!codeMode || !sessionId) return;
+  openModal(cwContextUsageModal);
+  cwContextUsageList.innerHTML = '<div class="cw-activity-empty">正在读取原生上下文统计…</div>';
+  const data = await refreshNativeContextUsage({ silent:false });
+  renderNativeContextUsage(data || latestNativeContextUsage || {});
+}
+
+tokenCounter?.setAttribute('tabindex', '0');
+tokenCounter?.setAttribute('role', 'button');
+tokenCounter?.setAttribute('aria-label', '查看 Code 上下文占用明细');
+tokenCounter?.addEventListener('click', () => { if (codeMode && latestContextExact) openNativeContextUsage(); });
+tokenCounter?.addEventListener('keydown', event => {
+  if (codeMode && latestContextExact && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openNativeContextUsage(); }
+});
+cwContextRefreshBtn?.addEventListener('click', openNativeContextUsage);
+cwContextCompactBtn?.addEventListener('click', async () => {
+  cwContextCompactBtn.disabled = true;
+  cwContextCompactBtn.textContent = '正在压缩…';
+  try { await runNativeCompact(); await refreshNativeContextUsage({ silent:false }); renderNativeContextUsage(); }
+  catch (error) { toast('原生压缩失败：' + (error.message || error)); }
+  finally { cwContextCompactBtn.disabled = false; cwContextCompactBtn.textContent = '立即原生压缩'; }
+});
 
 async function refreshNativeContextUsage(options = {}) {
   if (!codeMode || !sessionId || currentCodeRuntime !== 'claude_agent_sdk') return null;
@@ -11038,6 +11801,28 @@ function addErrorBlock(message) {
   el.className = 'bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-900 text-red-800 dark:text-red-300 px-3 py-2 rounded-lg text-sm';
   el.textContent = '错误: ' + message;
   chatInner.appendChild(el);
+  if (!codeMode) return el;
+  const raw = String(message || '');
+  const lower = raw.toLowerCase();
+  let diagnostic = null;
+  if (lower.includes('did not acknowledge') || lower.includes('acknowledgement')) diagnostic = ['SDK 回合没有在确认窗口内接管请求','通常是 SDK runtime 正在重建、版本不兼容或桥接进程卡住。先检查 SDK 状态，再重试这一轮。','sdk'];
+  else if (lower.includes('separator is not found') || lower.includes('chunk exceed') || lower.includes('frame')) diagnostic = ['流式数据帧过大或边界丢失','常见于旧 SDK、超大单段工具输出或附件。升级 SDK 后重试；超大输出应由工具写入文件再读取必要片段。','sdk'];
+  else if (lower.includes('context') && (lower.includes('limit') || lower.includes('maximum') || lower.includes('too long'))) diagnostic = ['上下文接近或超过模型窗口','查看占用明细并执行 Claude Code 原生 compact，然后继续当前任务。','context'];
+  else if (lower.includes('permission') || lower.includes('not allowed')) diagnostic = ['工具权限阻止了当前操作','检查当前运行模式和本会话授权规则；只对需要的工具放行。','permissions'];
+  else if (lower.includes('auth') || lower.includes('unauthorized') || lower.includes('login')) diagnostic = ['Claude 认证不可用','确认运行服务的本机 Claude Code 认证仍有效，然后重试。','auth'];
+  if (!diagnostic) return el;
+  const card = document.createElement('section');
+  card.className = 'cw-code-diagnostic';
+  card.innerHTML = `<div class="cw-code-diagnostic-title">${escapeHtml(diagnostic[0])}</div><div class="cw-code-diagnostic-copy">${escapeHtml(diagnostic[1])}</div><div class="cw-code-diagnostic-actions"></div>`;
+  const actions = card.querySelector('.cw-code-diagnostic-actions');
+  const addAction = (label, handler) => { const button=document.createElement('button'); button.type='button'; button.textContent=label; button.addEventListener('click',handler); actions.appendChild(button); };
+  if (diagnostic[2] === 'context') addAction('查看上下文', openNativeContextUsage);
+  if (diagnostic[2] === 'sdk') addAction('打开 SDK 设置', () => { openModal(settingsModal); refreshAgentSdkStatus(false); });
+  if (diagnostic[2] === 'permissions') addAction('查看授权规则', openPermissionRulesModal);
+  addAction('复制错误', () => navigator.clipboard?.writeText(raw));
+  if (sessionId && lastUserIndex >= 0) addAction('重试这一轮', () => retryTurnWithCurrentPermissions(sessionId,lastUserIndex));
+  chatInner.appendChild(card);
+  return el;
 }
 async function retryTurnWithCurrentPermissions(targetSessionId, userIdx) {
   if (!targetSessionId) { alert('当前没有会话'); return; }
@@ -11115,6 +11900,28 @@ function normalizeNativeQuestion(raw) {
     multiSelect: raw.multiSelect === true,
     options,
   };
+}
+
+async function renderPrewritePermissionPreview(card, toolName, input, targetSessionId) {
+  if (!codeMode || !['Write','Edit','MultiEdit'].includes(toolName) || !card || !targetSessionId) return;
+  const preview = document.createElement('div');
+  preview.className = 'cw-prewrite-preview';
+  preview.innerHTML = '<div class="cw-prewrite-head"><span>写入前 Diff</span><span>正在读取当前文件…</span></div><div class="cw-prewrite-note">Claude 尚未修改文件；批准后才会执行。</div>';
+  card.appendChild(preview);
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/permissions/preview-change`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ tool_name:toolName, input }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    if (!data.supported) {
+      preview.innerHTML = `<div class="cw-prewrite-head"><span>写入前检查</span><span>无法生成 Diff</span></div><div class="cw-prewrite-note">${escapeHtml(data.reason || '当前工具不支持预览')}</div>`;
+      return;
+    }
+    preview.innerHTML = `<div class="cw-prewrite-head"><span>${escapeHtml(data.path || '文件修改')}</span><span>${data.created ? '新建文件' : '执行前预览'}</span></div><div class="cw-prewrite-body">${renderUnifiedCodeDiff(data.old_text || '', data.new_text || '', data.path || '', '写入前 Diff')}</div>`;
+  } catch (error) {
+    preview.innerHTML = `<div class="cw-prewrite-head"><span>写入前检查</span><span>预览失败</span></div><div class="cw-prewrite-note">${escapeHtml(error.message || error)}</div>`;
+  }
 }
 function addNativePermissionRequest(container, info) {
   if (!container) container = newAssistantBubble();
@@ -11217,6 +12024,7 @@ function addNativePermissionRequest(container, info) {
     pre.textContent = JSON.stringify(input, null, 2);
     details.append(summary, pre);
     card.appendChild(details);
+    renderPrewritePermissionPreview(card, toolName, input, targetSessionId);
   }
 
   const status = document.createElement('div');
@@ -12024,10 +12832,20 @@ function handleEvent(obj, container, options = {}) {
     if (obj.has_checkpoint && lastUserIndex >= 0) {
       markLastUserMessageCheckpoint(lastUserIndex);
     }
+    if (codeMode && pendingWorkspacePresetSettings) {
+      const pendingSettings = pendingWorkspacePresetSettings;
+      pendingWorkspacePresetSettings = null;
+      currentCodeProjectSettings = { ...currentCodeProjectSettings, ...pendingSettings };
+      setTimeout(() => saveCodeProjectSettings({ silent:true }), 0);
+    }
     return container;
   }
   if (obj.type === 'permission_request') {
     hideThinking(container);
+    if (codeMode && obj.tool_name === 'AskUserQuestion' && !replay) {
+      notifyUser('Code 会话等待回答', obj.title || obj.description || 'Claude 有问题需要你回答');
+      beep();
+    }
     return addNativePermissionRequest(container, obj);
   }
   if (obj.type === 'permission_auto_approved') {
@@ -12897,6 +13715,32 @@ function saveDraft() {
   localStorage.setItem(draftKey(), input.value);
   persistCodeFileReferences();
 }
+function rememberCodeInput(text) {
+  const value = String(text || '').trim();
+  if (!codeMode || !value) return;
+  codeInputHistory = [value, ...codeInputHistory.filter(item => item !== value)].slice(0, 200);
+  LS.set('codeInputHistoryV1', codeInputHistory);
+  codeInputHistoryIndex = -1;
+  codeInputHistoryDraft = '';
+}
+function navigateCodeInputHistory(direction) {
+  if (!codeMode || !codeInputHistory.length) return false;
+  if (direction < 0) {
+    if (codeInputHistoryIndex < 0) {
+      if (input.value.trim()) return false;
+      codeInputHistoryDraft = input.value;
+    }
+    codeInputHistoryIndex = Math.min(codeInputHistory.length - 1, codeInputHistoryIndex + 1);
+    input.value = codeInputHistory[codeInputHistoryIndex] || '';
+  } else {
+    if (codeInputHistoryIndex < 0) return false;
+    codeInputHistoryIndex -= 1;
+    input.value = codeInputHistoryIndex < 0 ? codeInputHistoryDraft : (codeInputHistory[codeInputHistoryIndex] || '');
+  }
+  input.selectionStart = input.selectionEnd = input.value.length;
+  updateTokenCount(); autosizeTextarea(); syncComposerDraftState();
+  return true;
+}
 function restoreDraft() {
   input.value = localStorage.getItem(draftKey()) || '';
   codeFileReferences.clear();
@@ -13010,6 +13854,7 @@ const builtinSlashCommands = [
   { group: '🔧 操作', kind: 'action', trigger: 'clear', name: '清空当前会话', desc: '保留 ID，删除所有历史', handler: slashClear, needSession: true },
   { group: '🔧 操作', kind: 'action', trigger: 'fork', name: '从当前位置分叉', desc: '基于最后一轮分叉到新会话', handler: slashFork, needSession: true, needHistory: true },
   { group: '💎 重操作', kind: 'heavy', trigger: 'compact', name: '压缩会话历史', desc: 'Code 使用 SDK 原生 compact；Chat 使用摘要备份', handler: slashCompact, needSession: true, needHistory: true },
+  { group: '🔧 操作', kind: 'action', trigger: 'context', name: '查看上下文占用', desc: '查看 Claude Agent SDK 上下文明细', handler: openNativeContextUsage, needSession: true, codeOnly: true },
   { group: '💎 重操作', kind: 'heavy', trigger: 'init', name: '初始化 CLAUDE.md', desc: '扫项目并生成草稿到输入框', handler: slashInit },
   { group: '📝 模板', kind: 'template', trigger: 'recap', name: '总结当前进度', content: '请简要总结当前会话的目标、已完成、待办和风险，不超过 10 行。' },
   { group: '📝 模板', kind: 'template', trigger: 'test', name: '写测试', content: '请为下面的代码补充测试，覆盖正常路径、边界条件和错误路径：\n\n' },
@@ -13229,6 +14074,7 @@ async function maybeShowPicker() {
     if (pickerMode === 'slash') {
       const builtInTriggers = new Set(builtinSlashCommands.map(c => c.trigger));
       const builtins = builtinSlashCommands
+        .filter(c => !c.codeOnly || codeMode)
         .filter(c => !q || c.trigger.includes(q) || c.name.toLowerCase().includes(q.toLowerCase()))
         .map(c => ({ ...c, label: '/' + c.trigger, meta: c.name, disabledReason: slashDisabledReason(c) }));
       const promptSlash = promptsCache
@@ -14408,6 +15254,7 @@ form.addEventListener('submit', async (e) => {
   const slashPayload = pendingSlashFork && pendingImages.length === 0 && readyDocs === 0 && loadingDocs === 0
     ? slashForkPayloadFor(text)
     : null;
+  if (codeMode) rememberCodeInput(text);
   input.value = '';
   updateTokenCount();
   autosizeTextarea();
@@ -14447,6 +15294,9 @@ input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowUp') { e.preventDefault(); movePickerSelection(-1); return; }
     if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); insertPickerSelection(pickerSel); return; }
     if (e.key === 'Escape') { hidePicker(); return; }
+  }
+  if (codeMode && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
+    if (navigateCodeInputHistory(e.key === 'ArrowUp' ? -1 : 1)) { e.preventDefault(); return; }
   }
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -15254,6 +16104,7 @@ function renderGitDiffHunks(path, diffText, options = {}) {
 }
 
 async function openGitFileDiff(path, providedDiff = null, options = {}) {
+  if (codeMode) return openCodeDiffInspector(path, providedDiff, options);
   const cwd = cwdInput.value.trim();
   if (!cwd || !path || !gitDiffModal) return;
   if (gitDiffPath) gitDiffPath.textContent = options.turnLabel ? `${path} · ${options.turnLabel}` : path;
@@ -15615,6 +16466,123 @@ async function runCodeValidation() {
 }
 
 codeValidationRun?.addEventListener('click', runCodeValidation);
+async function toggleCodeInspectorExternalMenu() {
+  const tab = activeCodeInspectorTab();
+  if (!tab || !sessionId || !cwCodeInspectorExternalMenu) return;
+  if (!cwCodeInspectorExternalMenu.classList.contains('hidden')) {
+    cwCodeInspectorExternalMenu.classList.add('hidden');
+    return;
+  }
+  cwCodeInspectorExternalMenu.innerHTML = '<button type="button" disabled>正在检测本机编辑器…</button>';
+  cwCodeInspectorExternalMenu.classList.remove('hidden');
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/code-file/editors`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || '无法检测本机编辑器');
+    const editors = (data.editors || []).filter(editor => editor.available);
+    cwCodeInspectorExternalMenu.innerHTML = editors.length
+      ? editors.map(editor => `<button type="button" role="menuitem" data-code-editor="${escapeHtml(editor.id)}">${escapeHtml(editor.name)}</button>`).join('')
+      : '<button type="button" disabled>没有可用的本机编辑器</button>';
+    cwCodeInspectorExternalMenu.querySelectorAll('[data-code-editor]').forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const openResponse = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/code-file/open-external`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ path:tab.path, line:tab.lineStart || 1, editor:button.dataset.codeEditor }),
+        });
+        const openData = await openResponse.json().catch(() => ({}));
+        if (!openResponse.ok) throw new Error(openData.detail || '启动本机编辑器失败');
+        toast(`已在${button.textContent}中打开`);
+        cwCodeInspectorExternalMenu.classList.add('hidden');
+      } catch (error) { toast(error.message || '启动本机编辑器失败'); }
+      finally { button.disabled = false; }
+    }));
+  } catch (error) {
+    cwCodeInspectorExternalMenu.innerHTML = `<button type="button" disabled>${escapeHtml(error.message || '检测失败')}</button>`;
+  }
+}
+
+function referenceActiveCodeInspectorLine() {
+  const tab = activeCodeInspectorTab();
+  if (!tab || !input) return;
+  const range = tab.lineStart ? `:${tab.lineStart}${tab.lineEnd && tab.lineEnd !== tab.lineStart ? `-${tab.lineEnd}` : ''}` : '';
+  const reference = `@${tab.path}${range} `;
+  const start = Number.isFinite(input.selectionStart) ? input.selectionStart : input.value.length;
+  const end = Number.isFinite(input.selectionEnd) ? input.selectionEnd : start;
+  input.value = `${input.value.slice(0, start)}${reference}${input.value.slice(end)}`;
+  input.dispatchEvent(new Event('input', { bubbles:true }));
+  input.focus();
+  input.setSelectionRange(start + reference.length, start + reference.length);
+  toast(range ? '已引用所选代码行' : '已引用文件');
+}
+
+cwOpenCodeFileBtn?.addEventListener('click', openCodeInspectorPicker);
+cwCodeInspectorClose?.addEventListener('click', () => setCodeInspectorOpen(false));
+cwCodeInspectorReference?.addEventListener('click', referenceActiveCodeInspectorLine);
+cwCodeInspectorExternal?.addEventListener('click', toggleCodeInspectorExternalMenu);
+cwCodeInspectorMode?.addEventListener('click', async event => {
+  const button = event.target.closest('[data-inspector-mode]');
+  const tab = activeCodeInspectorTab();
+  if (!button || !tab) return;
+  tab.mode = button.dataset.inspectorMode;
+  if (tab.mode === 'diff') await loadCodeInspectorDiff(tab);
+  else if (!tab.content && !tab.binary) { await reloadCodeInspectorTab(tab); return; }
+  renderCodeInspector();
+});
+
+chatInner?.addEventListener('click', event => {
+  if (!codeMode) return;
+  const target = event.target.closest('[data-code-file-target]');
+  if (!target || !chatInner.contains(target)) return;
+  event.preventDefault(); event.stopPropagation();
+  openCodeFileInspector(target.dataset.codeFileTarget);
+});
+if (chatInner && window.MutationObserver) {
+  const codeFileLinkObserver = new MutationObserver(mutations => mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
+    if (node.nodeType === Node.ELEMENT_NODE) decorateCodeFileLinks(node.matches?.('a,code') ? node.parentElement : node);
+  })));
+  codeFileLinkObserver.observe(chatInner, { childList:true, subtree:true });
+}
+
+document.addEventListener('click', event => {
+  if (!event.target.closest('#cwCodeInspectorExternal,#cwCodeInspectorExternalMenu')) cwCodeInspectorExternalMenu?.classList.add('hidden');
+});
+document.addEventListener('keydown', event => {
+  if (!codeMode) return;
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'p') {
+    event.preventDefault(); openCodeInspectorPicker(); return;
+  }
+  if (event.key === 'Escape' && document.body.classList.contains('cw-code-inspector-open')) {
+    if (cwCodeInspectorExternalMenu && !cwCodeInspectorExternalMenu.classList.contains('hidden')) cwCodeInspectorExternalMenu.classList.add('hidden');
+    else setCodeInspectorOpen(false);
+  }
+});
+
+if (cwCodeInspectorResizer) {
+  const savedWidth = Number(localStorage.getItem('codeInspectorWidthV1') || 620);
+  document.documentElement.style.setProperty('--cw-code-inspector-width', `${Math.min(760, Math.max(420, savedWidth))}px`);
+  cwCodeInspectorResizer.addEventListener('pointerdown', event => {
+    if (window.innerWidth <= 900) return;
+    event.preventDefault();
+    cwCodeInspectorResizer.setPointerCapture?.(event.pointerId);
+    cwCodeInspectorResizer.classList.add('dragging');
+    document.body.classList.add('cw-code-inspector-resizing');
+    const move = moveEvent => {
+      const width = Math.min(760, Math.max(420, window.innerWidth - moveEvent.clientX));
+      document.documentElement.style.setProperty('--cw-code-inspector-width', `${width}px`);
+      localStorage.setItem('codeInspectorWidthV1', String(width));
+    };
+    const stop = () => {
+      cwCodeInspectorResizer.classList.remove('dragging');
+      document.body.classList.remove('cw-code-inspector-resizing');
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', stop);
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', stop, { once:true });
+  });
+}
+
 codeValidationMode?.addEventListener('change', () => saveCodeProjectSettings());
 codeValidationCommand?.addEventListener('change', () => saveCodeProjectSettings({ silent: true }));
 codeValidationCommand?.addEventListener('keydown', event => {
@@ -15678,8 +16646,9 @@ async function renderChangedFilesSummary(container, changedFiles = [], meta = {}
               <pre class="git-diff-content">${renderGitDiffHtml(file.diff || '', file.path)}</pre>
               <div class="cw-inline-review-actions">
                 <span class="cw-inline-review-state ${escapeHtml(state)}">${stateLabel}${file.diff_truncated ? ' · Diff 已截断' : ''}</span>
+                <button type="button" class="cw-review-btn" data-inline-view-source="${index}">查看源码</button>
                 <button type="button" class="cw-review-btn" data-inline-open-validation>运行验证</button>
-                <button type="button" class="cw-review-btn" data-inline-view-diff="${index}">全屏查看</button>
+                <button type="button" class="cw-review-btn" data-inline-view-diff="${index}">查看 Diff</button>
                 <button type="button" class="cw-review-btn primary" data-inline-review-action="keep" data-inline-review-file="${index}" ${!persisted || state !== 'pending' ? 'disabled' : ''}>保留</button>
                 <button type="button" class="cw-review-btn danger" data-inline-review-action="revert" data-inline-review-file="${index}" ${cannotRevert ? 'disabled' : ''} title="${cannotRevert && state === 'pending' ? '没有完整可逆补丁，请使用整轮回退' : '撤销这个文件的本轮 AI 修改'}">撤销</button>
               </div>
@@ -15691,6 +16660,12 @@ async function renderChangedFilesSummary(container, changedFiles = [], meta = {}
       btn.addEventListener('click', () => {
         const file = files[Number(btn.dataset.inlineViewDiff)];
         if (file) openGitFileDiff(file.path, file.diff, { changeSetId: set.id, truncated: !!file.diff_truncated, turnLabel: codeReviewTurnLabel(set.userIndex) });
+      });
+    });
+    card.querySelectorAll('[data-inline-view-source]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const file = files[Number(btn.dataset.inlineViewSource)];
+        if (file) openCodeFileInspector(file.path, { mode:'source' });
       });
     });
     card.querySelectorAll('[data-inline-open-validation]').forEach(btn => {
@@ -15717,6 +16692,8 @@ async function renderChangedFilesSummary(container, changedFiles = [], meta = {}
       });
     });
     container.appendChild(card);
+    decorateCodeFileLinks(card);
+    files.forEach(file => refreshCodeInspectorPath(file.path));
     scrollBottom();
   } catch {}
 }
@@ -15805,16 +16782,6 @@ function renderSessionStatsBar() {
     editsItem.title = files ? `查看 ${files} 个变更文件` : '暂无文件变更';
   }
 
-  const approvalItem = $('cwStatsApproval');
-  const approvalState = $('cwStatsApprovalState');
-  if (approvalItem) {
-    approvalItem.classList.toggle('approval-on', currentCodeAutoApprove);
-    approvalItem.setAttribute('aria-pressed', currentCodeAutoApprove ? 'true' : 'false');
-    approvalItem.title = currentCodeAutoApprove
-      ? '本会话会自动批准工具请求；需要用户回答的问题仍会暂停'
-      : '开启后自动批准本会话的工具请求';
-  }
-  if (approvalState) approvalState.textContent = currentCodeAutoApprove ? '开' : '关';
 }
 
 function workspaceActivityRows(tab = currentWorkspaceActivityTab) {
@@ -15877,8 +16844,8 @@ async function toggleCodeAutoApprove() {
   }
   const next = !currentCodeAutoApprove;
   if (next && !confirm('开启“替我审批”后，本会话的工具请求会由服务端自动允许，可能执行写文件和命令。需要用户回答的问题仍会暂停。仅在可信项目中开启，继续吗？')) return;
-  const button = $('cwStatsApproval');
-  if (button) button.disabled = true;
+  currentCodeAutoApproveUpdating = true;
+  renderCodeAutoApproveControl();
   try {
     const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/auto-approve`, {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -15887,12 +16854,12 @@ async function toggleCodeAutoApprove() {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
     currentCodeAutoApprove = !!data.enabled;
-    renderSessionStatsBar();
     toast(currentCodeAutoApprove ? '本会话已开启替我审批' : '本会话已关闭替我审批');
   } catch (error) {
     toast(`设置失败：${error.message || error}`);
   } finally {
-    if (button) button.disabled = false;
+    currentCodeAutoApproveUpdating = false;
+    renderCodeAutoApproveControl();
   }
 }
 
@@ -17203,7 +18170,6 @@ $('cwStatsAgents')?.addEventListener('click', () => {
 $('cwStatsEdits')?.addEventListener('click', () => {
   openWorkspaceActivity('edits');
 });
-$('cwStatsApproval')?.addEventListener('click', toggleCodeAutoApprove);
 cwWorkspaceActivity?.addEventListener('click', event => {
   const tab = event.target.closest('[data-cw-activity-tab]');
   if (tab) {
@@ -17550,6 +18516,33 @@ function rootUnsafePermissionMessage() {
   return '当前服务以 root/sudo 权限运行，Claude CLI 不允许使用自动模式；请使用代理模式，或用普通用户运行服务。';
 }
 
+function renderCodeAutoApproveControl() {
+  if (!cwModeAutoApprove) return;
+  const available = !!sessionId && codeMode && currentCodeRuntime === 'claude_agent_sdk';
+  const enabled = available && currentCodeAutoApprove;
+  const automaticMode = effectivePermissionModeForWorkspace(permSelect?.value) === 'bypassPermissions';
+  cwModeAutoApprove.disabled = !available || currentCodeAutoApproveUpdating;
+  cwModeAutoApprove.setAttribute('aria-checked', enabled ? 'true' : 'false');
+  cwModeAutoApprove.setAttribute('aria-label', `替我审批，${enabled ? '已开启' : '已关闭'}`);
+  if (cwModeAutoApproveState) cwModeAutoApproveState.textContent = enabled ? '开启' : '关闭';
+  cwModeAutoApprove.title = available
+    ? (enabled ? '关闭本会话的自动工具审批' : '自动批准本会话的工具请求')
+    : '打开 Claude Agent SDK Code 会话后可用';
+  if (cwModeAutoApproveDescription) {
+    if (!available) {
+      cwModeAutoApproveDescription.textContent = '打开 Claude Agent SDK Code 会话后可用';
+    } else if (currentCodeAutoApproveUpdating) {
+      cwModeAutoApproveDescription.textContent = '正在保存本会话设置…';
+    } else if (automaticMode) {
+      cwModeAutoApproveDescription.textContent = '自动模式通常不会触发审批；设置仍按会话保存';
+    } else {
+      cwModeAutoApproveDescription.textContent = enabled
+        ? '已自动批准工具请求；提问仍需回答'
+        : '自动批准此会话的工具请求；提问仍需回答';
+    }
+  }
+}
+
 function renderPermissionModeMenu() {
   if (!cwPermissionModeMenu) return;
   const current = effectivePermissionModeForWorkspace(permSelect?.value);
@@ -17571,6 +18564,7 @@ function renderPermissionModeMenu() {
     btn.disabled = rootDisabled;
     btn.title = rootDisabled ? rootUnsafePermissionMessage() : '';
   });
+  renderCodeAutoApproveControl();
 }
 
 function setPermissionMode(value) {
@@ -17588,6 +18582,108 @@ function setPermissionMode(value) {
   syncNativeRuntimePermissionMode(mode);
   return true;
 }
+
+function permissionSuggestionSummary(suggestions) {
+  if (!Array.isArray(suggestions) || !suggestions.length) return 'SDK 动态授权规则';
+  return suggestions.map(item => {
+    if (!item || typeof item !== 'object') return String(item || '');
+    const rules = Array.isArray(item.rules) ? item.rules : [];
+    const ruleText = rules.map(rule => rule?.toolName || rule?.tool_name || rule?.content || '').filter(Boolean).join(', ');
+    return [item.type || item.behavior || '规则', ruleText].filter(Boolean).join(' · ');
+  }).filter(Boolean).join('；') || 'SDK 动态授权规则';
+}
+async function openPermissionRulesModal() {
+  if (!codeMode || !sessionId) return toast('请先打开一个 Code 会话');
+  setPermissionModeMenuOpen(false);
+  openModal(cwPermissionRulesModal);
+  cwPermissionRulesList.innerHTML = '<div class="cw-activity-empty">正在读取本会话授权规则…</div>';
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/permissions/rules`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || response.status);
+    const dynamicRules = data.rules || [];
+    const overrides = getSessionPermissionOverride(sessionId).extraAllowedTools || [];
+    const rows = [
+      ...dynamicRules.map(rule => ({ title:rule.tool_name || '工具', detail:permissionSuggestionSummary(rule.suggestions) })),
+      ...overrides.map(tool => ({ title:tool, detail:'claude-web 本会话预放行工具' })),
+    ];
+    cwPermissionRulesList.innerHTML = rows.length ? rows.map(item => `<div class="cw-code-list-row"><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail)}</small></div></div>`).join('') : '<div class="cw-activity-empty">本会话没有记住任何额外权限；项目配置仍按当前运行模式生效。</div>';
+    cwPermissionRulesClear.disabled = rows.length === 0;
+  } catch (error) {
+    cwPermissionRulesList.innerHTML = `<div class="cw-activity-empty" style="color:#c83a35">加载失败：${escapeHtml(error.message || error)}</div>`;
+  }
+}
+cwPermissionRulesBtn?.addEventListener('click', openPermissionRulesModal);
+cwPermissionRulesClear?.addEventListener('click', async () => {
+  if (!sessionId || !confirm('撤销本会话记住的全部授权？下一次需要时 Claude 会重新询问。')) return;
+  cwPermissionRulesClear.disabled = true;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/permissions/rules`, { method:'DELETE' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || response.status);
+    setSessionPermissionOverride(sessionId, { mode:'', extraAllowedTools:[] });
+    toast('已撤销本会话授权，SDK runtime 将在下一轮重新建立');
+    await openPermissionRulesModal();
+  } catch (error) { toast('撤销失败：' + (error.message || error)); }
+  finally { cwPermissionRulesClear.disabled = false; }
+});
+
+async function refreshWorkspacePresets() {
+  cwWorkspacePresetsList.innerHTML = '<div class="cw-activity-empty">正在加载工作区预设…</div>';
+  try {
+    const response = await fetch('/api/code-workspace/presets');
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || response.status);
+    const presets = data.presets || [];
+    cwWorkspacePresetsList.innerHTML = presets.length ? presets.map(preset => `
+      <div class="cw-code-list-row" data-workspace-preset="${preset.id}"><div><strong>${escapeHtml(preset.name)}</strong><small>${escapeHtml(pathBasename(preset.cwd || '') || preset.cwd || '默认目录')} · ${escapeHtml(preset.model || '默认模型')} · ${escapeHtml(preset.permission_mode || 'default')} · 轻上下文${preset.light_context ? '开' : '关'}</small></div><div class="cw-code-list-actions"><button type="button" data-apply-preset="${preset.id}">应用</button><button type="button" class="danger" data-delete-preset="${preset.id}">删除</button></div></div>
+    `).join('') : '<div class="cw-activity-empty">还没有预设。保存当前配置后，可在不同项目之间快速切换。</div>';
+    cwWorkspacePresetsList.querySelectorAll('[data-apply-preset]').forEach(button => button.addEventListener('click', () => applyWorkspacePreset(presets.find(item => item.id === button.dataset.applyPreset))));
+    cwWorkspacePresetsList.querySelectorAll('[data-delete-preset]').forEach(button => button.addEventListener('click', async () => {
+      if (!confirm('删除这个工作区预设？')) return;
+      const response = await fetch(`/api/code-workspace/presets/${encodeURIComponent(button.dataset.deletePreset)}`, { method:'DELETE' });
+      if (!response.ok) return toast('删除预设失败');
+      refreshWorkspacePresets();
+    }));
+  } catch (error) { cwWorkspacePresetsList.innerHTML = `<div class="cw-activity-empty" style="color:#c83a35">加载失败：${escapeHtml(error.message || error)}</div>`; }
+}
+function applyWorkspacePreset(preset) {
+  if (!preset) return;
+  const nextCwd = String(preset.cwd || '').trim();
+  if (sessionId && nextCwd && nextCwd !== cwdInput.value.trim()) startNewSession();
+  if (nextCwd) cwdInput.value = nextCwd;
+  selectedModel = preset.model || ''; modelSelect.value = selectedModel; LS.set('model', selectedModel);
+  selectedEffort = preset.effort || ''; LS.set('effort', selectedEffort);
+  setPermissionMode(preset.permission_mode || 'free');
+  settings.lightContextMode = preset.light_context !== false; LS.set('lightContextMode', settings.lightContextMode); lightContextModeEl.checked = settings.lightContextMode;
+  currentCodeProjectSettings = { ...currentCodeProjectSettings, validation_command:preset.validation_command || '', validation_mode:preset.validation_mode || 'ask' };
+  pendingWorkspacePresetSettings = { ...currentCodeProjectSettings };
+  codeValidationCommand.value = currentCodeProjectSettings.validation_command;
+  codeValidationMode.value = currentCodeProjectSettings.validation_mode;
+  updateSettingsLabel(); syncSettingsMenuChecks(); updateWorkspaceLabels(); refreshGitStatus();
+  closeModal(cwWorkspacePresetsModal); toast(`已应用工作区预设：${preset.name}`);
+}
+async function openWorkspacePresetsModal() {
+  if (!codeMode) return;
+  setPermissionModeMenuOpen(false); openModal(cwWorkspacePresetsModal); await refreshWorkspacePresets();
+}
+cwWorkspacePresetsBtn?.addEventListener('click', openWorkspacePresetsModal);
+cwWorkspacePresetSave?.addEventListener('click', async () => {
+  const name = cwWorkspacePresetName.value.trim();
+  if (!name) { cwWorkspacePresetName.focus(); return; }
+  cwWorkspacePresetSave.disabled = true;
+  try {
+    const response = await fetch('/api/code-workspace/presets', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+      name, cwd:cwdInput.value.trim(), model:selectedModel, effort:selectedEffort,
+      permission_mode:effectivePermissionModeForWorkspace(permSelect.value), light_context:settings.lightContextMode,
+      validation_command:codeValidationCommand.value.trim(), validation_mode:codeValidationMode.value,
+    }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || response.status);
+    cwWorkspacePresetName.value = ''; await refreshWorkspacePresets(); toast('工作区预设已保存');
+  } catch (error) { toast('保存失败：' + (error.message || error)); }
+  finally { cwWorkspacePresetSave.disabled = false; }
+});
 
 function setPermissionModeMenuOpen(open, options = {}) {
   if (!cwPermissionModeMenu || !cwComposerPermBtn) return;
@@ -18689,6 +19785,62 @@ function scheduleConversationRailUpdate() {
 
 const conversationRailObserver = new MutationObserver(scheduleConversationRailUpdate);
 conversationRailObserver.observe(chatInner, { childList: true, subtree: true });
+
+function clearCodeConversationSearchMatches() {
+  codeConversationMatches.forEach(node => node.classList.remove('cw-conversation-match','active'));
+  codeConversationMatches = [];
+  codeConversationMatchIndex = -1;
+  if (cwConversationSearchCount) cwConversationSearchCount.textContent = '0 / 0';
+}
+function refreshCodeConversationSearch() {
+  clearCodeConversationSearchMatches();
+  if (!codeMode || !cwConversationSearchInput) return;
+  const query = cwConversationSearchInput.value.trim().toLocaleLowerCase();
+  if (!query) return;
+  const candidates = chatInner.querySelectorAll('.user-msg-text,.prose-custom,.tool-card,.system-info,.cw-code-diagnostic');
+  codeConversationMatches = [...candidates].filter(node => !node.closest('.hidden') && (node.textContent || '').toLocaleLowerCase().includes(query));
+  codeConversationMatches.forEach(node => node.classList.add('cw-conversation-match'));
+  if (codeConversationMatches.length) codeConversationMatchIndex = 0;
+  focusCodeConversationMatch(0);
+}
+function focusCodeConversationMatch(delta = 0) {
+  if (!codeConversationMatches.length) {
+    if (cwConversationSearchCount) cwConversationSearchCount.textContent = '0 / 0';
+    return;
+  }
+  codeConversationMatches.forEach(node => node.classList.remove('active'));
+  codeConversationMatchIndex = (codeConversationMatchIndex + delta + codeConversationMatches.length) % codeConversationMatches.length;
+  const node = codeConversationMatches[codeConversationMatchIndex];
+  node.classList.add('active');
+  node.scrollIntoView({ block:'center', behavior:'smooth' });
+  if (cwConversationSearchCount) cwConversationSearchCount.textContent = `${codeConversationMatchIndex + 1} / ${codeConversationMatches.length}`;
+}
+function setCodeConversationSearchOpen(open) {
+  if (!codeMode) open = false;
+  cwConversationSearch?.classList.toggle('hidden', !open);
+  if (open) {
+    requestAnimationFrame(() => { cwConversationSearchInput?.focus(); cwConversationSearchInput?.select(); });
+  } else {
+    clearCodeConversationSearchMatches();
+    input?.focus();
+  }
+}
+cwConversationSearchInput?.addEventListener('input', refreshCodeConversationSearch);
+cwConversationSearchInput?.addEventListener('keydown', event => {
+  if (event.key === 'Enter') { event.preventDefault(); focusCodeConversationMatch(event.shiftKey ? -1 : 1); }
+  if (event.key === 'Escape') { event.preventDefault(); setCodeConversationSearchOpen(false); }
+});
+cwConversationSearchPrev?.addEventListener('click', () => focusCodeConversationMatch(-1));
+cwConversationSearchNext?.addEventListener('click', () => focusCodeConversationMatch(1));
+cwConversationSearchClose?.addEventListener('click', () => setCodeConversationSearchOpen(false));
+document.addEventListener('keydown', event => {
+  if (codeMode && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+    event.preventDefault(); setCodeConversationSearchOpen(true); return;
+  }
+  if (codeMode && !cwConversationSearch?.classList.contains('hidden') && event.key === 'F3') {
+    event.preventDefault(); focusCodeConversationMatch(event.shiftKey ? -1 : 1);
+  }
+});
 window.addEventListener('resize', scheduleConversationRailUpdate);
 
 function countTimelineItemsBelow() {
@@ -19191,10 +20343,17 @@ function setCodeMode(enabled, options = {}) {
     setPermissionModeMenuOpen(false);
     codeReviewModal?.classList.add('hidden');
     rewindPreviewModal?.classList.add('hidden');
+    cwContextUsageModal?.classList.add('hidden');
+    cwPermissionRulesModal?.classList.add('hidden');
+    cwWorkspacePresetsModal?.classList.add('hidden');
+    setCodeConversationSearchOpen(false);
+    setCodeInspectorOpen(false);
   }
+  if (codeMode && codeInspectorState.sessionId && codeInspectorState.sessionId !== sessionId) resetCodeInspector();
   if (codeMode) {
     setMoreToolsOpen(false);
     closeFeedbackPopover();
+    decorateCodeFileLinks(chatInner);
   }
   document.body.classList.toggle('code-mode', codeMode);
   syncNativeCodeControls();
@@ -19518,8 +20677,15 @@ cwPermissionModeMenu?.addEventListener('click', (e) => {
   toast(`已切换到${PERMISSION_MODE_LABELS[mode]}`);
 });
 
+cwModeAutoApprove?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (cwModeAutoApprove.disabled) return;
+  toggleCodeAutoApprove();
+});
+
 cwPermissionModeMenu?.addEventListener('keydown', (e) => {
-  const options = [...cwPermissionModeMenu.querySelectorAll('.cw-mode-option:not(:disabled)')];
+  const options = [...cwPermissionModeMenu.querySelectorAll('[data-permission-mode]:not(:disabled), #cwModeAutoApprove:not(:disabled)')];
   if (!options.length) return;
   const index = Math.max(0, options.indexOf(document.activeElement));
   if (e.key === 'Escape') {
@@ -19773,6 +20939,7 @@ async function refreshMcpServers() {
             <span class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--surface); color:var(--text-subtle);">${escapeHtml(s.scope_label || s.scope || '')}</span>
           </div>
           <div class="flex items-center gap-1">
+            <button data-mcp-health="${escapeHtml(s.name)}" data-mcp-scope="${escapeHtml(s.scope)}" class="text-xs px-2 py-1 rounded" style="background:var(--surface); border:1px solid var(--border);">检测</button>
             <button data-mcp-toggle="${escapeHtml(s.name)}" data-mcp-scope="${escapeHtml(s.scope)}" data-disabled="${s.disabled}" class="text-xs px-2 py-1 rounded" style="background:var(--surface); border:1px solid var(--border);">
               ${s.disabled ? '启用' : '禁用'}
             </button>
@@ -19789,6 +20956,7 @@ async function refreshMcpServers() {
             ${mcpSecretBadges(s.env)}${mcpSecretBadges(s.headers)}
           </div>
         ` : ''}
+        <div data-mcp-health-result="${escapeHtml(s.name)}" class="hidden mt-2 text-xs"></div>
       </div>
     `).join('');
 
@@ -19805,6 +20973,31 @@ async function refreshMcpServers() {
         });
         if (!r.ok) { alert('操作失败: ' + await mcpErrorMessage(r)); return; }
         refreshMcpServers();
+      });
+    });
+
+    mcpServerList.querySelectorAll('[data-mcp-health]').forEach(btn => {
+      if (mobileQuestionMode) lockMobileControl(btn);
+      btn.addEventListener('click', async () => {
+        if (mobileQuestionMode) return toast('手机问答模式不能启动 MCP 健康检查');
+        const name = btn.dataset.mcpHealth;
+        const result = [...mcpServerList.querySelectorAll('[data-mcp-health-result]')].find(el => el.dataset.mcpHealthResult === name);
+        btn.disabled = true; btn.textContent = '检测中';
+        if (result) { result.classList.remove('hidden'); result.style.color = 'var(--text-muted)'; result.textContent = '正在启动 MCP 并读取 tools/list…'; }
+        try {
+          const response = await fetch('/api/mcp/servers/' + encodeURIComponent(name) + '/health' + mcpQuery({ scope:btn.dataset.mcpScope }), { method:'POST' });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.detail || response.status);
+          if (!result) return;
+          if (data.ok) {
+            result.style.color = '#16834a';
+            const tools = data.tools || [];
+            result.innerHTML = `<strong>连接正常 · ${Number(data.latency_ms || 0)}ms · ${tools.length} 个工具</strong>${tools.length ? `<div class="mt-1" style="color:var(--text-muted)">${tools.map(tool => `<code title="${escapeHtml(tool.description || '')}" style="margin-right:6px">${escapeHtml(tool.name)}</code>`).join('')}</div>` : ''}`;
+          } else {
+            result.style.color = '#c83a35'; result.textContent = `检测失败：${data.error || data.status || '未知错误'}`;
+          }
+        } catch (error) { if (result) { result.style.color='#c83a35'; result.textContent='检测失败：' + (error.message || error); } }
+        finally { btn.disabled=false; btn.textContent='检测'; }
       });
     });
 
