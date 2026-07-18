@@ -4431,6 +4431,26 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .cw-project-session .running-indicator {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #f59e0b;
+    margin-left: 4px;
+    animation: cwRunningPulse 1.4s ease-in-out infinite;
+  }
+  @keyframes cwRunningPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.7); }
+  }
+  .cw-project-session.needs-permission {
+    animation: cwNeedsPermission 1.2s ease-in-out infinite;
+  }
+  @keyframes cwNeedsPermission {
+    0%, 100% { background: transparent; }
+    50% { background: rgba(245, 158, 11, 0.22); }
+  }
   .cw-show-more {
     margin: 2px 0 2px 7px;
     padding: 4px 0;
@@ -9258,6 +9278,71 @@ let currentUserIndex = 0;
 let lastUserIndex = -1;
 const SESSION_PERMISSION_OVERRIDES_KEY = 'sessionPermissionOverrides';
 const sessionPermissionOverrides = LS.get(SESSION_PERMISSION_OVERRIDES_KEY, {});
+
+// ===== Multi-session parallel state =====
+const SESSION_DOM_CACHE_MAX = 5;
+const SESSION_PENDING_EVENTS_MAX = 800;
+const sessionDomCacheOrder = []; // LRU order: most recent at end
+
+class SessionState {
+  constructor(id) {
+    this.id = id;
+    this.controller = null;
+    this.streaming = false;
+    this.dom = null;
+    this.pendingEvents = [];
+    this.pendingOverflow = false;
+    this.runtime = 'unknown';
+    this.autoApprove = false;
+    this.contextTokens = null;
+    this.feedback = {};
+    this.needsPermission = false;
+  }
+}
+
+const sessionStates = new Map();
+
+function getOrCreateSessionState(id) {
+  if (!id) return null;
+  if (!sessionStates.has(id)) sessionStates.set(id, new SessionState(id));
+  return sessionStates.get(id);
+}
+
+function touchSessionDomCache(id) {
+  const idx = sessionDomCacheOrder.indexOf(id);
+  if (idx !== -1) sessionDomCacheOrder.splice(idx, 1);
+  sessionDomCacheOrder.push(id);
+  while (sessionDomCacheOrder.length > SESSION_DOM_CACHE_MAX) {
+    const evictId = sessionDomCacheOrder.shift();
+    const st = sessionStates.get(evictId);
+    if (st) st.dom = null;
+  }
+}
+
+function updateSidebarRunningIndicators() {
+  document.querySelectorAll('.cw-project-session').forEach(el => {
+    const id = el.dataset.id;
+    const st = sessionStates.get(id);
+    const existing = el.querySelector('.running-indicator');
+    if (st && st.controller) {
+      if (!existing) {
+        const dot = document.createElement('span');
+        dot.className = 'running-indicator';
+        dot.title = '运行中 · 点击进入后可停止';
+        el.appendChild(dot);
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+    if (st && st.needsPermission) {
+      el.classList.add('needs-permission');
+      el.title = '需要权限确认 · 点击进入处理';
+    } else {
+      el.classList.remove('needs-permission');
+      el.title = '';
+    }
+  });
+}
 
 // ===== dom refs =====
 const $ = (id) => document.getElementById(id);
@@ -15220,10 +15305,17 @@ function codeQueueSessionIsRecovering(owner) {
 }
 
 function isCodeQueueOwnerBusy(owner = activeCodeQueueOwner) {
-  return codeQueueDispatchingOwners.has(owner)
-    || (!!currentController && currentControllerQueueOwner === owner)
-    || (owner === activeCodeQueueOwner && codeMode && !stopBtn.classList.contains('hidden'))
-    || codeQueueSessionIsRecovering(owner);
+  if (codeQueueDispatchingOwners.has(owner)) return true;
+  if (!!currentController && currentControllerQueueOwner === owner) return true;
+  if (owner === activeCodeQueueOwner && codeMode && !stopBtn.classList.contains('hidden')) return true;
+  if (codeQueueSessionIsRecovering(owner)) return true;
+  // Check per-session state for background sessions
+  const ownerSessionId = owner.startsWith('session:') ? owner.slice(8) : null;
+  if (ownerSessionId) {
+    const st = sessionStates.get(ownerSessionId);
+    if (st && st.controller) return true;
+  }
+  return false;
 }
 
 function codeQueueEntryPreview(entry) {
@@ -15919,8 +16011,13 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   sendBtn.disabled = !codeMode;
   stopBtn.classList.remove('hidden');
   const turnController = new AbortController();
+  const targetSessionId = sessionId;
+  const targetSessionState = getOrCreateSessionState(targetSessionId);
+  targetSessionState.controller = turnController;
+  targetSessionState.streaming = true;
   currentController = turnController;
   currentControllerQueueOwner = queueOwner;
+  updateSidebarRunningIndicators();
   let lastResultEvent = null;
   let collectedAssistantText = '';
   let streamErrorEvent = null;
@@ -15931,6 +16028,9 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   if (cwd === null) {
     sendBtn.disabled = false;
     stopBtn.classList.add('hidden');
+    targetSessionState.controller = null;
+    targetSessionState.streaming = false;
+    updateSidebarRunningIndicators();
     if (currentController === turnController) {
       currentController = null;
       currentControllerQueueOwner = '';
@@ -15999,39 +16099,68 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
           } else if (obj.type === 'assistant') {
             collectedAssistantText += '\n' + assistantTextFromEvent(obj);
           }
-          const result = handleEvent(obj, asstContainer, { queueOwner });
-          if (result) asstContainer = result;
+          // Route event: foreground → render, background → buffer
+          if (sessionId === targetSessionId) {
+            const result = handleEvent(obj, asstContainer, { queueOwner });
+            if (result) asstContainer = result;
+          } else {
+            const isCritical = obj.type === 'permission_request' || obj.type === 'result' || obj.type === 'error' || obj.type === 'permission_error';
+            if (targetSessionState.pendingEvents.length >= SESSION_PENDING_EVENTS_MAX) {
+              targetSessionState.pendingOverflow = true;
+              if (isCritical) targetSessionState.pendingEvents.push(obj);
+            } else {
+              targetSessionState.pendingEvents.push(obj);
+            }
+            if (obj.type === 'permission_request') {
+              targetSessionState.needsPermission = true;
+              updateSidebarRunningIndicators();
+              toast(`会话「${targetSessionState.id.slice(0, 8)}」需要权限确认`);
+            }
+          }
         } catch (e) { console.warn('parse fail', line, e); }
       }
     }
-    hideThinking(asstContainer);
-    finishPendingToolUses('已结束', 'done');
+    if (sessionId === targetSessionId) {
+      hideThinking(asstContainer);
+      finishPendingToolUses('已结束', 'done');
+    }
     if (streamErrorEvent) {
       return { ok: false, accepted: serverAccepted, error: streamErrorEvent, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
     }
     if (!quiet) {
-      notifyUser('Claude Code 已完成', titleLabel.textContent);
-      beep();
+      if (sessionId === targetSessionId) {
+        notifyUser('Claude Code 已完成', titleLabel.textContent);
+        beep();
+      } else {
+        toast('后台会话已完成');
+      }
     }
     fetchFollowupSuggestions();
     turnSucceeded = true;
     return { ok: true, accepted: serverAccepted, result: lastResultEvent, usage: lastResultEvent?.usage || null, text: collectedAssistantText.trim() };
   } catch (e) {
-    hideThinking(container);
-    if (e.name !== 'AbortError') {
-      finishPendingToolUses('出错', 'error');
-      addErrorBlock(e.message);
-    } else {
-      finishPendingToolUses('已中止', 'stopped');
-      addSystemInfo('已中止');
+    if (sessionId === targetSessionId) {
+      hideThinking(container);
+      if (e.name !== 'AbortError') {
+        finishPendingToolUses('出错', 'error');
+        addErrorBlock(e.message);
+      } else {
+        finishPendingToolUses('已中止', 'stopped');
+        addSystemInfo('已中止');
+      }
     }
     return { ok: false, accepted: serverAccepted, error: e, aborted: e.name === 'AbortError', text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
   } finally {
-    sendBtn.disabled = agentLoopRunning || contextCompactionRunning;
-    if (currentController === turnController) {
-      stopBtn.classList.add('hidden');
-      currentController = null;
-      currentControllerQueueOwner = '';
+    targetSessionState.controller = null;
+    targetSessionState.streaming = false;
+    updateSidebarRunningIndicators();
+    if (sessionId === targetSessionId) {
+      sendBtn.disabled = agentLoopRunning || contextCompactionRunning;
+      if (currentController === turnController) {
+        stopBtn.classList.add('hidden');
+        currentController = null;
+        currentControllerQueueOwner = '';
+      }
     }
     input.focus();
     refreshSessions();
@@ -16170,8 +16299,18 @@ newSessionBtn.addEventListener('click', () => {
 function startNewSession() {
   stopNativeTurnRecovery();
   hidePicker();
+  // Cache current session's DOM before clearing
+  if (codeMode && sessionId) {
+    const prevState = getOrCreateSessionState(sessionId);
+    const fragment = document.createDocumentFragment();
+    while (chatInner.firstChild) fragment.appendChild(chatInner.firstChild);
+    prevState.dom = fragment;
+    touchSessionDomCache(sessionId);
+  }
   activateNewCodeQueueOwner();
   pendingNativeRewind = null;
+  currentController = null;
+  currentControllerQueueOwner = '';
   sessionId = null;
   currentCodeRuntime = 'unknown';
   sessionFeedback = {};
@@ -16375,6 +16514,14 @@ function toggleSessionActionMenu(btn, root = sessionItems) {
 
 async function deleteSessionById(targetId) {
   if (!targetId || !confirm('删除此会话？')) return false;
+  // Abort a background turn if this session is running but not in the foreground
+  const bgState = sessionStates.get(targetId);
+  if (bgState && bgState.controller) {
+    try {
+      await fetch('/api/chat/stop/' + targetId, { method:'POST' });
+      bgState.controller.abort();
+    } catch {}
+  }
   let r = await fetch('/api/sessions/' + targetId, { method:'DELETE' });
   if (r.status === 409 && targetId === sessionId) {
     if (!confirm('当前会话正在生成回复。要先停止生成并删除吗？')) return false;
@@ -16389,6 +16536,10 @@ async function deleteSessionById(targetId) {
     alert('删除失败: ' + (data.detail || r.status));
     return false;
   }
+  // Clean up per-session state and LRU cache entry
+  sessionStates.delete(targetId);
+  const lruIdx = sessionDomCacheOrder.indexOf(targetId);
+  if (lruIdx !== -1) sessionDomCacheOrder.splice(lruIdx, 1);
   if (targetId === sessionId) startNewSession();
   refreshSessions();
   refreshStats();
@@ -16533,6 +16684,8 @@ function renderCodeProjectSessionList(list) {
       renderCodeProjectSessionList(list);
     });
   });
+  updateSidebarRunningIndicators();
+  highlightActiveSession();
 }
 
 async function refreshSessions() {
@@ -16714,6 +16867,7 @@ function highlightActiveSession() {
 
 async function loadSession(id, options = {}) {
   try {
+    const prevSessionIdSnap = sessionId;
     const historyTurns = codeMode ? (sessionHistoryTurns.get(id) || DEFAULT_HISTORY_TURNS) : 0;
     const previousHeight = options.historyExpansion ? chatEl.scrollHeight : 0;
     const previousTop = options.historyExpansion ? chatEl.scrollTop : 0;
@@ -16749,40 +16903,103 @@ async function loadSession(id, options = {}) {
     updateWorkspaceLabels();
     refreshMemories();
     suggestTitleBtn.classList.remove('hidden');
-    chatInner.innerHTML = '';
-    restoreDraft();
-    refreshGitStatus();
-    syncEmptyShellState();
 
-    if (data.has_more) {
-      const loader = document.createElement('div');
-      loader.className = 'cw-history-loader';
-      loader.innerHTML = `<button type="button">加载更早消息 · 当前显示最近 ${historyTurns} 轮</button>`;
-      loader.querySelector('button').addEventListener('click', () => {
-        sessionHistoryTurns.set(data.id, Math.min(500, historyTurns + DEFAULT_HISTORY_TURNS));
-        loadSession(data.id, { historyExpansion: true });
-      });
-      chatInner.appendChild(loader);
+    // --- Multi-session DOM cache logic (code mode only) ---
+    if (codeMode && prevSessionIdSnap && prevSessionIdSnap !== data.id && !options.historyExpansion) {
+      const prevState = getOrCreateSessionState(prevSessionIdSnap);
+      const fragment = document.createDocumentFragment();
+      while (chatInner.firstChild) fragment.appendChild(chatInner.firstChild);
+      prevState.dom = fragment;
+      touchSessionDomCache(prevSessionIdSnap);
     }
-    let asstContainer = null;
-    const eventOffset = Number(data.event_offset || 0);
-    data.events.forEach((ev, localEventIndex) => {
-      const eventIndex = eventOffset + localEventIndex;
-      if (ev.type === 'user_input') {
-        addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '', compacted: !!ev.compacted, eventIndex });
-        asstContainer = null;
-      } else if (ev.type === 'assistant' || ev.type === 'user') {
-        const c = handleEvent(ev, asstContainer, { replay: true, eventIndex });
-        if (c) asstContainer = c;
-      } else {
-        handleEvent(ev, asstContainer, { replay: true, eventIndex });
+
+    const targetState = getOrCreateSessionState(data.id);
+    targetState.runtime = data.runtime_origin || 'unknown';
+    targetState.autoApprove = !!data.auto_approve;
+    targetState.feedback = data.feedback || {};
+
+    // If overflow occurred, discard stale DOM cache and force server reload
+    if (targetState.pendingOverflow) {
+      targetState.dom = null;
+      targetState.pendingEvents = [];
+      targetState.pendingOverflow = false;
+    }
+
+    const hasDomCache = codeMode && targetState.dom && !options.historyExpansion;
+    if (hasDomCache) {
+      chatInner.innerHTML = '';
+      chatInner.appendChild(targetState.dom);
+      targetState.dom = null;
+      touchSessionDomCache(data.id);
+      if (targetState.pendingEvents.length > 0) {
+        let asstContainer = chatInner.querySelector('.asst-wrap:last-child > div.flex-1') || null;
+        targetState.pendingEvents.forEach(ev => {
+          const c = handleEvent(ev, asstContainer, { replay: false });
+          if (c) asstContainer = c;
+        });
+        targetState.pendingEvents = [];
       }
-    });
-    if (!data.events.length) chatInner.appendChild(welcome);
-    if (options.historyExpansion) {
-      requestAnimationFrame(() => { chatEl.scrollTop = Math.max(0, chatEl.scrollHeight - previousHeight + previousTop); });
-    } else {
+      targetState.needsPermission = false;
+      restoreDraft();
+      refreshGitStatus();
+      syncEmptyShellState();
       forceScrollBottom();
+    } else {
+      chatInner.innerHTML = '';
+      restoreDraft();
+      refreshGitStatus();
+      syncEmptyShellState();
+
+      if (data.has_more) {
+        const loader = document.createElement('div');
+        loader.className = 'cw-history-loader';
+        loader.innerHTML = `<button type="button">加载更早消息 · 当前显示最近 ${historyTurns} 轮</button>`;
+        loader.querySelector('button').addEventListener('click', () => {
+          sessionHistoryTurns.set(data.id, Math.min(500, historyTurns + DEFAULT_HISTORY_TURNS));
+          loadSession(data.id, { historyExpansion: true });
+        });
+        chatInner.appendChild(loader);
+      }
+      let asstContainer = null;
+      const eventOffset = Number(data.event_offset || 0);
+      data.events.forEach((ev, localEventIndex) => {
+        const eventIndex = eventOffset + localEventIndex;
+        if (ev.type === 'user_input') {
+          addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '', compacted: !!ev.compacted, eventIndex });
+          asstContainer = null;
+        } else if (ev.type === 'assistant' || ev.type === 'user') {
+          const c = handleEvent(ev, asstContainer, { replay: true, eventIndex });
+          if (c) asstContainer = c;
+        } else {
+          handleEvent(ev, asstContainer, { replay: true, eventIndex });
+        }
+      });
+      if (!data.events.length) chatInner.appendChild(welcome);
+      if (targetState.pendingEvents.length > 0) {
+        let lastContainer = chatInner.querySelector('.asst-wrap:last-child > div.flex-1') || null;
+        targetState.pendingEvents.forEach(ev => {
+          const c = handleEvent(ev, lastContainer, { replay: false });
+          if (c) lastContainer = c;
+        });
+        targetState.pendingEvents = [];
+      }
+      targetState.needsPermission = false;
+      if (options.historyExpansion) {
+        requestAnimationFrame(() => { chatEl.scrollTop = Math.max(0, chatEl.scrollHeight - previousHeight + previousTop); });
+      } else {
+        forceScrollBottom();
+      }
+    }
+
+    // Sync currentController to the active session's controller
+    currentController = targetState.controller;
+    currentControllerQueueOwner = targetState.controller ? `session:${data.id}` : '';
+    if (targetState.controller) {
+      stopBtn.classList.remove('hidden');
+      sendBtn.disabled = !codeMode;
+    } else {
+      stopBtn.classList.add('hidden');
+      sendBtn.disabled = false;
     }
     highlightActiveSession();
     if (codeMode) refreshSessions();
