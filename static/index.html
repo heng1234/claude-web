@@ -6028,6 +6028,7 @@
   .cw-code-review-icon svg { width:20px; height:20px; }
   .cw-code-review-title { color:var(--text); font-size:17px; font-weight:700; letter-spacing:-.02em; }
   .cw-code-review-sub { margin-top:3px; color:var(--text-muted); font-size:12.5px; letter-spacing:-.005em; }
+  .cw-review-batch-actions { display:flex; align-items:center; gap:6px; margin-left:auto; }
   .cw-code-review-close {
     display:grid; width:36px; height:36px; flex:0 0 36px; place-items:center;
     border:0; border-radius:50%; background:transparent; color:var(--text-muted); cursor:pointer;
@@ -6103,6 +6104,14 @@
   .cw-review-state.kept { color:#16834a; background:color-mix(in srgb,#16834a 10%,transparent); }
   .cw-review-state.reverted,
   .cw-review-state.rewound { color:#b56a20; background:color-mix(in srgb,#b56a20 10%,transparent); }
+  .cw-review-state.partial { color:#8b5cf6; background:color-mix(in srgb,#8b5cf6 10%,transparent); }
+  .cw-diff-hunks { border-top:1px solid var(--border); padding:10px; background:var(--surface); }
+  .cw-diff-hunk { margin-top:8px; overflow:hidden; border:1px solid var(--border); border-radius:10px; }
+  .cw-diff-hunk:first-child { margin-top:0; }
+  .cw-diff-hunk-head { display:flex; align-items:center; gap:8px; min-height:40px; padding:5px 8px 5px 11px; background:var(--surface-2); }
+  .cw-diff-hunk-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-muted); font:11px/1.3 'JetBrains Mono',monospace; }
+  .cw-diff-hunk-stats { margin-left:auto; white-space:nowrap; font-size:11px; }
+  .cw-diff-hunk-actions { display:flex; gap:3px; }
 
   .cw-validation-zone { display:grid; grid-template-columns:minmax(180px,.65fr) minmax(300px,1.35fr); gap:14px 20px; align-items:end; margin-top:24px; padding:20px 0 0; border-top:1px solid var(--border); }
   .cw-validation-copy { align-self:center; }
@@ -6110,6 +6119,7 @@
   .cw-validation-title svg { width:16px; height:16px; color:var(--accent); flex:0 0 16px; }
   .cw-validation-help { max-width:340px; margin-top:6px; color:var(--text-muted); font-size:11.5px; line-height:1.55; }
   .cw-validation-form { display:flex; gap:8px; }
+  .cw-validation-mode { min-height:40px; padding:0 10px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); color:var(--text); font:600 12px/1 inherit; }
   .cw-validation-form input { min-width:0; min-height:40px; flex:1; padding:0 13px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); color:var(--text); font:12.5px/1.3 'JetBrains Mono',ui-monospace,monospace; transition:border-color .14s ease,box-shadow .14s ease; }
   .cw-validation-form input:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent); outline:none; }
   .cw-validation-form .cw-review-btn { flex:0 0 auto; min-height:40px; padding:0 16px; font-weight:600; }
@@ -6204,7 +6214,11 @@
     .cw-code-diff-ln { padding:0 4px; }
     .cw-code-review-box,
     .cw-rewind-preview-box { width:100% !important; max-width:none !important; max-height:92dvh !important; border-radius:20px 20px 0 0 !important; }
-    .cw-code-review-head { min-height:68px; padding:12px 14px 12px 16px; }
+    .cw-code-review-head { min-height:68px; flex-wrap:wrap; padding:12px 14px 12px 16px; }
+    .cw-code-review-head-main { flex:1 1 calc(100% - 52px); }
+    .cw-review-batch-actions { order:3; display:grid; grid-template-columns:1fr 1fr; width:100%; margin:4px 0 0; }
+    .cw-review-batch-actions .cw-review-btn { width:auto; }
+    .cw-code-review-close { width:44px; height:44px; flex-basis:44px; }
     .cw-code-review-icon { width:32px; height:32px; flex:0 0 32px; }
     .cw-code-review-icon svg { width:17px; height:17px; }
     .cw-code-review-body { padding:12px 10px calc(16px + env(safe-area-inset-bottom)); }
@@ -6213,13 +6227,18 @@
     .cw-review-set-meta { display:block; margin-top:2px; }
     .cw-review-file { grid-template-columns:1fr; gap:9px; padding:11px 10px 10px 12px; }
     .cw-review-file-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
-    .cw-review-btn,
-    .cw-inline-rewind { width:38px; height:38px; }
+    .cw-review-btn { width:auto; min-width:44px; height:44px; padding:0 10px; }
+    .cw-inline-rewind { width:44px; height:44px; }
     .cw-inline-rewind { padding:0; }
     .cw-message-secondary-actions { min-height:44px; }
     .cw-validation-zone { grid-template-columns:1fr; gap:10px; padding-inline:2px; }
     .cw-validation-form { align-items:stretch; flex-direction:column; }
     .cw-validation-form input { min-height:44px; font-size:16px; }
+    .cw-validation-form .cw-review-btn { width:100%; }
+    .cw-diff-hunk-head { flex-wrap:wrap; }
+    .cw-diff-hunk-label { flex:1 1 100%; }
+    .cw-diff-hunk-stats { margin-left:0; }
+    .cw-diff-hunk-actions { margin-left:auto; }
     .cw-file-context-chip { min-height:36px; max-width:100%; }
     .cw-file-context-chip button { width:32px; height:32px; }
   }
@@ -6538,7 +6557,7 @@
 
   /* ===== Session Stats Bar (code workspace) ===== */
   .cw-session-stats-bar {
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
     align-items: stretch; width: 100%; margin: 0 0 8px; gap: 3px;
     min-height: 38px; border: 0; border-radius: 12px;
     box-sizing: border-box; padding: 3px;
@@ -6581,6 +6600,29 @@
   }
   .cw-stats-diff-add { margin-left: 1px; font-size: 11px; font-weight: 650; color: #10b981; }
   .cw-stats-diff-del { font-size: 11px; font-weight: 650; color: #ef4444; }
+  .cw-stats-item.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(28,25,23,.08); }
+  .cw-stats-item.approval-on { color:#16834a; background:color-mix(in srgb,#16834a 9%,var(--surface)); }
+  .cw-workspace-activity {
+    position:relative; z-index:24; margin:-2px 0 8px; overflow:hidden;
+    border:1px solid var(--border); border-radius:12px; background:var(--surface);
+    box-shadow:0 12px 32px rgba(28,25,23,.12);
+  }
+  .cw-workspace-activity.hidden { display:none; }
+  .cw-activity-head { display:flex; align-items:center; gap:4px; padding:5px; border-bottom:1px solid var(--border); background:var(--surface-2); }
+  .cw-activity-tab { min-height:36px; padding:0 12px; border:0; border-radius:8px; background:transparent; color:var(--text-muted); font:600 12px/1 inherit; cursor:pointer; }
+  .cw-activity-tab.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(28,25,23,.08); }
+  .cw-activity-close { width:36px; height:36px; margin-left:auto; border:0; border-radius:8px; background:transparent; color:var(--text-muted); cursor:pointer; }
+  .cw-activity-body { max-height:280px; overflow:auto; padding:8px; }
+  .cw-activity-row { display:flex; width:100%; align-items:flex-start; gap:9px; min-height:44px; padding:9px 10px; border:0; border-radius:9px; background:transparent; color:var(--text); font:12px/1.4 inherit; text-align:left; cursor:pointer; }
+  .cw-activity-row:hover { background:var(--surface-2); }
+  .cw-activity-row strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:620; }
+  .cw-activity-row small { display:block; margin-top:2px; overflow:hidden; color:var(--text-muted); text-overflow:ellipsis; white-space:nowrap; font-size:10.5px; }
+  .cw-activity-row + .cw-activity-row { border-top:1px solid color-mix(in srgb,var(--border) 55%,transparent); }
+  .cw-activity-row-meta { margin-left:auto; color:var(--text-subtle); white-space:nowrap; }
+  .cw-activity-empty { padding:24px 12px; color:var(--text-muted); text-align:center; font-size:12px; }
+  .cw-history-loader { display:flex; justify-content:center; padding:0 0 18px; }
+  .cw-history-loader button { min-height:40px; padding:0 16px; border:1px solid var(--border); border-radius:999px; background:var(--surface); color:var(--text-muted); font:600 12px/1 inherit; cursor:pointer; }
+  .cw-history-loader button:hover { color:var(--text); border-color:var(--border-strong); }
   @media (max-width: 640px) {
     .cw-session-stats-bar { min-height: 46px; margin-bottom: 6px; }
     .cw-stats-item { min-height: 40px; gap: 4px; padding-inline: 7px; font-size: 12px; }
@@ -6624,7 +6666,7 @@
     max-height: 120px; overflow-y: auto; overscroll-behavior: contain;
   }
   .cw-code-queue-item {
-    display: grid; grid-template-columns: 18px minmax(0, 1fr) 26px;
+    display: grid; grid-template-columns: 18px minmax(0, 1fr) auto;
     align-items: center; gap: 6px; min-height: 30px; padding: 2px 2px 2px 6px;
     border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
     border-radius: 8px; background: var(--surface); color: var(--text);
@@ -6649,15 +6691,20 @@
     transition: background .15s ease, color .15s ease;
   }
   .cw-code-queue-remove svg { width: 14px; height: 14px; }
+  .cw-code-queue-actions { display:flex; align-items:center; gap:1px; }
+  .cw-code-queue-action { display:grid; place-items:center; width:26px; height:26px; border:0; border-radius:7px; background:transparent; color:var(--text-subtle); cursor:pointer; }
+  .cw-code-queue-action:hover { background:var(--surface-2); color:var(--text); }
+  .cw-code-queue-action:disabled { opacity:.3; cursor:not-allowed; }
   .cw-code-queue-remove:hover { background: rgba(239, 68, 68, .09); color: #c83a35; }
   .cw-code-queue-remove:focus-visible,
   .cw-code-queue-resume:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   @media (max-width: 640px) {
     .cw-code-message-queue { margin-inline: 0; padding: 7px; border-radius: 10px; }
     .cw-code-queue-head { min-height: 26px; }
-    .cw-code-queue-item { grid-template-columns: 18px minmax(0, 1fr) 38px; min-height: 40px; }
-    .cw-code-queue-remove { width: 38px; height: 38px; }
-    .cw-code-queue-resume { min-height: 38px; padding-inline: 11px; }
+    .cw-code-queue-item { grid-template-columns: 18px minmax(0, 1fr) auto; min-height: 44px; }
+    .cw-code-queue-remove { width: 44px; height: 44px; }
+    .cw-code-queue-action { width:44px; height:44px; }
+    .cw-code-queue-resume { min-height: 44px; padding-inline: 11px; }
     .cw-code-queue-state { display: none; }
   }
 </style>
@@ -6960,7 +7007,21 @@
           <span class="cw-stats-diff-add" id="cwStatsAdd"></span>
           <span class="cw-stats-diff-del" id="cwStatsDel"></span>
         </button>
+        <button type="button" class="cw-stats-item" id="cwStatsApproval" title="让服务端自动批准本会话的工具请求">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+          <span class="cw-stats-label">替我审批</span>
+          <span class="cw-stats-count" id="cwStatsApprovalState">关</span>
+        </button>
       </div>
+      <section id="cwWorkspaceActivity" class="cw-workspace-activity hidden" aria-label="Code 工作区活动">
+        <div class="cw-activity-head">
+          <button type="button" class="cw-activity-tab active" data-cw-activity-tab="tasks">任务</button>
+          <button type="button" class="cw-activity-tab" data-cw-activity-tab="agents">子代理</button>
+          <button type="button" class="cw-activity-tab" data-cw-activity-tab="edits">变更</button>
+          <button type="button" id="cwWorkspaceActivityClose" class="cw-activity-close" aria-label="关闭工作区活动">×</button>
+        </div>
+        <div id="cwWorkspaceActivityBody" class="cw-activity-body"></div>
+      </section>
       <div class="composer relative" id="composer">
         <div id="cwCodeMessageQueue" class="cw-code-message-queue hidden" aria-live="polite" aria-label="Code 待发送队列">
           <div class="cw-code-queue-head">
@@ -7799,7 +7860,7 @@
       <div class="text-lg font-semibold">⚙️ 自定义工具权限</div>
       <button data-close class="text-xl">×</button>
     </div>
-    <div class="text-xs text-gray-500 mb-3">勾选预先放行的工具。Web 版不能在运行中批准权限，MCP 工具请提前加入白名单。</div>
+    <div class="text-xs text-gray-500 mb-3">勾选后会预先放行工具以减少打断；未预放行的可审批请求会在 Code 对话中显示允许或拒绝按钮。</div>
     <div id="toolCheckboxes" class="grid grid-cols-2 gap-2 text-sm"></div>
     <div class="mt-4">
       <label for="extraToolsInput" class="block text-sm font-medium mb-1">额外工具名（MCP / 自定义）</label>
@@ -7825,6 +7886,7 @@
       <button data-close class="sb-icon-btn" aria-label="关闭文件差异">×</button>
     </div>
     <pre id="gitDiffContent" class="git-diff-content">正在加载...</pre>
+    <div id="gitDiffHunks" class="cw-diff-hunks hidden"></div>
   </div>
 </div>
 
@@ -7839,6 +7901,10 @@
           <div id="codeReviewTitle" class="cw-code-review-title">本会话改动</div>
           <div id="codeReviewSummary" class="cw-code-review-sub">审查 Claude 在 Code 模式中产生的文件修改</div>
         </div>
+      </div>
+      <div class="cw-review-batch-actions">
+        <button type="button" id="codeReviewKeepAll" class="cw-review-btn primary">全部保留</button>
+        <button type="button" id="codeReviewRevertAll" class="cw-review-btn danger">全部撤销</button>
       </div>
       <button data-close class="cw-code-review-close" aria-label="关闭改动审查">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
@@ -7855,6 +7921,11 @@
           <div class="cw-validation-help">留空会自动检测 npm、Make、pytest 或 unittest；结果会保存到当前 Code 会话。</div>
         </div>
         <div class="cw-validation-form">
+          <select id="codeValidationMode" class="cw-validation-mode" aria-label="项目验证策略">
+            <option value="off">不自动验证</option>
+            <option value="ask">完成后询问</option>
+            <option value="auto">修改后自动</option>
+          </select>
           <input id="codeValidationCommand" type="text" autocomplete="off" spellcheck="false" placeholder="例如：npm test" aria-label="测试或构建命令" />
           <button id="codeValidationRun" type="button" class="cw-review-btn primary">运行验证</button>
         </div>
@@ -8192,6 +8263,12 @@ const settings = {
   chatWebSearch: LS.get('chatWebSearch', LS.get('webSearch', false)),
   codeWebSearch: LS.get('codeWebSearch', false),
 };
+const LIGHT_CONTEXT_DEFAULT_POLICY = 'native-compact-default-on-v1';
+if (LS.get('lightContextDefaultPolicy', '') !== LIGHT_CONTEXT_DEFAULT_POLICY) {
+  settings.lightContextMode = true;
+  LS.set('lightContextMode', true);
+  LS.set('lightContextDefaultPolicy', LIGHT_CONTEXT_DEFAULT_POLICY);
+}
 if (!LS.get(THINKING_OPEN_DEFAULT_MIGRATION_KEY, false)) {
   settings.thinkingOpen = true;
   LS.set('thinkingOpen', true);
@@ -8229,6 +8306,13 @@ const codeMessageQueues = new Map();
 const codeQueueDispatchingOwners = new Set();
 const codeQueuePauseReasons = new Map();
 let codeQueueDrainTimer = null;
+let codeQueueSyncSerial = 0;
+let currentCodeAutoApprove = false;
+let currentCodeProjectSettings = { validation_command: '', validation_mode: 'ask', validation_timeout: 120 };
+let currentWorkspaceActivityTab = 'tasks';
+let latestTodoItems = [];
+const sessionHistoryTurns = new Map();
+const DEFAULT_HISTORY_TURNS = 40;
 
 // Token-level streaming state
 const streamingMessages = {}; // msgId -> { container, blocks: { [index]: {type, el, text} } }
@@ -8469,15 +8553,18 @@ const settingsUsageCost = $('settingsUsageCost'), settingsUsageSessions = $('set
 const settingsUsageTurns = $('settingsUsageTurns'), settingsUsageDuration = $('settingsUsageDuration');
 const settingsUsageNote = $('settingsUsageNote');
 const openDetailedStatsBtn = $('openDetailedStatsBtn'), refreshUsageStatsBtn = $('refreshUsageStatsBtn');
-const gitDiffModal = $('gitDiffModal'), gitDiffPath = $('gitDiffPath'), gitDiffContent = $('gitDiffContent');
+const gitDiffModal = $('gitDiffModal'), gitDiffPath = $('gitDiffPath'), gitDiffContent = $('gitDiffContent'), gitDiffHunks = $('gitDiffHunks');
 const codeReviewModal = $('codeReviewModal'), codeReviewList = $('codeReviewList'), codeReviewSummary = $('codeReviewSummary');
-const codeValidationCommand = $('codeValidationCommand'), codeValidationRun = $('codeValidationRun'), codeValidationResult = $('codeValidationResult');
+const codeReviewKeepAll = $('codeReviewKeepAll'), codeReviewRevertAll = $('codeReviewRevertAll');
+const codeValidationCommand = $('codeValidationCommand'), codeValidationMode = $('codeValidationMode'), codeValidationRun = $('codeValidationRun'), codeValidationResult = $('codeValidationResult');
 const rewindPreviewModal = $('rewindPreviewModal'), rewindPreviewSummary = $('rewindPreviewSummary');
 const rewindPreviewList = $('rewindPreviewList'), rewindPreviewConfirm = $('rewindPreviewConfirm');
 const cwFileContextChips = $('cwFileContextChips');
 const cwCodeMessageQueue = $('cwCodeMessageQueue');
 const cwCodeQueueTitle = $('cwCodeQueueTitle'), cwCodeQueueState = $('cwCodeQueueState');
 const cwCodeQueueResume = $('cwCodeQueueResume'), cwCodeQueueList = $('cwCodeQueueList');
+const cwStatsApproval = $('cwStatsApproval'), cwStatsApprovalState = $('cwStatsApprovalState');
+const cwWorkspaceActivity = $('cwWorkspaceActivity'), cwWorkspaceActivityBody = $('cwWorkspaceActivityBody'), cwWorkspaceActivityClose = $('cwWorkspaceActivityClose');
 const memoryBar = $('memoryBar');
 const tokenBar = $('tokenBar');
 const tokenCounter = $('tokenCounter');
@@ -9734,6 +9821,11 @@ function statusDotKind(status) {
 
 function renderSubagentPanel() {
   renderSessionStatsBar();
+  if (codeMode) {
+    subagentPanel.classList.add('hidden');
+    renderWorkspaceActivity();
+    return;
+  }
   if (subagentCards.size === 0) {
     hideSubagentPanel();
     return;
@@ -11413,7 +11505,12 @@ const TODO_PLAYBACK_INTERVAL = 600;
 
 function updateTodoPanel(todos) {
   if (!Array.isArray(todos) || todos.length === 0) return;
+  latestTodoItems = todos.map(item => ({ ...item }));
   updateSessionStatsTasks(todos);
+  if (codeMode) {
+    renderWorkspaceActivity();
+    return;
+  }
   // Skip duplicate snapshots (same status array as last queued)
   const last = todoSnapshotQueue.length
     ? todoSnapshotQueue[todoSnapshotQueue.length - 1]
@@ -11933,6 +12030,10 @@ function handleEvent(obj, container, options = {}) {
     hideThinking(container);
     return addNativePermissionRequest(container, obj);
   }
+  if (obj.type === 'permission_auto_approved') {
+    if (!replay) addSystemInfo(`替我审批 · 已允许 ${obj.tool_name || '工具请求'}`);
+    return container;
+  }
   if (obj.type === 'permission_error') {
     hideThinking(container);
     finishPendingToolUses('权限被拒绝', 'error');
@@ -12032,11 +12133,16 @@ function handleEvent(obj, container, options = {}) {
     updateTokenCount();
     if (!replay) scheduleNativeContextUsageRefresh();
     refreshStats();
-    if (codeMode) renderChangedFilesSummary(container, obj.changed_files || [], {
-      changeSetId: obj.change_set_id || '',
-      eventIndex,
-      userIndex: lastUserIndex,
-    });
+    if (codeMode) {
+      renderChangedFilesSummary(container, obj.changed_files || [], {
+        changeSetId: obj.change_set_id || '',
+        eventIndex,
+        userIndex: lastUserIndex,
+      });
+      if (!replay && (obj.changed_files || []).length && currentCodeProjectSettings?.validation_mode === 'ask') {
+        addSystemInfo('代码已修改 · 可在“变更”里运行项目验证');
+      }
+    }
     const denials = obj.permission_denials;
     if (Array.isArray(denials) && denials.length > 0) {
       const toolNames = [...new Set(denials.map(d => d.tool_name).filter(Boolean))];
@@ -13412,6 +13518,10 @@ function bindCodeQueueOwnerToSession(targetSessionId, owner = activeCodeQueueOwn
     codeQueuePauseReasons.delete(previousOwner);
   }
   codeQueueOwnerBySession.set(sid, owner);
+  codeQueueFor(owner).forEach(entry => {
+    entry.owner = owner;
+    persistCodeQueueEntry(entry).catch(() => {});
+  });
 }
 
 function codeQueueSessionIsRecovering(owner) {
@@ -13464,8 +13574,8 @@ function renderCodeMessageQueue() {
     : (busy ? '完成后自动发送' : '即将发送');
   cwCodeQueueResume.classList.toggle('hidden', busy || !paused);
   cwCodeQueueResume.disabled = busy;
-  cwCodeQueueList.innerHTML = [...queue].reverse().map((entry, reversedIndex) => {
-    const position = queue.length - reversedIndex;
+  cwCodeQueueList.innerHTML = queue.map((entry, index) => {
+    const position = index + 1;
     const preview = codeQueueEntryPreview(entry);
     const meta = codeQueueEntryMeta(entry);
     return `
@@ -13475,11 +13585,92 @@ function renderCodeMessageQueue() {
           <span class="cw-code-queue-preview">${escapeHtml(preview)}</span>
           ${meta ? `<span class="cw-code-queue-meta">${escapeHtml(meta)}</span>` : ''}
         </span>
-        <button type="button" class="cw-code-queue-remove" data-remove-code-queue="${escapeHtml(entry.id)}" aria-label="移除待发送消息：${escapeHtml(preview)}" title="移除">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg>
-        </button>
+        <span class="cw-code-queue-actions">
+          <button type="button" class="cw-code-queue-action" data-move-code-queue="up" data-code-queue-id="${escapeHtml(entry.id)}" aria-label="上移" title="上移" ${index === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="cw-code-queue-action" data-move-code-queue="down" data-code-queue-id="${escapeHtml(entry.id)}" aria-label="下移" title="下移" ${index === queue.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="cw-code-queue-action" data-edit-code-queue="${escapeHtml(entry.id)}" aria-label="编辑待发送消息" title="编辑">✎</button>
+          <button type="button" class="cw-code-queue-remove" data-remove-code-queue="${escapeHtml(entry.id)}" aria-label="移除待发送消息：${escapeHtml(preview)}" title="移除">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg>
+          </button>
+        </span>
       </div>`;
   }).join('');
+}
+
+function queueSessionId(owner = activeCodeQueueOwner) {
+  const value = String(owner || '');
+  if (value.startsWith('session:')) return value.slice(8);
+  for (const [sid, mappedOwner] of codeQueueOwnerBySession.entries()) {
+    if (mappedOwner === owner) return sid;
+  }
+  return '';
+}
+
+function queuedEntryPayload(entry) {
+  return {
+    message: entry.message,
+    displayMessage: entry.displayMessage,
+    imagePaths: entry.imagePaths || [],
+    forceNew: !!entry.forceNew,
+    isFork: !!entry.isFork,
+    snapshot: entry.snapshot || {},
+    queuedAt: entry.queuedAt || Date.now(),
+  };
+}
+
+async function persistCodeQueueEntry(entry) {
+  const sid = queueSessionId(entry.owner);
+  if (!sid) return;
+  const response = await fetch(`/api/sessions/${encodeURIComponent(sid)}/queue`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ id: entry.id, payload: queuedEntryPayload(entry) }),
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || '保存队列失败');
+}
+
+async function setPersistedQueueState(entry, state, error = '') {
+  const sid = queueSessionId(entry.owner);
+  if (!sid) return;
+  await fetch(`/api/sessions/${encodeURIComponent(sid)}/queue/${encodeURIComponent(entry.id)}`, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ state, error }),
+  }).catch(() => {});
+}
+
+async function deletePersistedQueueEntry(entry) {
+  const sid = queueSessionId(entry.owner);
+  if (!sid) return;
+  await fetch(`/api/sessions/${encodeURIComponent(sid)}/queue/${encodeURIComponent(entry.id)}`, { method: 'DELETE' }).catch(() => {});
+}
+
+async function persistCodeQueueOrder(owner = activeCodeQueueOwner) {
+  const sid = queueSessionId(owner);
+  if (!sid) return;
+  await fetch(`/api/sessions/${encodeURIComponent(sid)}/queue/reorder`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ ids: codeQueueFor(owner).map(entry => entry.id) }),
+  }).catch(() => {});
+}
+
+async function loadPersistedCodeQueue(targetSessionId) {
+  const serial = ++codeQueueSyncSerial;
+  const owner = codeQueueOwnerForSession(targetSessionId);
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/queue`);
+    if (!response.ok) return;
+    const data = await response.json();
+    if (serial !== codeQueueSyncSerial) return;
+    const queue = codeQueueFor(owner);
+    queue.splice(0, queue.length, ...(data.items || []).map(item => ({
+      id: item.id,
+      owner,
+      ...(item.payload || {}),
+    })));
+    const paused = (data.items || []).some(item => item.state === 'paused' || item.state === 'dispatching');
+    if (paused && queue.length) codeQueuePauseReasons.set(owner, '已恢复待发送队列，请确认后继续');
+    else codeQueuePauseReasons.delete(owner);
+    if (owner === activeCodeQueueOwner) renderCodeMessageQueue();
+  } catch {}
 }
 
 function enqueueCodeMessage(entry, options = {}) {
@@ -13490,15 +13681,20 @@ function enqueueCodeMessage(entry, options = {}) {
     toast(`已加入待发送队列 · 第 ${queue.length} 条`);
   }
   renderCodeMessageQueue();
+  persistCodeQueueEntry(entry).catch(error => {
+    if (entry.owner === activeCodeQueueOwner) toast(error.message || '队列仅保存在当前页面');
+  });
 }
 
 function removeQueuedCodeMessage(entryId) {
   const queue = codeQueueFor(activeCodeQueueOwner);
   const index = queue.findIndex(entry => entry.id === entryId);
   if (index < 0) return;
-  queue.splice(index, 1);
+  const [entry] = queue.splice(index, 1);
   if (!queue.length) codeQueuePauseReasons.delete(activeCodeQueueOwner);
   renderCodeMessageQueue();
+  deletePersistedQueueEntry(entry);
+  persistCodeQueueOrder(activeCodeQueueOwner);
 }
 
 function pauseCodeMessageQueue(owner, reason) {
@@ -13584,6 +13780,7 @@ async function dispatchCodeQueueEntry(entry) {
   }
   codeQueueDispatchingOwners.add(owner);
   codeQueuePauseReasons.delete(owner);
+  setPersistedQueueState(entry, 'dispatching');
   renderCodeMessageQueue();
   let result = null;
   try {
@@ -13601,6 +13798,7 @@ async function dispatchCodeQueueEntry(entry) {
         composerSnapshot: entry.snapshot,
         queueOwner: owner,
         queueManaged: true,
+        clientTurnId: entry.id,
       },
     );
   } catch (error) {
@@ -13610,8 +13808,14 @@ async function dispatchCodeQueueEntry(entry) {
     codeQueueDispatchingOwners.delete(owner);
   }
   if (result?.ok) {
+    deletePersistedQueueEntry(entry);
     scheduleCodeQueueDrain(owner);
   } else {
+    if (!result?.accepted) {
+      const queue = codeQueueFor(owner);
+      if (!queue.some(item => item.id === entry.id)) queue.unshift(entry);
+      setPersistedQueueState(entry, 'paused', result?.error?.message || '上一轮未完成');
+    }
     pauseCodeMessageQueue(owner, result?.aborted ? '当前任务已停止，队列已暂停' : '上一轮未完成，队列已暂停');
   }
   renderCodeMessageQueue();
@@ -13619,11 +13823,37 @@ async function dispatchCodeQueueEntry(entry) {
 
 cwCodeQueueList?.addEventListener('click', event => {
   const button = event.target.closest('[data-remove-code-queue]');
-  if (!button) return;
-  removeQueuedCodeMessage(button.dataset.removeCodeQueue || '');
+  if (button) {
+    removeQueuedCodeMessage(button.dataset.removeCodeQueue || '');
+    return;
+  }
+  const move = event.target.closest('[data-move-code-queue]');
+  if (move) {
+    const queue = codeQueueFor(activeCodeQueueOwner);
+    const index = queue.findIndex(entry => entry.id === move.dataset.codeQueueId);
+    const target = move.dataset.moveCodeQueue === 'up' ? index - 1 : index + 1;
+    if (index >= 0 && target >= 0 && target < queue.length) {
+      [queue[index], queue[target]] = [queue[target], queue[index]];
+      renderCodeMessageQueue();
+      persistCodeQueueOrder(activeCodeQueueOwner);
+    }
+    return;
+  }
+  const edit = event.target.closest('[data-edit-code-queue]');
+  if (edit) {
+    const entry = codeQueueFor(activeCodeQueueOwner).find(item => item.id === edit.dataset.editCodeQueue);
+    if (!entry) return;
+    const next = prompt('编辑待发送消息：', entry.displayMessage || entry.message || '');
+    if (next === null || !next.trim()) return;
+    entry.message = next.trim();
+    entry.displayMessage = next.trim();
+    renderCodeMessageQueue();
+    persistCodeQueueEntry(entry).catch(error => toast(error.message || '保存队列失败'));
+  }
 });
 cwCodeQueueResume?.addEventListener('click', () => {
   codeQueuePauseReasons.delete(activeCodeQueueOwner);
+  codeQueueFor(activeCodeQueueOwner).forEach(entry => setPersistedQueueState(entry, 'queued'));
   renderCodeMessageQueue();
   scheduleCodeQueueDrain(activeCodeQueueOwner, 0);
 });
@@ -14004,6 +14234,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let lastResultEvent = null;
   let collectedAssistantText = '';
   let streamErrorEvent = null;
+  let serverAccepted = false;
 
   const perm = buildPermissionPayload();
   const cwd = mobileCwdOrStop();
@@ -14036,6 +14267,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         allowed_tools: perm.allowed_tools,
         disallowed_tools: perm.disallowed_tools,
         force_new: forceNew || null,
+        client_turn_id: options.clientTurnId || null,
       }),
       signal: turnController.signal,
     });
@@ -14047,7 +14279,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         if (data?.detail) message = data.detail;
       } catch {}
       addErrorBlock(message);
-      return { ok: false, status: resp.status, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
+      return { ok: false, accepted: false, status: resp.status, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
     }
 
     const reader = resp.body.getReader();
@@ -14066,6 +14298,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         if (!line) continue;
         try {
           const obj = JSON.parse(line.slice(6));
+          if (obj.type === 'meta') serverAccepted = true;
           if (obj.type === 'user_input') continue;
           if (obj.type === 'error' || obj.type === 'permission_error') {
             streamErrorEvent = obj;
@@ -14084,7 +14317,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     hideThinking(asstContainer);
     finishPendingToolUses('已结束', 'done');
     if (streamErrorEvent) {
-      return { ok: false, error: streamErrorEvent, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
+      return { ok: false, accepted: serverAccepted, error: streamErrorEvent, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
     }
     if (!quiet) {
       notifyUser('Claude Code 已完成', titleLabel.textContent);
@@ -14092,7 +14325,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     }
     fetchFollowupSuggestions();
     turnSucceeded = true;
-    return { ok: true, result: lastResultEvent, usage: lastResultEvent?.usage || null, text: collectedAssistantText.trim() };
+    return { ok: true, accepted: serverAccepted, result: lastResultEvent, usage: lastResultEvent?.usage || null, text: collectedAssistantText.trim() };
   } catch (e) {
     hideThinking(container);
     if (e.name !== 'AbortError') {
@@ -14102,7 +14335,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       finishPendingToolUses('已中止', 'stopped');
       addSystemInfo('已中止');
     }
-    return { ok: false, error: e, aborted: e.name === 'AbortError', text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
+    return { ok: false, accepted: serverAccepted, error: e, aborted: e.name === 'AbortError', text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
   } finally {
     sendBtn.disabled = agentLoopRunning || contextCompactionRunning;
     if (currentController === turnController) {
@@ -14785,16 +15018,22 @@ function highlightActiveSession() {
   });
 }
 
-async function loadSession(id) {
+async function loadSession(id, options = {}) {
   try {
+    const historyTurns = codeMode ? (sessionHistoryTurns.get(id) || DEFAULT_HISTORY_TURNS) : 0;
+    const previousHeight = options.historyExpansion ? chatEl.scrollHeight : 0;
+    const previousTop = options.historyExpansion ? chatEl.scrollTop : 0;
     stopNativeTurnRecovery();
     hidePicker();
-    const r = await fetch('/api/sessions/' + id);
+    const historyQuery = historyTurns ? `?history_turns=${historyTurns}` : '';
+    const r = await fetch('/api/sessions/' + id + historyQuery);
     if (!r.ok) return;
     const data = await r.json();
     sessionId = data.id;
     activateCodeQueueForSession(data.id);
+    loadPersistedCodeQueue(data.id);
     currentCodeRuntime = data.runtime_origin || 'unknown';
+    currentCodeAutoApprove = !!data.auto_approve;
     sessionFeedback = data.feedback || {};
     if (milestoneView) renderMilestones();
     titleLabel.textContent = data.title;
@@ -14805,8 +15044,8 @@ async function loadSession(id) {
     resetToolUseRuntimeState();
     hideTodoPanel();
     clearArtifacts();
-    currentUserIndex = 0;
-    lastUserIndex = -1;
+    currentUserIndex = Number(data.user_offset || 0);
+    lastUserIndex = currentUserIndex - 1;
     resetSessionTokens();
     resetCodeReviewState();
     resetSessionStatsBar();
@@ -14819,8 +15058,20 @@ async function loadSession(id) {
     refreshGitStatus();
     syncEmptyShellState();
 
+    if (data.has_more) {
+      const loader = document.createElement('div');
+      loader.className = 'cw-history-loader';
+      loader.innerHTML = `<button type="button">加载更早消息 · 当前显示最近 ${historyTurns} 轮</button>`;
+      loader.querySelector('button').addEventListener('click', () => {
+        sessionHistoryTurns.set(data.id, Math.min(500, historyTurns + DEFAULT_HISTORY_TURNS));
+        loadSession(data.id, { historyExpansion: true });
+      });
+      chatInner.appendChild(loader);
+    }
     let asstContainer = null;
-    data.events.forEach((ev, eventIndex) => {
+    const eventOffset = Number(data.event_offset || 0);
+    data.events.forEach((ev, localEventIndex) => {
+      const eventIndex = eventOffset + localEventIndex;
       if (ev.type === 'user_input') {
         addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '', compacted: !!ev.compacted, eventIndex });
         asstContainer = null;
@@ -14832,14 +15083,19 @@ async function loadSession(id) {
       }
     });
     if (!data.events.length) chatInner.appendChild(welcome);
-    forceScrollBottom();
+    if (options.historyExpansion) {
+      requestAnimationFrame(() => { chatEl.scrollTop = Math.max(0, chatEl.scrollHeight - previousHeight + previousTop); });
+    } else {
+      forceScrollBottom();
+    }
     highlightActiveSession();
     if (codeMode) refreshSessions();
     closeMobileSidebar();
     restoreActiveAgentLoopForSession();
     if (codeMode) {
+      loadCodeProjectSettings();
       scheduleNativeContextUsageRefresh(0);
-      startNativeTurnRecovery(data.id, data.events.length, asstContainer);
+      startNativeTurnRecovery(data.id, Number(data.total_event_count ?? data.events.length), asstContainer);
     }
   } catch (e) { console.warn(e); }
 }
@@ -14943,11 +15199,66 @@ function renderGitDiffHtml(diff, filePath = '') {
   }).join('');
 }
 
+function parseUnifiedDiffHunks(diffText) {
+  const lines = String(diffText || '').split('\n');
+  const starts = [];
+  lines.forEach((line, index) => { if (line.startsWith('@@')) starts.push(index); });
+  return starts.map((start, index) => {
+    const end = index + 1 < starts.length ? starts[index + 1] : lines.length;
+    const hunkLines = lines.slice(start, end);
+    return {
+      index,
+      header: hunkLines[0] || `Hunk ${index + 1}`,
+      text: hunkLines.join('\n'),
+      additions: hunkLines.filter(line => line.startsWith('+') && !line.startsWith('+++')).length,
+      deletions: hunkLines.filter(line => line.startsWith('-') && !line.startsWith('---')).length,
+    };
+  });
+}
+
+function renderGitDiffHunks(path, diffText, options = {}) {
+  if (!gitDiffHunks) return;
+  const found = options.changeSetId ? findCodeReviewFile(options.changeSetId, path) : null;
+  const hunks = found ? parseUnifiedDiffHunks(diffText) : [];
+  if (!found || !hunks.length || options.truncated) {
+    gitDiffHunks.classList.add('hidden');
+    gitDiffHunks.innerHTML = '';
+    return;
+  }
+  const persisted = /^[0-9a-f]{32}$/.test(options.changeSetId || '');
+  gitDiffHunks.classList.remove('hidden');
+  gitDiffHunks.innerHTML = hunks.map(hunk => {
+    const state = found.file.hunk_review?.[String(hunk.index)] || 'pending';
+    const label = state === 'kept' ? '已保留' : state === 'reverted' ? '已撤销' : '待审查';
+    const disabled = !persisted || state !== 'pending';
+    const revertDisabled = disabled || !found.file.revertible;
+    return `<section class="cw-diff-hunk" data-diff-hunk="${hunk.index}">
+      <div class="cw-diff-hunk-head">
+        <code class="cw-diff-hunk-label" title="${escapeHtml(hunk.header)}">${escapeHtml(hunk.header)}</code>
+        <span class="cw-diff-hunk-stats"><span class="cw-code-diff-add">+${hunk.additions}</span> <span class="cw-code-diff-del">-${hunk.deletions}</span> · ${label}</span>
+        <span class="cw-diff-hunk-actions">
+          <button type="button" class="cw-review-btn primary" data-hunk-action="keep" ${disabled ? 'disabled' : ''}>保留此块</button>
+          <button type="button" class="cw-review-btn danger" data-hunk-action="revert" ${revertDisabled ? 'disabled' : ''}>撤销此块</button>
+        </span>
+      </div>
+      <pre class="git-diff-content">${renderGitDiffHtml(hunk.text, path)}</pre>
+    </section>`;
+  }).join('');
+  gitDiffHunks.querySelectorAll('[data-hunk-action]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const hunk = button.closest('[data-diff-hunk]');
+      const applied = await reviewCodeChange(options.changeSetId, path, button.dataset.hunkAction, button, Number(hunk?.dataset.diffHunk));
+      if (applied) renderGitDiffHunks(path, diffText, options);
+    });
+  });
+}
+
 async function openGitFileDiff(path, providedDiff = null, options = {}) {
   const cwd = cwdInput.value.trim();
   if (!cwd || !path || !gitDiffModal) return;
   if (gitDiffPath) gitDiffPath.textContent = options.turnLabel ? `${path} · ${options.turnLabel}` : path;
   if (gitDiffContent) gitDiffContent.textContent = '正在加载差异...';
+  if (gitDiffHunks) { gitDiffHunks.classList.add('hidden'); gitDiffHunks.innerHTML = ''; }
   openModal(gitDiffModal);
   try {
     let diffText = providedDiff;
@@ -14960,6 +15271,7 @@ async function openGitFileDiff(path, providedDiff = null, options = {}) {
     }
     if (options.truncated) diffText += '\n\n[Diff 已截断，仅供审查；为安全起见不能自动反向应用]\n';
     if (gitDiffContent) gitDiffContent.innerHTML = renderGitDiffHtml(diffText || '', path);
+    renderGitDiffHunks(path, diffText || '', options);
   } catch (e) {
     if (gitDiffContent) gitDiffContent.textContent = e.message || '读取差异失败';
   }
@@ -14988,6 +15300,7 @@ function recomputeCodeReviewStats() {
   sessionStatsState.addLines = activeFiles.reduce((sum, file) => sum + (Number(file.additions) || 0), 0);
   sessionStatsState.delLines = activeFiles.reduce((sum, file) => sum + (Number(file.deletions) || 0), 0);
   renderSessionStatsBar();
+  renderWorkspaceActivity();
 }
 
 function registerCodeChangeSet(changedFiles, meta = {}) {
@@ -15078,6 +15391,15 @@ function renderCodeReviewPanel() {
   const sets = [...codeReviewState.changeSets].sort((a, b) => b.userIndex - a.userIndex);
   const allFiles = sets.flatMap(set => set.files);
   const activeFiles = allFiles.filter(file => !['reverted', 'rewound'].includes(file.review_state));
+  const pendingTargets = sets.flatMap(set => set.files
+    .filter(file => !set.rewound && (file.review_state || 'pending') === 'pending' && /^[0-9a-f]{32}$/.test(set.id))
+    .map(file => ({ set, file })));
+  if (codeReviewKeepAll) codeReviewKeepAll.disabled = pendingTargets.length === 0;
+  if (codeReviewRevertAll) {
+    codeReviewRevertAll.disabled = pendingTargets.length === 0 || pendingTargets.some(({ file }) => !file.revertible || file.diff_truncated);
+    codeReviewRevertAll.title = pendingTargets.some(({ file }) => !file.revertible || file.diff_truncated)
+      ? '部分文件没有完整可逆补丁，请使用整轮回退' : '一次撤销全部待审查修改';
+  }
   if (codeReviewSummary) {
     const add = activeFiles.reduce((sum, file) => sum + (file.additions || 0), 0);
     const del = activeFiles.reduce((sum, file) => sum + (file.deletions || 0), 0);
@@ -15103,7 +15425,7 @@ function renderCodeReviewPanel() {
         </div>
         <div>${set.files.map(file => {
           const state = set.rewound ? 'rewound' : (file.review_state || 'pending');
-          const stateLabel = state === 'kept' ? '已保留' : state === 'reverted' ? '已撤销' : state === 'rewound' ? '已整体回退' : '待审查';
+          const stateLabel = state === 'kept' ? '已保留' : state === 'reverted' ? '已撤销' : state === 'rewound' ? '已整体回退' : state === 'partial' ? '部分已审查' : '待审查';
           const keyId = encodeURIComponent(set.id);
           const keyPath = encodeURIComponent(file.path);
           const cannotRevert = !persistedChangeSet || set.rewound || state === 'reverted' || !file.revertible || file.diff_truncated;
@@ -15138,7 +15460,7 @@ function findCodeReviewFile(changeSetId, path) {
   return set && file ? { set, file } : null;
 }
 
-async function reviewCodeChange(changeSetId, path, action, button) {
+async function reviewCodeChange(changeSetId, path, action, button, hunkIndex = null) {
   if (!sessionId || !codeMode) return false;
   if (currentCodeRuntime !== 'claude_agent_sdk') {
     toast('这个历史会话不归 Claude Agent SDK 管理');
@@ -15150,7 +15472,7 @@ async function reviewCodeChange(changeSetId, path, action, button) {
     const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/changes/review`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ change_set_id: changeSetId, path, action }),
+      body: JSON.stringify({ change_set_id: changeSetId, path, action, hunk_index: Number.isInteger(hunkIndex) ? hunkIndex : null }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
@@ -15159,7 +15481,8 @@ async function reviewCodeChange(changeSetId, path, action, button) {
     recomputeCodeReviewStats();
     renderCodeReviewPanel();
     refreshGitStatus();
-    toast(action === 'revert' ? '已安全撤销该文件的本轮 AI 修改' : '已标记为保留');
+    const scope = Number.isInteger(hunkIndex) ? '该差异块' : '该文件';
+    toast(action === 'revert' ? `已安全撤销${scope}的 AI 修改` : `已标记保留${scope}`);
     return true;
   } catch (error) {
     toast(`操作失败：${error.message || error}`, { timeout: 5000 });
@@ -15167,6 +15490,46 @@ async function reviewCodeChange(changeSetId, path, action, button) {
     return false;
   }
 }
+
+async function reviewCodeChangesBatch(action) {
+  if (!sessionId || !codeMode || currentCodeRuntime !== 'claude_agent_sdk') return;
+  const targets = codeReviewState.changeSets.flatMap(set => set.files
+    .filter(file => !set.rewound && (file.review_state || 'pending') === 'pending' && /^[0-9a-f]{32}$/.test(set.id))
+    .map(file => ({ change_set_id: set.id, path: file.path })));
+  if (!targets.length) { toast('没有待审查修改'); return; }
+  if (action === 'revert' && !confirm(`将一次撤销 ${targets.length} 个待审查文件的 AI 修改。失败时会自动恢复安全检查点，继续吗？`)) return;
+  const button = action === 'revert' ? codeReviewRevertAll : codeReviewKeepAll;
+  const original = button?.textContent || '';
+  if (button) { button.disabled = true; button.textContent = action === 'revert' ? '批量撤销中…' : '批量保留中…'; }
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/changes/review-batch`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ action, targets }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    for (const target of targets) {
+      const found = findCodeReviewFile(target.change_set_id, target.path);
+      if (!found) continue;
+      found.file.review_state = action === 'revert' ? 'reverted' : 'kept';
+      const hunks = parseUnifiedDiffHunks(found.file.diff || '');
+      found.file.hunk_review = Object.fromEntries(hunks.map(hunk => [String(hunk.index), action === 'revert' ? 'reverted' : 'kept']));
+    }
+    recomputeCodeReviewStats();
+    renderCodeReviewPanel();
+    renderWorkspaceActivity();
+    refreshGitStatus();
+    toast(action === 'revert' ? '全部待审查修改已安全撤销' : '全部待审查修改已标记保留');
+  } catch (error) {
+    toast(`批量操作失败：${error.message || error}`, { timeout: 6000 });
+  } finally {
+    if (button) { button.disabled = false; button.textContent = original; }
+    renderCodeReviewPanel();
+  }
+}
+
+codeReviewKeepAll?.addEventListener('click', () => reviewCodeChangesBatch('keep'));
+codeReviewRevertAll?.addEventListener('click', () => reviewCodeChangesBatch('revert'));
 
 codeReviewList?.addEventListener('click', (event) => {
   const rewind = event.target.closest('[data-review-rewind]');
@@ -15178,11 +15541,47 @@ codeReviewList?.addEventListener('click', (event) => {
   const found = findCodeReviewFile(changeSetId, path);
   if (!found) return;
   if (actionButton.hasAttribute('data-review-view')) {
-    openGitFileDiff(path, found.file.diff, { truncated: !!found.file.diff_truncated, turnLabel: codeReviewTurnLabel(found.set.userIndex) });
+    openGitFileDiff(path, found.file.diff, { changeSetId, truncated: !!found.file.diff_truncated, turnLabel: codeReviewTurnLabel(found.set.userIndex) });
   } else {
     reviewCodeChange(changeSetId, path, actionButton.hasAttribute('data-review-revert') ? 'revert' : 'keep', actionButton);
   }
 });
+
+async function loadCodeProjectSettings() {
+  if (!sessionId || !codeMode || currentCodeRuntime !== 'claude_agent_sdk') return;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/project-settings`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    currentCodeProjectSettings = data;
+    if (codeValidationCommand) codeValidationCommand.value = data.validation_command || '';
+    if (codeValidationMode) codeValidationMode.value = data.validation_mode || 'ask';
+  } catch (error) {
+    console.warn('load project validation settings failed', error);
+  }
+}
+
+async function saveCodeProjectSettings(options = {}) {
+  if (!sessionId || !codeMode || currentCodeRuntime !== 'claude_agent_sdk') return false;
+  const payload = {
+    validation_command: (codeValidationCommand?.value || '').trim(),
+    validation_mode: codeValidationMode?.value || 'ask',
+    validation_timeout: Number(currentCodeProjectSettings?.validation_timeout || 120),
+  };
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/project-settings`, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    currentCodeProjectSettings = data;
+    if (!options.silent) toast('项目验证策略已保存');
+    return true;
+  } catch (error) {
+    if (!options.silent) toast(`保存失败：${error.message || error}`);
+    return false;
+  }
+}
 
 async function runCodeValidation() {
   if (!sessionId || !codeMode) { toast('请先打开 Code 会话'); return; }
@@ -15192,6 +15591,7 @@ async function runCodeValidation() {
   }
   if (currentController) { toast('Claude 正在运行，请完成或停止后再验证'); return; }
   const command = (codeValidationCommand?.value || '').trim();
+  await saveCodeProjectSettings({ silent: true });
   codeValidationRun.disabled = true;
   codeValidationRun.textContent = '验证中…';
   if (codeValidationResult) codeValidationResult.innerHTML = '<div class="cw-code-diff-empty">正在运行测试或构建命令…</div>';
@@ -15199,7 +15599,7 @@ async function runCodeValidation() {
     const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/validate`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ command, timeout: 120 }),
+      body: JSON.stringify({ command, timeout: Number(currentCodeProjectSettings?.validation_timeout || 120) }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
@@ -15215,6 +15615,8 @@ async function runCodeValidation() {
 }
 
 codeValidationRun?.addEventListener('click', runCodeValidation);
+codeValidationMode?.addEventListener('change', () => saveCodeProjectSettings());
+codeValidationCommand?.addEventListener('change', () => saveCodeProjectSettings({ silent: true }));
 codeValidationCommand?.addEventListener('keydown', event => {
   if (event.key === 'Enter') { event.preventDefault(); runCodeValidation(); }
 });
@@ -15288,7 +15690,7 @@ async function renderChangedFilesSummary(container, changedFiles = [], meta = {}
     card.querySelectorAll('[data-inline-view-diff]').forEach(btn => {
       btn.addEventListener('click', () => {
         const file = files[Number(btn.dataset.inlineViewDiff)];
-        if (file) openGitFileDiff(file.path, file.diff, { truncated: !!file.diff_truncated, turnLabel: codeReviewTurnLabel(set.userIndex) });
+        if (file) openGitFileDiff(file.path, file.diff, { changeSetId: set.id, truncated: !!file.diff_truncated, turnLabel: codeReviewTurnLabel(set.userIndex) });
       });
     });
     card.querySelectorAll('[data-inline-open-validation]').forEach(btn => {
@@ -15335,6 +15737,8 @@ function resetSessionStatsBar() {
   sessionStatsState.changedFiles = [];
   sessionStatsState.addLines = 0;
   sessionStatsState.delLines = 0;
+  latestTodoItems = [];
+  cwWorkspaceActivity?.classList.add('hidden');
   renderSessionStatsBar();
 }
 
@@ -15399,6 +15803,96 @@ function renderSessionStatsBar() {
   if (editsItem) {
     editsItem.disabled = !files;
     editsItem.title = files ? `查看 ${files} 个变更文件` : '暂无文件变更';
+  }
+
+  const approvalItem = $('cwStatsApproval');
+  const approvalState = $('cwStatsApprovalState');
+  if (approvalItem) {
+    approvalItem.classList.toggle('approval-on', currentCodeAutoApprove);
+    approvalItem.setAttribute('aria-pressed', currentCodeAutoApprove ? 'true' : 'false');
+    approvalItem.title = currentCodeAutoApprove
+      ? '本会话会自动批准工具请求；需要用户回答的问题仍会暂停'
+      : '开启后自动批准本会话的工具请求';
+  }
+  if (approvalState) approvalState.textContent = currentCodeAutoApprove ? '开' : '关';
+}
+
+function workspaceActivityRows(tab = currentWorkspaceActivityTab) {
+  if (tab === 'tasks') {
+    return latestTodoItems.map(item => ({
+      key: '',
+      title: item.status === 'in_progress' ? (item.activeForm || item.content || '处理中') : (item.content || item.activeForm || '任务'),
+      meta: item.status === 'completed' ? '已完成' : item.status === 'in_progress' ? '进行中' : '待处理',
+      icon: item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '●' : '○',
+    }));
+  }
+  if (tab === 'agents') {
+    return [...subagentCards.values()].sort((a, b) => a.startedAt - b.startedAt).map(card => ({
+      key: card.id,
+      title: card.description || card.subagentType || '子代理',
+      meta: card.status === 'running' ? fmtElapsed(Date.now() - card.startedAt) : card.status,
+      icon: card.status === 'running' ? '●' : card.status === 'success' ? '✓' : '!',
+      detail: card.latestActivity || '',
+    }));
+  }
+  return codeReviewState.changeSets
+    .filter(set => !set.rewound)
+    .flatMap(set => set.files.map(file => {
+      const state = file.review_state || 'pending';
+      return {
+        key: `${set.id}:${file.path}`,
+        title: file.path,
+        meta: `+${file.additions || 0} / -${file.deletions || 0}`,
+        icon: state === 'kept' ? '✓' : state === 'reverted' || state === 'rewound' ? '↶' : '±',
+        detail: `${codeReviewTurnLabel(set.userIndex)} · ${state === 'pending' ? '待审查' : state === 'partial' ? '部分已审查' : state === 'kept' ? '已保留' : state === 'rewound' ? '已整体回退' : '已撤销'}`,
+      };
+    }));
+}
+
+function renderWorkspaceActivity() {
+  if (!cwWorkspaceActivity || !cwWorkspaceActivityBody || !codeMode) return;
+  cwWorkspaceActivity.querySelectorAll('[data-cw-activity-tab]').forEach(button => {
+    button.classList.toggle('active', button.dataset.cwActivityTab === currentWorkspaceActivityTab);
+  });
+  const rows = workspaceActivityRows();
+  cwWorkspaceActivityBody.innerHTML = rows.length ? rows.map(row => `
+    <button type="button" class="cw-activity-row" ${row.key ? `data-cw-activity-key="${escapeHtml(row.key)}"` : ''}>
+      <span aria-hidden="true">${escapeHtml(row.icon)}</span>
+      <span class="min-w-0"><strong>${escapeHtml(row.title)}</strong>${row.detail ? `<small>${escapeHtml(row.detail)}</small>` : ''}</span>
+      <span class="cw-activity-row-meta">${escapeHtml(row.meta)}</span>
+    </button>`).join('') : '<div class="cw-activity-empty">这里暂时没有活动。</div>';
+}
+
+function openWorkspaceActivity(tab) {
+  if (!codeMode || !cwWorkspaceActivity) return;
+  currentWorkspaceActivityTab = ['tasks', 'agents', 'edits'].includes(tab) ? tab : 'tasks';
+  renderWorkspaceActivity();
+  cwWorkspaceActivity.classList.remove('hidden');
+}
+
+async function toggleCodeAutoApprove() {
+  if (!sessionId || !codeMode || currentCodeRuntime !== 'claude_agent_sdk') {
+    toast('请先打开 Claude Agent SDK 的 Code 会话');
+    return;
+  }
+  const next = !currentCodeAutoApprove;
+  if (next && !confirm('开启“替我审批”后，本会话的工具请求会由服务端自动允许，可能执行写文件和命令。需要用户回答的问题仍会暂停。仅在可信项目中开启，继续吗？')) return;
+  const button = $('cwStatsApproval');
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/auto-approve`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ enabled: next }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    currentCodeAutoApprove = !!data.enabled;
+    renderSessionStatsBar();
+    toast(currentCodeAutoApprove ? '本会话已开启替我审批' : '本会话已关闭替我审批');
+  } catch (error) {
+    toast(`设置失败：${error.message || error}`);
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -16701,19 +17195,33 @@ soundEnabledEl.addEventListener('change', () => { settings.soundEnabled = soundE
 
 // Stats bar click handlers
 $('cwStatsTasks')?.addEventListener('click', () => {
-  if (todoPanel) { todoPanel.classList.remove('hidden'); todoPanel.style.transform = 'scale(1.03)'; setTimeout(() => { todoPanel.style.transform = ''; }, 200); }
+  openWorkspaceActivity('tasks');
 });
 $('cwStatsAgents')?.addEventListener('click', () => {
-  if (subagentPanel && !subagentPanel.classList.contains('hidden')) {
-    const first = subagentPanel.querySelector('.subagent-card');
-    if (first) first.click();
-  }
+  openWorkspaceActivity('agents');
 });
 $('cwStatsEdits')?.addEventListener('click', () => {
-  if (!codeMode) return;
-  renderCodeReviewPanel();
-  openModal(codeReviewModal);
+  openWorkspaceActivity('edits');
 });
+$('cwStatsApproval')?.addEventListener('click', toggleCodeAutoApprove);
+cwWorkspaceActivity?.addEventListener('click', event => {
+  const tab = event.target.closest('[data-cw-activity-tab]');
+  if (tab) {
+    currentWorkspaceActivityTab = tab.dataset.cwActivityTab;
+    renderWorkspaceActivity();
+    return;
+  }
+  const row = event.target.closest('[data-cw-activity-key]');
+  if (!row) return;
+  if (currentWorkspaceActivityTab === 'agents') {
+    const card = subagentCards.get(row.dataset.cwActivityKey);
+    if (card) openSubagentModal(card);
+  } else if (currentWorkspaceActivityTab === 'edits') {
+    renderCodeReviewPanel();
+    openModal(codeReviewModal);
+  }
+});
+cwWorkspaceActivityClose?.addEventListener('click', () => cwWorkspaceActivity?.classList.add('hidden'));
 urlAutoFetchEl.addEventListener('change', () => {
   settings.urlAutoFetch = urlAutoFetchEl.checked;
   LS.set('urlAutoFetch', settings.urlAutoFetch);
@@ -19853,7 +20361,9 @@ document.addEventListener('keydown', (e) => {
 }, true);
 
 window.addEventListener('beforeunload', (e) => {
-  if (configState.dirty && !configCenter.classList.contains('hidden')) {
+  const hasQueuedCodeWork = codeMode && codeQueueFor(activeCodeQueueOwner).length > 0;
+  const hasRunningCodeWork = codeMode && !!currentController;
+  if ((configState.dirty && !configCenter.classList.contains('hidden')) || hasQueuedCodeWork || hasRunningCodeWork) {
     e.preventDefault();
     e.returnValue = '';
   }

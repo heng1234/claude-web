@@ -620,6 +620,7 @@ def init_db() -> None:
         ensure_column(conn, "sessions", "summary_cache", "TEXT")
         ensure_column(conn, "sessions", "workspace_mode", "TEXT NOT NULL DEFAULT 'chat'")
         ensure_column(conn, "sessions", "runtime_origin", "TEXT NOT NULL DEFAULT ''")
+        ensure_column(conn, "sessions", "auto_approve", "INTEGER NOT NULL DEFAULT 0")
         # Number of native plain-user messages that precede the first local
         # user_input event. Native forks intentionally keep Claude's earlier
         # transcript without copying those bubbles into the new Web session.
@@ -771,6 +772,43 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS code_message_queue (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0,
+                state TEXT NOT NULL DEFAULT 'queued',
+                error TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS code_turn_requests (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                state TEXT NOT NULL DEFAULT 'starting',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                UNIQUE(session_id, id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS code_project_settings (
+                cwd TEXT PRIMARY KEY,
+                validation_command TEXT NOT NULL DEFAULT '',
+                validation_mode TEXT NOT NULL DEFAULT 'ask',
+                validation_timeout INTEGER NOT NULL DEFAULT 120,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session_usage_session ON session_usage(session_id, turn_idx)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session_usage_ts ON session_usage(ts)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id)")
@@ -787,6 +825,8 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prompt_optimizer_samples_updated ON prompt_optimizer_samples(updated_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prompt_optimizer_rules_task ON prompt_optimizer_rules(task_type, enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prompt_optimizer_feedback_rewrite ON prompt_optimizer_feedback(rewrite_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_code_queue_session ON code_message_queue(session_id, state, position)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_code_turn_session ON code_turn_requests(session_id, updated_at)")
 
 
 init_db()
@@ -1049,6 +1089,37 @@ def load_events(session_id: str) -> List[dict]:
     return events
 
 
+def session_event_page(events: List[dict], limit_turns: int = 0) -> dict:
+    """Return a tail page aligned to a user turn while preserving absolute offsets."""
+    total = len(events)
+    if limit_turns <= 0:
+        return {
+            "events": events,
+            "event_offset": 0,
+            "user_offset": 0,
+            "total_event_count": total,
+            "has_more": False,
+        }
+    remaining = max(1, min(500, int(limit_turns)))
+    start = 0
+    user_seen = 0
+    for index in range(total - 1, -1, -1):
+        if events[index].get("type") == "user_input":
+            user_seen += 1
+            if user_seen >= remaining:
+                start = index
+                break
+    else:
+        start = 0
+    return {
+        "events": events[start:],
+        "event_offset": start,
+        "user_offset": sum(1 for event in events[:start] if event.get("type") == "user_input"),
+        "total_event_count": total,
+        "has_more": start > 0,
+    }
+
+
 def iter_history_paths() -> Iterator[Path]:
     for path in HISTORY_DIR.glob("*.jsonl"):
         if ".before-compact-" in path.name or ".tmp." in path.name:
@@ -1189,6 +1260,7 @@ class ChatRequest(BaseModel):
     # badges on the user message. Chat mode embeds extracted text in `message`;
     # Code mode passes local paths so Claude Code can Read/Bash the files itself.
     docs: Optional[List[dict]] = None
+    client_turn_id: Optional[str] = None
 
 
 class NativeCompactRequest(BaseModel):
@@ -1229,11 +1301,46 @@ class CodeChangeReviewRequest(BaseModel):
     change_set_id: str
     path: str
     action: str
+    hunk_index: Optional[int] = None
+
+
+class CodeBatchReviewTarget(BaseModel):
+    change_set_id: str
+    path: str
+
+
+class CodeBatchReviewRequest(BaseModel):
+    action: str
+    targets: List[CodeBatchReviewTarget]
 
 
 class CodeValidationRequest(BaseModel):
     command: Optional[str] = ""
     timeout: Optional[int] = 120
+
+
+class CodeQueueRequest(BaseModel):
+    id: str
+    payload: dict
+
+
+class CodeQueueOrderRequest(BaseModel):
+    ids: List[str]
+
+
+class CodeQueueStateRequest(BaseModel):
+    state: str
+    error: Optional[str] = ""
+
+
+class CodeAutoApproveRequest(BaseModel):
+    enabled: bool
+
+
+class CodeProjectSettingsRequest(BaseModel):
+    validation_command: Optional[str] = ""
+    validation_mode: Optional[str] = "ask"
+    validation_timeout: Optional[int] = 120
 
 
 class GitCheckoutRequest(BaseModel):
@@ -5158,6 +5265,7 @@ async def _drain_detached_agent_sdk_turn(
             # through /permissions/pending. They are transient UI state, not
             # conversation history.
             if envelope_type == "permission_request":
+                await _maybe_auto_approve_permission(session_id, envelope)
                 continue
             if envelope_type != "event" or not isinstance(envelope.get("event"), dict):
                 continue
@@ -5198,6 +5306,12 @@ async def _drain_detached_agent_sdk_turn(
                 append_event(session_id, obj)
                 if event_type == "result":
                     record_usage(session_id, obj)
+                    if not obj.get("parent_tool_use_id"):
+                        await _maybe_auto_validate_code_changes(
+                            session_id,
+                            work_dir,
+                            obj.get("changed_files") or [],
+                        )
     except asyncio.CancelledError:
         await _claude_agent_bridge.abandon_turn(turn)
         raise
@@ -5264,6 +5378,14 @@ def _agent_sdk_streaming_response(
                     yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
                     continue
                 if envelope_type == "permission_request":
+                    if await _maybe_auto_approve_permission(session_id, envelope):
+                        auto_event = {
+                            "type": "permission_auto_approved",
+                            "tool_name": envelope.get("toolName"),
+                            "ts": time.time(),
+                        }
+                        yield f"data: {json.dumps(auto_event, ensure_ascii=False)}\n\n"
+                        continue
                     permission_event = {
                         "type": "permission_request",
                         "approval_id": envelope.get("approvalId"),
@@ -5326,6 +5448,14 @@ def _agent_sdk_streaming_response(
                     if event_type == "result":
                         record_usage(session_id, obj)
                 yield f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+                if event_type == "result" and not obj.get("parent_tool_use_id"):
+                    validation_event = await _maybe_auto_validate_code_changes(
+                        session_id,
+                        work_dir,
+                        obj.get("changed_files") or [],
+                    )
+                    if validation_event:
+                        yield f"data: {json.dumps(validation_event, ensure_ascii=False)}\n\n"
         except (asyncio.CancelledError, GeneratorExit):
             detached = True
             task = asyncio.create_task(
@@ -5373,6 +5503,47 @@ async def chat(request: Request, req: ChatRequest):
     return await _chat_response(_authenticated_remote_chat_request(request, req))
 
 
+def _reserve_code_turn(session_id: str, client_turn_id: Optional[str]) -> str:
+    if not client_turn_id:
+        return ""
+    turn_id = _valid_code_queue_id(client_turn_id)
+    now = time.time()
+    try:
+        with db_connect() as conn:
+            conn.execute(
+                "DELETE FROM code_turn_requests WHERE state = 'accepted' AND updated_at < ?",
+                (now - 30 * 24 * 60 * 60,),
+            )
+            conn.execute(
+                "INSERT INTO code_turn_requests (id, session_id, state, created_at, updated_at) VALUES (?, ?, 'starting', ?, ?)",
+                (turn_id, session_id, now, now),
+            )
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="this queued turn was already accepted; reload the session") from exc
+    return turn_id
+
+
+def _mark_code_turn_accepted(session_id: str, turn_id: str) -> None:
+    if not turn_id:
+        return
+    with db_connect() as conn:
+        conn.execute(
+            "UPDATE code_turn_requests SET state = 'accepted', updated_at = ? WHERE id = ? AND session_id = ?",
+            (time.time(), turn_id, session_id),
+        )
+        conn.execute("DELETE FROM code_message_queue WHERE id = ? AND session_id = ?", (turn_id, session_id))
+
+
+def _release_code_turn(session_id: str, turn_id: str) -> None:
+    if not turn_id:
+        return
+    with db_connect() as conn:
+        conn.execute(
+            "DELETE FROM code_turn_requests WHERE id = ? AND session_id = ? AND state = 'starting'",
+            (turn_id, session_id),
+        )
+
+
 async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     session_id = req.session_id or str(uuid.uuid4())
     if _session_runtime_busy(session_id) or session_id in _compacting_sessions:
@@ -5414,6 +5585,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     # turn an existing SDK-owned Code session into a legacy CLI request.
     req.workspace_mode = workspace_mode
     code_workspace = workspace_mode == "code"
+    reserved_turn_id = ""
     legacy_locally_compacted_code = code_workspace and any(
         event.get("type") == "user_input"
         and event.get("compacted") is True
@@ -5495,6 +5667,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 agent_params["resumeSessionId"] = remote_session_id
             else:
                 agent_params["sessionId"] = remote_session_id
+            reserved_turn_id = _reserve_code_turn(session_id, req.client_turn_id)
             try:
                 turn = await _claude_agent_bridge.open_turn(session_id, agent_params)
             except asyncio.TimeoutError as exc:
@@ -5504,6 +5677,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                     )
                 except Exception:
                     pass
+                _release_code_turn(session_id, reserved_turn_id)
                 await discard_git_checkpoint(checkpoint, work_dir)
                 raise HTTPException(
                     status_code=504,
@@ -5518,9 +5692,11 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                     429 if "runtime limit reached" in message
                     else (409 if "already running" in message or "active turn" in message else 502)
                 )
+                _release_code_turn(session_id, reserved_turn_id)
                 await discard_git_checkpoint(checkpoint, work_dir)
                 raise HTTPException(status_code=status_code, detail=message) from exc
             append_event(session_id, user_event)
+            _mark_code_turn_accepted(session_id, reserved_turn_id)
             set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
             _agent_sdk_running_sessions.add(session_id)
             return _agent_sdk_streaming_response(
@@ -5544,7 +5720,11 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 detail="This Code session is owned by Claude Agent SDK and cannot be opened with Claude CLI.",
             )
 
+    if code_workspace:
+        reserved_turn_id = _reserve_code_turn(session_id, req.client_turn_id)
     append_event(session_id, user_event)
+    if code_workspace:
+        _mark_code_turn_accepted(session_id, reserved_turn_id)
     if code_workspace:
         if runtime_origin == _RUNTIME_ORIGIN_AGENT_SDK:
             await discard_git_checkpoint(checkpoint, work_dir)
@@ -6461,7 +6641,7 @@ def _agent_sdk_session_row(session_id: str) -> sqlite3.Row:
         row = conn.execute(
             """
             SELECT id, cwd, remote_session_id, remote_ready, workspace_mode, runtime_origin,
-                   native_user_offset
+                   native_user_offset, auto_approve
             FROM sessions WHERE id = ?
             """,
             (session_id,),
@@ -6473,6 +6653,34 @@ def _agent_sdk_session_row(session_id: str) -> sqlite3.Row:
     if normalize_runtime_origin(row["runtime_origin"]) == _RUNTIME_ORIGIN_CLI:
         raise HTTPException(status_code=409, detail="this session is owned by Claude CLI")
     return row
+
+
+def _session_auto_approve_enabled(session_id: str) -> bool:
+    with db_connect() as conn:
+        row = conn.execute("SELECT auto_approve FROM sessions WHERE id = ?", (session_id,)).fetchone()
+    return bool(row and row["auto_approve"])
+
+
+async def _maybe_auto_approve_permission(session_id: str, envelope: dict) -> bool:
+    """Approve tool requests server-side while leaving questions for the user."""
+    if not _session_auto_approve_enabled(session_id):
+        return False
+    tool_name = str(envelope.get("toolName") or "")
+    approval_id = str(envelope.get("approvalId") or "")
+    if not approval_id or tool_name == "AskUserQuestion":
+        return False
+    try:
+        await _claude_agent_bridge.respond_permission(
+            session_id,
+            approval_id,
+            allow=True,
+            use_suggestions=False,
+            updated_input=envelope.get("input") if isinstance(envelope.get("input"), dict) else None,
+            message="Auto-approved by the Code session owner",
+        )
+        return True
+    except (AgentSdkBridgeError, asyncio.TimeoutError):
+        return False
 
 
 def _agent_sdk_control_params(row: sqlite3.Row, req: NativeCompactRequest) -> dict:
@@ -6605,6 +6813,37 @@ async def pending_agent_sdk_permissions(session_id: str):
     }
 
 
+@app.post("/api/sessions/{session_id}/auto-approve")
+async def set_code_session_auto_approve(session_id: str, req: CodeAutoApproveRequest):
+    _agent_sdk_session_row(session_id)
+    with db_connect() as conn:
+        conn.execute(
+            "UPDATE sessions SET auto_approve = ?, updated_at = ? WHERE id = ?",
+            (1 if req.enabled else 0, time.time(), session_id),
+        )
+    approved: List[str] = []
+    if req.enabled and _claude_agent_bridge.running:
+        try:
+            response = await _claude_agent_bridge.pending_permissions(session_id)
+            for item in response.get("pending") or []:
+                if str(item.get("toolName") or "") == "AskUserQuestion":
+                    continue
+                approval_id = str(item.get("approvalId") or "")
+                if not approval_id:
+                    continue
+                await _claude_agent_bridge.respond_permission(
+                    session_id,
+                    approval_id,
+                    allow=True,
+                    updated_input=item.get("input") if isinstance(item.get("input"), dict) else None,
+                    message="Auto-approved by the Code session owner",
+                )
+                approved.append(approval_id)
+        except (AgentSdkBridgeError, asyncio.TimeoutError):
+            pass
+    return {"ok": True, "enabled": bool(req.enabled), "approved_pending": approved}
+
+
 @app.post("/api/sessions/{session_id}/rewind/native")
 async def rewind_agent_sdk_files(session_id: str, req: NativeRewindRequest):
     if _session_control_busy(session_id):
@@ -6708,6 +6947,100 @@ async def _git_reverse_patch(cwd: str, diff_text: str, *, check_only: bool) -> T
     return proc.returncode == 0, detail
 
 
+def _diff_hunk_patches(diff_text: str) -> List[dict]:
+    lines = str(diff_text or "").splitlines(keepends=True)
+    first_hunk = next((index for index, line in enumerate(lines) if line.startswith("@@")), -1)
+    if first_hunk < 0:
+        return []
+    header = lines[:first_hunk]
+    unsafe_partial = any(
+        line.startswith(("new file mode ", "deleted file mode ", "Binary files "))
+        or line.startswith("--- /dev/null")
+        or line.startswith("+++ /dev/null")
+        for line in header
+    )
+    starts = [index for index in range(first_hunk, len(lines)) if lines[index].startswith("@@")]
+    hunks: List[dict] = []
+    for hunk_index, start in enumerate(starts):
+        end = starts[hunk_index + 1] if hunk_index + 1 < len(starts) else len(lines)
+        body = lines[start:end]
+        additions = sum(1 for line in body if line.startswith("+") and not line.startswith("+++"))
+        deletions = sum(1 for line in body if line.startswith("-") and not line.startswith("---"))
+        hunks.append({
+            "index": hunk_index,
+            "header": body[0].strip(),
+            "patch": "".join(header + body),
+            "additions": additions,
+            "deletions": deletions,
+            "revertible": not unsafe_partial,
+        })
+    return hunks
+
+
+def _refresh_hunk_review_state(item: dict, hunks: List[dict]) -> None:
+    reviews = item.get("hunk_review") if isinstance(item.get("hunk_review"), dict) else {}
+    states = [str(reviews.get(str(hunk["index"])) or "pending") for hunk in hunks]
+    if states and all(state == "kept" for state in states):
+        item["review_state"] = "kept"
+    elif states and all(state == "reverted" for state in states):
+        item["review_state"] = "reverted"
+    elif any(state != "pending" for state in states):
+        item["review_state"] = "partial"
+    else:
+        item["review_state"] = "pending"
+    item["hunk_review"] = reviews
+
+
+def _code_project_settings(cwd: str) -> dict:
+    normalized = str(Path(os.path.expanduser(cwd or "~")).resolve())
+    with db_connect() as conn:
+        row = conn.execute(
+            "SELECT validation_command, validation_mode, validation_timeout, updated_at FROM code_project_settings WHERE cwd = ?",
+            (normalized,),
+        ).fetchone()
+    if row is None:
+        return {
+            "cwd": normalized,
+            "validation_command": "",
+            "validation_mode": "ask",
+            "validation_timeout": 120,
+            "updated_at": 0,
+        }
+    return {"cwd": normalized, **dict(row)}
+
+
+@app.get("/api/sessions/{session_id}/project-settings")
+async def get_code_project_settings(session_id: str):
+    row = _agent_sdk_session_row(session_id)
+    return _code_project_settings(row["cwd"] or os.path.expanduser("~"))
+
+
+@app.put("/api/sessions/{session_id}/project-settings")
+async def set_code_project_settings(session_id: str, req: CodeProjectSettingsRequest):
+    row = _agent_sdk_session_row(session_id)
+    cwd = str(Path(os.path.expanduser(row["cwd"] or "~")).resolve())
+    mode = str(req.validation_mode or "ask").strip().lower()
+    if mode not in {"off", "ask", "auto"}:
+        raise HTTPException(status_code=400, detail="validation_mode must be off, ask or auto")
+    command = _normalize_agent_loop_test_command(req.validation_command or "")
+    timeout = max(5, min(600, int(req.validation_timeout or 120)))
+    with db_connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO code_project_settings
+                (cwd, validation_command, validation_mode, validation_timeout, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(cwd) DO UPDATE SET
+                validation_command = excluded.validation_command,
+                validation_mode = excluded.validation_mode,
+                validation_timeout = excluded.validation_timeout,
+                updated_at = excluded.updated_at
+            """,
+            (cwd, command, mode, timeout, time.time()),
+        )
+    return {"ok": True, **_code_project_settings(cwd)}
+
+
 @app.post("/api/sessions/{session_id}/changes/review")
 async def review_code_change(session_id: str, req: CodeChangeReviewRequest):
     if _session_control_busy(session_id):
@@ -6725,11 +7058,42 @@ async def review_code_change(session_id: str, req: CodeChangeReviewRequest):
     rel_path = relative.as_posix()
     events = load_events(session_id)
     _, item = _find_code_change(events, change_set_id, rel_path)
-    if item.get("review_state") == "reverted" and action == "revert":
+    if req.hunk_index is None and item.get("review_state") == "reverted" and action == "revert":
         return {"ok": True, "item": item, "already_applied": True}
 
+    diff_text = str(item.get("diff") or "")
+    hunks = _diff_hunk_patches(diff_text)
+    if req.hunk_index is not None:
+        hunk_index = int(req.hunk_index)
+        hunk = next((entry for entry in hunks if entry["index"] == hunk_index), None)
+        if hunk is None:
+            raise HTTPException(status_code=404, detail="diff hunk not found")
+        reviews = item.get("hunk_review") if isinstance(item.get("hunk_review"), dict) else {}
+        previous = str(reviews.get(str(hunk_index)) or "pending")
+        if previous == action + "ed" or (previous == "kept" and action == "keep"):
+            return {"ok": True, "item": item, "already_applied": True}
+        if previous != "pending":
+            raise HTTPException(status_code=409, detail="this diff hunk was already reviewed")
+        if action == "revert":
+            if item.get("diff_truncated") or not item.get("revertible") or not hunk["revertible"]:
+                raise HTTPException(status_code=409, detail="this file type cannot be partially reverted safely")
+            cwd = row["cwd"] or os.path.expanduser("~")
+            checked, detail = await _git_reverse_patch(cwd, hunk["patch"], check_only=True)
+            if not checked:
+                raise HTTPException(status_code=409, detail=(detail or "this hunk overlaps a later edit"))
+            applied, detail = await _git_reverse_patch(cwd, hunk["patch"], check_only=False)
+            if not applied:
+                raise HTTPException(status_code=409, detail=(detail or "unable to reverse the diff hunk"))
+            reviews[str(hunk_index)] = "reverted"
+        else:
+            reviews[str(hunk_index)] = "kept"
+        item["hunk_review"] = reviews
+        _refresh_hunk_review_state(item, hunks)
+        item["reviewed_at"] = time.time()
+        save_events(session_id, events)
+        return {"ok": True, "item": item, "hunks": hunks}
+
     if action == "revert":
-        diff_text = str(item.get("diff") or "")
         if not diff_text or item.get("diff_truncated") or not item.get("revertible"):
             raise HTTPException(status_code=409, detail="this file does not have a complete reversible patch")
         cwd = row["cwd"] or os.path.expanduser("~")
@@ -6745,9 +7109,165 @@ async def review_code_change(session_id: str, req: CodeChangeReviewRequest):
         item["review_state"] = "reverted"
     else:
         item["review_state"] = "kept"
+    if hunks:
+        previous_reviews = item.get("hunk_review") if isinstance(item.get("hunk_review"), dict) else {}
+        item["hunk_review"] = {
+            str(hunk["index"]): (
+                "reverted"
+                if action == "revert"
+                else ("reverted" if previous_reviews.get(str(hunk["index"])) == "reverted" else "kept")
+            )
+            for hunk in hunks
+        }
+        _refresh_hunk_review_state(item, hunks)
     item["reviewed_at"] = time.time()
     save_events(session_id, events)
     return {"ok": True, "item": item}
+
+
+@app.post("/api/sessions/{session_id}/changes/review-batch")
+async def review_code_changes_batch(session_id: str, req: CodeBatchReviewRequest):
+    if _session_control_busy(session_id):
+        raise HTTPException(status_code=409, detail="session is busy")
+    row = _agent_sdk_session_row(session_id)
+    action = str(req.action or "").strip().lower()
+    if action not in {"keep", "revert"}:
+        raise HTTPException(status_code=400, detail="action must be keep or revert")
+    if not req.targets or len(req.targets) > 200:
+        raise HTTPException(status_code=400, detail="batch targets must contain 1 to 200 files")
+    events = load_events(session_id)
+    resolved: List[Tuple[dict, str]] = []
+    seen: Set[Tuple[str, str]] = set()
+    for target in req.targets:
+        change_set_id = str(target.change_set_id or "").strip()
+        if not re.fullmatch(r"[0-9a-f]{32}", change_set_id):
+            raise HTTPException(status_code=400, detail="invalid change_set_id")
+        relative = _safe_checkpoint_relative_path(str(target.path or "").strip())
+        if relative is None:
+            raise HTTPException(status_code=400, detail="invalid file path")
+        rel_path = relative.as_posix()
+        key = (change_set_id, rel_path)
+        if key in seen:
+            continue
+        seen.add(key)
+        _, item = _find_code_change(events, change_set_id, rel_path)
+        if str(item.get("review_state") or "pending") != "pending":
+            continue
+        resolved.append((item, rel_path))
+    if not resolved:
+        return {"ok": True, "items": [], "already_applied": True}
+
+    cwd = row["cwd"] or os.path.expanduser("~")
+    safety = None
+    if action == "revert":
+        for item, rel_path in resolved:
+            diff_text = str(item.get("diff") or "")
+            if not diff_text or item.get("diff_truncated") or not item.get("revertible"):
+                raise HTTPException(status_code=409, detail=f"{rel_path} does not have a complete reversible patch")
+            checked, detail = await _git_reverse_patch(cwd, diff_text, check_only=True)
+            if not checked:
+                raise HTTPException(status_code=409, detail=f"{rel_path}: {detail or 'file overlaps a later edit'}")
+        safety = await create_git_checkpoint(cwd)
+        try:
+            for item, rel_path in resolved:
+                applied, detail = await _git_reverse_patch(cwd, str(item.get("diff") or ""), check_only=False)
+                if not applied:
+                    raise RuntimeError(f"{rel_path}: {detail or 'unable to reverse patch'}")
+        except Exception as exc:
+            if safety:
+                await restore_git_checkpoint(cwd, safety)
+            raise HTTPException(status_code=409, detail=f"batch revert was rolled back: {exc}") from exc
+        finally:
+            if safety:
+                await discard_git_checkpoint(safety, cwd)
+
+    now = time.time()
+    for item, _ in resolved:
+        item["review_state"] = "reverted" if action == "revert" else "kept"
+        item["reviewed_at"] = now
+        hunks = _diff_hunk_patches(str(item.get("diff") or ""))
+        if hunks:
+            item["hunk_review"] = {
+                str(hunk["index"]): "reverted" if action == "revert" else "kept"
+                for hunk in hunks
+            }
+    save_events(session_id, events)
+    return {"ok": True, "items": [item for item, _ in resolved]}
+
+
+async def _execute_code_validation(
+    session_id: str,
+    cwd: str,
+    *,
+    command: str = "",
+    timeout: int = 120,
+    source: str = "manual",
+) -> dict:
+    normalized = _normalize_agent_loop_test_command(command or "")
+    detected_source = source
+    if not normalized:
+        normalized, detected_source = _agent_loop_detect_test_command(cwd)
+        normalized = _normalize_agent_loop_test_command(normalized)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="unable to detect a validation command; enter one manually")
+    timeout = max(5, min(600, int(timeout or 120)))
+    _code_validation_processes[session_id] = None
+    _code_validation_stop_requests.discard(session_id)
+
+    def track_process(process):
+        if session_id in _code_validation_processes:
+            _code_validation_processes[session_id] = process
+        if process is not None and session_id in _code_validation_stop_requests and process.returncode is None:
+            try:
+                process.terminate()
+            except ProcessLookupError:
+                pass
+
+    try:
+        result = await _run_validation_command(normalized, cwd, timeout, on_process=track_process)
+    finally:
+        _code_validation_processes.pop(session_id, None)
+        _code_validation_stop_requests.discard(session_id)
+    event = {
+        "type": "code_validation",
+        "validation_id": uuid.uuid4().hex,
+        "source": detected_source,
+        **result,
+        "ts": time.time(),
+    }
+    append_event(session_id, event)
+    return event
+
+
+async def _maybe_auto_validate_code_changes(session_id: str, cwd: str, changed_files: List[dict]) -> Optional[dict]:
+    if not changed_files:
+        return None
+    settings = _code_project_settings(cwd)
+    if settings["validation_mode"] != "auto":
+        return None
+    try:
+        return await _execute_code_validation(
+            session_id,
+            cwd,
+            command=settings["validation_command"],
+            timeout=settings["validation_timeout"],
+            source="project_auto",
+        )
+    except HTTPException as exc:
+        event = {
+            "type": "code_validation",
+            "validation_id": uuid.uuid4().hex,
+            "source": "project_auto",
+            "command": settings["validation_command"],
+            "stdout": "",
+            "stderr": str(exc.detail),
+            "returncode": -1,
+            "timed_out": False,
+            "duration_ms": 0,
+            "ts": time.time(),
+        }
+        append_event(session_id, event)
+        return event
 
 
 @app.post("/api/sessions/{session_id}/validate")
@@ -6756,43 +7276,13 @@ async def validate_code_session(session_id: str, req: CodeValidationRequest):
         raise HTTPException(status_code=409, detail="session is busy")
     row = _agent_sdk_session_row(session_id)
     cwd = row["cwd"] or os.path.expanduser("~")
-    command = _normalize_agent_loop_test_command(req.command or "")
-    source = "manual" if command else ""
-    if not command:
-        command, source = _agent_loop_detect_test_command(cwd)
-        command = _normalize_agent_loop_test_command(command)
-    if not command:
-        raise HTTPException(status_code=400, detail="unable to detect a validation command; enter one manually")
-    timeout = max(5, min(600, int(req.timeout or 120)))
-    _code_validation_processes[session_id] = None
-    _code_validation_stop_requests.discard(session_id)
-
-    def track_process(process):
-        if session_id in _code_validation_processes:
-            _code_validation_processes[session_id] = process
-        if (
-            process is not None
-            and session_id in _code_validation_stop_requests
-            and process.returncode is None
-        ):
-            try:
-                process.terminate()
-            except ProcessLookupError:
-                pass
-
-    try:
-        result = await _run_validation_command(command, cwd, timeout, on_process=track_process)
-    finally:
-        _code_validation_processes.pop(session_id, None)
-        _code_validation_stop_requests.discard(session_id)
-    event = {
-        "type": "code_validation",
-        "validation_id": uuid.uuid4().hex,
-        "source": source,
-        **result,
-        "ts": time.time(),
-    }
-    append_event(session_id, event)
+    event = await _execute_code_validation(
+        session_id,
+        cwd,
+        command=req.command or "",
+        timeout=int(req.timeout or 120),
+        source="manual" if (req.command or "").strip() else "",
+    )
     return {"ok": True, "event": event}
 
 
@@ -7864,7 +8354,135 @@ def _row_to_session(r: sqlite3.Row) -> dict:
         "workspace_mode": (r["workspace_mode"] or "chat") if "workspace_mode" in r.keys() else "chat",
         "runtime_origin": normalize_runtime_origin(r["runtime_origin"]) if "runtime_origin" in r.keys() else "",
         "native_user_offset": int(r["native_user_offset"] or 0) if "native_user_offset" in r.keys() else 0,
+        "auto_approve": bool(r["auto_approve"]) if "auto_approve" in r.keys() else False,
     }
+
+
+def _valid_code_queue_id(value: str) -> str:
+    queue_id = str(value or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._:-]{8,120}", queue_id):
+        raise HTTPException(status_code=400, detail="invalid queue id")
+    return queue_id
+
+
+def _code_queue_payload(row: sqlite3.Row) -> dict:
+    try:
+        payload = json.loads(row["payload_json"])
+    except (TypeError, json.JSONDecodeError):
+        payload = {}
+    return {
+        "id": row["id"],
+        "session_id": row["session_id"],
+        "payload": payload if isinstance(payload, dict) else {},
+        "position": int(row["position"] or 0),
+        "state": row["state"] or "queued",
+        "error": row["error"] or "",
+        "created_at": float(row["created_at"] or 0),
+        "updated_at": float(row["updated_at"] or 0),
+    }
+
+
+@app.get("/api/sessions/{session_id}/queue")
+async def list_code_message_queue(session_id: str):
+    _agent_sdk_session_row(session_id)
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, session_id, payload_json, position, state, error, created_at, updated_at
+            FROM code_message_queue
+            WHERE session_id = ? AND state IN ('queued', 'paused', 'dispatching')
+            ORDER BY position, created_at
+            """,
+            (session_id,),
+        ).fetchall()
+    return {"items": [_code_queue_payload(row) for row in rows]}
+
+
+@app.post("/api/sessions/{session_id}/queue")
+async def add_code_message_queue(session_id: str, req: CodeQueueRequest):
+    _agent_sdk_session_row(session_id)
+    queue_id = _valid_code_queue_id(req.id)
+    encoded = json.dumps(req.payload or {}, ensure_ascii=False)
+    if len(encoded.encode("utf-8")) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="queued message payload is too large")
+    now = time.time()
+    with db_connect() as conn:
+        existing = conn.execute(
+            "SELECT session_id FROM code_message_queue WHERE id = ?",
+            (queue_id,),
+        ).fetchone()
+        if existing is not None and existing["session_id"] != session_id:
+            raise HTTPException(status_code=409, detail="queue id belongs to another session")
+        next_position = conn.execute(
+            "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM code_message_queue WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()["p"]
+        conn.execute(
+            """
+            INSERT INTO code_message_queue
+                (id, session_id, payload_json, position, state, error, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'queued', '', ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                payload_json = excluded.payload_json,
+                state = 'queued', error = '', updated_at = excluded.updated_at
+            """,
+            (queue_id, session_id, encoded, int(next_position or 0), now, now),
+        )
+        row = conn.execute(
+            "SELECT id, session_id, payload_json, position, state, error, created_at, updated_at FROM code_message_queue WHERE id = ?",
+            (queue_id,),
+        ).fetchone()
+    return {"ok": True, "item": _code_queue_payload(row)}
+
+
+@app.patch("/api/sessions/{session_id}/queue/{queue_id}")
+async def patch_code_message_queue(session_id: str, queue_id: str, req: CodeQueueStateRequest):
+    _agent_sdk_session_row(session_id)
+    queue_id = _valid_code_queue_id(queue_id)
+    state = str(req.state or "").strip().lower()
+    if state not in {"queued", "paused", "dispatching", "failed"}:
+        raise HTTPException(status_code=400, detail="invalid queue state")
+    with db_connect() as conn:
+        changed = conn.execute(
+            "UPDATE code_message_queue SET state = ?, error = ?, updated_at = ? WHERE id = ? AND session_id = ?",
+            (state, str(req.error or "")[:2000], time.time(), queue_id, session_id),
+        ).rowcount
+    if not changed:
+        raise HTTPException(status_code=404, detail="queued message not found")
+    return {"ok": True}
+
+
+@app.delete("/api/sessions/{session_id}/queue/{queue_id}")
+async def delete_code_message_queue(session_id: str, queue_id: str):
+    _agent_sdk_session_row(session_id)
+    queue_id = _valid_code_queue_id(queue_id)
+    with db_connect() as conn:
+        conn.execute("DELETE FROM code_message_queue WHERE id = ? AND session_id = ?", (queue_id, session_id))
+    return {"ok": True}
+
+
+@app.post("/api/sessions/{session_id}/queue/reorder")
+async def reorder_code_message_queue(session_id: str, req: CodeQueueOrderRequest):
+    _agent_sdk_session_row(session_id)
+    ids = [_valid_code_queue_id(value) for value in req.ids]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=400, detail="duplicate queue ids")
+    with db_connect() as conn:
+        known = {
+            row["id"] for row in conn.execute(
+                "SELECT id FROM code_message_queue WHERE session_id = ? AND state IN ('queued', 'paused', 'dispatching')",
+                (session_id,),
+            ).fetchall()
+        }
+        if set(ids) != known:
+            raise HTTPException(status_code=409, detail="queue changed; reload before reordering")
+        now = time.time()
+        for position, queue_id in enumerate(ids):
+            conn.execute(
+                "UPDATE code_message_queue SET position = ?, updated_at = ? WHERE id = ? AND session_id = ?",
+                (position, now, queue_id, session_id),
+            )
+    return {"ok": True}
 
 
 @app.get("/api/sessions")
@@ -8341,12 +8959,12 @@ async def prompt_optimizer_feedback(req: PromptOptimizerFeedbackRequest):
 
 
 @app.get("/api/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(session_id: str, history_turns: int = Query(default=0, ge=0, le=500)):
     with db_connect() as conn:
         row = conn.execute(
             """
             SELECT id, title, cwd, created_at, updated_at, pinned, archived, tags,
-                   workspace_mode, runtime_origin, native_user_offset
+                   workspace_mode, runtime_origin, native_user_offset, auto_approve
             FROM sessions WHERE id = ?
             """,
             (session_id,),
@@ -8354,7 +8972,8 @@ async def get_session(session_id: str):
     if row is None:
         raise HTTPException(status_code=404, detail="session not found")
     data = _row_to_session(row)
-    data["events"] = load_events(session_id)
+    page = session_event_page(load_events(session_id), history_turns)
+    data.update(page)
     data["feedback"] = load_feedback_map(session_id)
     data["compact_backups"] = [
         {"name": p.name, "created_at": p.stat().st_mtime, "size": p.stat().st_size}
@@ -8499,6 +9118,8 @@ async def delete_session(request: Request, session_id: str):
         conn.execute("DELETE FROM session_usage WHERE session_id = ?", (session_id,))
         conn.execute("DELETE FROM tool_calls WHERE session_id = ?", (session_id,))
         conn.execute("DELETE FROM message_feedback WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM code_message_queue WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM code_turn_requests WHERE session_id = ?", (session_id,))
         conn.execute("DELETE FROM memories WHERE scope = ?", (f"session:{session_id}",))
     await discard_event_checkpoints(events, row["cwd"] if row else "")
     path = HISTORY_DIR / f"{session_id}.jsonl"
@@ -8521,6 +9142,8 @@ async def clear_session(request: Request, session_id: str):
     await discard_event_checkpoints(events, row["cwd"] if row else "")
     save_events(session_id, [])
     with db_connect() as conn:
+        conn.execute("DELETE FROM code_message_queue WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM code_turn_requests WHERE session_id = ?", (session_id,))
         conn.execute(
             """
             UPDATE sessions
