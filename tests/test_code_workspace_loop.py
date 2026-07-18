@@ -1,3 +1,5 @@
+import asyncio
+import os
 import tempfile
 import unittest
 import uuid
@@ -168,6 +170,67 @@ class CodeWorkspaceLoopTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("", payload["content"])
         self.assertEqual("binary", payload["encoding"])
 
+    async def test_code_tree_is_lazy_searchable_and_project_scoped(self):
+        root = Path(self.cwd)
+        (root / "src").mkdir()
+        (root / "src" / "main.py").write_text("print('ok')\n", encoding="utf-8")
+        (root / ".hidden.py").write_text("hidden\n", encoding="utf-8")
+        (root / "node_modules").mkdir()
+        (root / "node_modules" / "skip.js").write_text("skip\n", encoding="utf-8")
+
+        listing = await server.read_code_tree(self.session_id, path="", q="", show_hidden=False)
+        self.assertEqual(["src"], [item["name"] for item in listing["entries"]])
+        children = await server.read_code_tree(self.session_id, path="src", q="", show_hidden=False)
+        self.assertEqual(["src/main.py"], [item["path"] for item in children["entries"]])
+        searched = await server.read_code_tree(self.session_id, path="", q="main", show_hidden=False)
+        self.assertEqual(["src/main.py"], [item["path"] for item in searched["entries"]])
+        with self.assertRaises(HTTPException) as raised:
+            await server.read_code_tree(self.session_id, path="../", q="", show_hidden=False)
+        self.assertEqual(400, raised.exception.status_code)
+
+    def test_directory_picker_lists_directories_and_normalizes_selected_path(self):
+        root = Path(self.cwd)
+        (root / "alpha").mkdir()
+        (root / "beta").mkdir()
+        (root / ".hidden").mkdir()
+        (root / "notes.txt").write_text("not a directory", encoding="utf-8")
+
+        payload = server._directory_picker_payload(str(root))
+        self.assertEqual(str(root.resolve()), payload["path"])
+        self.assertEqual(["alpha", "beta"], [item["name"] for item in payload["entries"]])
+        self.assertTrue(all(Path(item["path"]).is_absolute() for item in payload["entries"]))
+
+        hidden_payload = server._directory_picker_payload(str(root), show_hidden=True)
+        self.assertEqual([".hidden", "alpha", "beta"], [item["name"] for item in hidden_payload["entries"]])
+        with self.assertRaises(HTTPException) as raised:
+            server._directory_picker_payload(str(root / "missing"))
+        self.assertEqual(404, raised.exception.status_code)
+
+    @unittest.skipIf(os.name == "nt", "PTY terminal requires POSIX")
+    async def test_code_terminal_has_independent_runtime_ownership_and_streams_output(self):
+        runtime = await server._spawn_code_terminal(self.session_id, self.cwd, 80, 24)
+        queue = asyncio.Queue()
+        runtime.listeners.add(queue)
+        try:
+            self.assertNotIn(self.session_id, server._running_processes)
+            self.assertNotIn(self.session_id, server._agent_sdk_running_sessions)
+            server._write_code_terminal(runtime, "printf 'PTY_OK\\n'\r")
+            output = bytearray()
+            for _ in range(12):
+                item = await asyncio.wait_for(queue.get(), timeout=2.0)
+                if isinstance(item, bytes):
+                    output.extend(item)
+                if b"PTY_OK" in output:
+                    break
+            self.assertIn(b"PTY_OK", output)
+            payload = server._code_terminal_payload(runtime)
+            self.assertEqual(self.session_id, payload["session_id"])
+            self.assertEqual(str(Path(self.cwd).resolve()), payload["cwd"])
+        finally:
+            runtime.listeners.discard(queue)
+            await server._terminate_code_terminal(runtime)
+            server._code_terminals.pop(runtime.id, None)
+
 
 class CodeWorkspaceStaticContractTest(unittest.TestCase):
     def test_light_context_stays_default_on_and_permission_copy_is_current(self):
@@ -218,6 +281,37 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         self.assertIn('def _resolve_code_file_target', server_source)
         self.assertIn('@app.get("/api/sessions/{session_id}/code-file")', server_source)
         self.assertIn('_require_not_mobile_access(request, "远程设备不能启动电脑上的本机编辑器")', server_source)
+
+    def test_code_tree_and_terminal_are_code_only_inspector_features(self):
+        source = (Path(__file__).parents[1] / "static" / "index.html").read_text(encoding="utf-8")
+        for marker in [
+            'id="cwCodeTree"',
+            'id="cwCodeTreeToggle"',
+            'id="cwCodeTerminalNew"',
+            'function loadCodeTree',
+            'function createCodeTerminal',
+            '/terminals/${encodeURIComponent',
+        ]:
+            self.assertIn(marker, source)
+        server_source = (Path(__file__).parents[1] / "claude_web" / "server.py").read_text(encoding="utf-8")
+        self.assertIn('@app.get("/api/sessions/{session_id}/code-tree")', server_source)
+        self.assertIn('@app.websocket("/api/sessions/{session_id}/terminals/{terminal_id}/ws")', server_source)
+        self.assertIn('_terminate_session_code_terminals(session_id)', server_source)
+
+    def test_project_manager_has_server_directory_picker(self):
+        source = (Path(__file__).parents[1] / "static" / "index.html").read_text(encoding="utf-8")
+        for marker in [
+            'id="cwProjectManagerBrowse"',
+            'id="cwDirectoryPicker"',
+            'function loadProjectDirectory',
+            "'/api/directories?'",
+            "'/api/projects/register'",
+            '选择此目录',
+        ]:
+            self.assertIn(marker, source)
+        server_source = (Path(__file__).parents[1] / "claude_web" / "server.py").read_text(encoding="utf-8")
+        self.assertIn('@app.get("/api/directories")', server_source)
+        self.assertIn('@app.post("/api/projects/register")', server_source)
 
 
 if __name__ == "__main__":

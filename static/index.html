@@ -22,6 +22,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- Interactive Code terminal -->
 <style>
   /* ===== Design Tokens ===== */
   :root {
@@ -2655,6 +2656,17 @@
     color: #8f877f;
     font-size: 13px;
   }
+  .cfg-hooks-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .cfg-hooks-toolbar .cfg-info {
+    min-width: 0;
+    flex: 1;
+    margin-bottom: 0;
+  }
   .cfg-add-btn {
     margin-top: 12px;
     min-height: 36px;
@@ -2671,6 +2683,34 @@
     cursor: pointer;
   }
   .cfg-add-btn:hover { color: #c46136; border-color: #c46136; background: #fffaf7; }
+  .cfg-hook-add-btn {
+    flex: 0 0 auto;
+    min-height: 38px;
+    margin-top: 0;
+    gap: 7px;
+    border-style: solid;
+    border-color: #d9d1c9;
+    background: #fff;
+    color: #403b36;
+    box-shadow: 0 1px 2px rgba(47, 40, 34, .05);
+  }
+  .cfg-hook-add-btn svg {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+  }
+  .cfg-hook-add-btn:hover {
+    border-color: #c8bdb3;
+    background: #f7f4f1;
+    color: #2f2c29;
+  }
+  @media (max-width: 640px) {
+    .cfg-hooks-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .cfg-hook-add-btn { align-self: flex-end; }
+  }
   .cfg-skill-card {
     display: flex;
     gap: 12px;
@@ -3169,8 +3209,8 @@
   }
   .composer-btn:hover { background: var(--surface-2); color: var(--text); }
   .composer-btn.toolbar-btn-active { background: var(--accent-soft) !important; color: var(--accent) !important; border-color: transparent !important; }
-  .composer-btn-stop { background: #ef4444; color: white; }
-  .composer-btn-stop:hover { background: #dc2626; color: white; }
+  .composer-btn-stop { width: 36px; height: 36px; border-radius: 10px; background: transparent; color: #3d3935; }
+  .composer-btn-stop:hover { background: #f1eeeb; color: #1a1816; }
   .composer-send {
     width: 36px; height: 36px; border-radius: 10px;
     display: inline-flex; align-items: center; justify-content: center;
@@ -3955,7 +3995,7 @@
     top: clamp(92px, 18vh, 150px);
     left: calc(var(--cw-sidebar-width) + ((100vw - var(--cw-sidebar-width)) / 2));
     z-index: 75;
-    width: min(520px, calc(100vw - var(--cw-sidebar-width) - 88px));
+    width: min(560px, calc(100vw - var(--cw-sidebar-width) - 88px));
     max-height: min(620px, calc(100vh - 78px));
     overflow: hidden;
     transform: translateX(-50%);
@@ -4002,7 +4042,7 @@
   }
   .cw-project-add-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 8px;
   }
   .cw-project-add-row input,
@@ -4036,6 +4076,172 @@
   .cw-project-add-btn:hover {
     background: #efede9;
   }
+  .cw-project-browse-btn {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 11px;
+    border: 1px solid #ded8d1;
+    border-radius: 10px;
+    background: #fff;
+    color: #5f5953;
+    font-size: 12.5px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .cw-project-browse-btn svg { width: 15px; height: 15px; }
+  .cw-project-browse-btn:hover { background: #f7f5f2; color: #2f2c29; }
+  .cw-directory-picker {
+    display: grid;
+    height: min(430px, calc(100vh - 250px));
+    min-height: 320px;
+    overflow: hidden;
+    border: 1px solid #e6e0d9;
+    border-radius: 13px;
+    background: #fff;
+    grid-template-rows: auto auto minmax(180px, 1fr) auto;
+  }
+  .cw-directory-picker.hidden { display: none; }
+  .cw-project-manager.directory-open .cw-project-add-row,
+  .cw-project-manager.directory-open .cw-project-manager-list,
+  .cw-project-manager.directory-open .cw-project-manager-meta { display: none; }
+  .cw-directory-shortcuts {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 9px 6px;
+    overflow-x: auto;
+  }
+  .cw-directory-shortcut,
+  .cw-directory-back {
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 8px;
+    background: #f5f3f0;
+    color: #6e6862;
+    font-size: 11.5px;
+    font-weight: 620;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .cw-directory-shortcut:hover,
+  .cw-directory-back:hover { background: #ece9e5; color: #2f2c29; }
+  .cw-directory-shortcut svg,
+  .cw-directory-back svg { width: 14px; height: 14px; }
+  .cw-directory-toolbar {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    padding: 0 9px 8px;
+    border-bottom: 1px solid #eee9e3;
+  }
+  .cw-directory-back {
+    width: 30px;
+    padding: 0;
+    background: transparent;
+  }
+  .cw-directory-back:disabled { opacity: .35; cursor: default; }
+  .cw-directory-path {
+    min-width: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    color: #6e6862;
+    font: 580 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    scrollbar-width: none;
+  }
+  .cw-directory-path::-webkit-scrollbar { display: none; }
+  .cw-directory-path-segment {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+  .cw-directory-path-segment:hover { background: #f3f1ee; color: #2f2c29; }
+  .cw-directory-path-separator { color: #bbb4ad; }
+  .cw-directory-list {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 5px;
+  }
+  .cw-directory-item {
+    width: 100%;
+    min-height: 38px;
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #373431;
+    text-align: left;
+    cursor: pointer;
+  }
+  .cw-directory-item:hover,
+  .cw-directory-item:focus-visible { background: #f1efec; outline: 0; }
+  .cw-directory-item > svg:first-child { width: 16px; height: 16px; color: #77716b; }
+  .cw-directory-item > svg:last-child { width: 14px; height: 14px; color: #b0aaa4; }
+  .cw-directory-item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+    font-weight: 610;
+  }
+  .cw-directory-empty {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    color: #918a83;
+    font-size: 12px;
+    text-align: center;
+  }
+  .cw-directory-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 7px;
+    padding: 9px;
+    border-top: 1px solid #eee9e3;
+    background: #fbfaf9;
+  }
+  .cw-directory-selection {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #8b847d;
+    font: 540 10.5px/1.3 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+  .cw-directory-action {
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid #ded8d1;
+    border-radius: 9px;
+    background: #fff;
+    color: #5f5953;
+    font-size: 11.5px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .cw-directory-action:hover { background: #f2efec; color: #2f2c29; }
+  .cw-directory-action.primary { border-color: #2f2c29; background: #2f2c29; color: #fff; }
+  .cw-directory-action.primary:hover { border-color: #1f1d1b; background: #1f1d1b; }
   .cw-project-manager-list {
     display: grid;
     gap: 2px;
@@ -4143,6 +4349,16 @@
       width: calc(100vw - 32px);
       max-height: calc(100vh - 96px);
     }
+    .cw-project-add-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .cw-project-browse-btn { width: 36px; padding: 0; }
+    .cw-project-browse-btn span { display: none; }
+    .cw-project-add-btn { grid-column: 1 / -1; }
+    .cw-directory-picker {
+      height: min(470px, calc(100vh - 190px));
+      min-height: min(300px, calc(100vh - 190px));
+    }
+    .cw-directory-footer { grid-template-columns: minmax(0, 1fr) auto; }
+    .cw-directory-selection { grid-column: 1 / -1; }
     .cw-branch-panel {
       width: calc(100vw - 32px);
     }
@@ -4283,12 +4499,15 @@
     transform: none !important;
   }
   .composer-btn-stop {
-    background: #4b4641 !important;
-    color: #fff !important;
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 12px !important;
+    background: transparent !important;
+    color: #3d3935 !important;
   }
   .composer-btn-stop:hover {
-    background: #34312e !important;
-    color: #fff !important;
+    background: #f1eeeb !important;
+    color: #1a1816 !important;
   }
   .cw-local-footer {
     min-height: 66px !important;
@@ -6891,7 +7110,7 @@
   .cw-code-diagnostic-title { font-size:13px; font-weight:700; }
   .cw-code-diagnostic-copy { margin-top:4px; color:var(--text-muted); font-size:12px; line-height:1.55; }
   .cw-code-diagnostic-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-  .cw-code-diagnostic-actions button,.cw-code-compact-btn { min-height:36px; padding:0 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--text); font:600 11px/1 inherit; cursor:pointer; }
+  .cw-code-diagnostic-actions button,.cw-code-compact-btn { min-height:30px; padding:0 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font:550 11px/1 inherit; cursor:pointer; transition:all .15s; }
   .cw-code-diagnostic-actions button:hover,.cw-code-compact-btn:hover { border-color:var(--border-strong); background:var(--surface-2); }
 
   .cw-code-list { display:flex; flex-direction:column; gap:7px; max-height:48vh; overflow:auto; }
@@ -6899,19 +7118,21 @@
   .cw-code-list-row strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-size:12px; }
   .cw-code-list-row small { display:block; margin-top:3px; color:var(--text-muted); font-size:10.5px; }
   .cw-code-list-actions { display:flex; gap:6px; }
-  .cw-code-list-actions button { min-height:36px; padding:0 11px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--text); font:600 11px/1 inherit; cursor:pointer; }
+  .cw-code-list-actions button { min-height:30px; padding:0 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); font:550 11px/1 inherit; cursor:pointer; transition:all .15s; }
   .cw-code-list-actions button.danger { color:#c83a35; }
   .cw-code-form-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-top:12px; }
-  .cw-code-form-row input { min-height:42px; padding:0 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); font-size:13px; }
-  .cw-code-form-row button { min-height:42px; padding:0 14px; border:0; border-radius:10px; background:#2f2c29; color:#fff; font-weight:650; cursor:pointer; }
+  .cw-code-form-row input { min-height:38px; padding:0 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--text); font-size:13px; }
+  .cw-code-form-row button { min-height:38px; padding:0 16px; border:0; border-radius:9px; background:#2f2c29; color:#fff; font-size:12.5px; font-weight:600; cursor:pointer; transition:all .15s; }
+  .cw-code-form-row button:hover { background:#1f1d1b; }
   :root.dark .cw-code-form-row button { background:#eee9e3; color:#24211f; }
+  :root.dark .cw-code-form-row button:hover { background:#fff; }
   @media (max-width:640px) {
     .cw-conversation-search { top:58px; }
     .cw-context-overview { grid-template-columns:1fr; }
     .cw-context-row { grid-template-columns:minmax(90px,1fr) auto; }
     .cw-context-row-bar { display:none; }
     .cw-code-list-row { grid-template-columns:1fr; }
-    .cw-code-list-actions button,.cw-code-compact-btn { min-height:44px; }
+    .cw-code-list-actions button,.cw-code-compact-btn { min-height:36px; }
   }
 
   /* Code source / diff inspector: dense desktop split view, full-screen mobile drawer. */
@@ -6929,6 +7150,7 @@
   .cw-code-inspector-tab.active { border-color:var(--border); background:var(--bg); color:var(--text); }
   .cw-code-inspector-tab-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:600 11.5px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
   .cw-code-inspector-tab-state { width:7px; height:7px; flex:0 0 auto; border-radius:999px; background:#d28b2c; }
+  .cw-code-inspector-tab-state.terminal-exited { background:#78716c; }
   .cw-code-inspector-tab-close,.cw-code-inspector-close { display:grid; place-items:center; min-width:30px; min-height:30px; padding:0; border:0; border-radius:7px; background:transparent; color:var(--text-muted); cursor:pointer; }
   .cw-code-inspector-tab-close:hover,.cw-code-inspector-close:hover { background:var(--surface-3); color:var(--text); }
   .cw-code-inspector-close { position:absolute; top:8px; right:8px; z-index:4; }
@@ -6937,13 +7159,50 @@
   .cw-code-inspector-breadcrumb span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .cw-code-inspector-breadcrumb strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font:650 11.5px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
   .cw-code-inspector-actions { display:flex; align-items:center; flex:0 0 auto; gap:5px; }
-  .cw-code-inspector-action,.cw-code-inspector-mode button { min-height:32px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text-muted); font:600 11px/1 inherit; cursor:pointer; }
-  .cw-code-inspector-action.icon { width:34px; padding:0; }
+  .cw-code-inspector-action,.cw-code-inspector-mode button { min-height:28px; padding:0 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text-muted); font:550 11px/1 inherit; cursor:pointer; transition:all .15s; }
+  .cw-code-inspector-action.icon { width:30px; padding:0; }
   .cw-code-inspector-action:hover,.cw-code-inspector-action:focus-visible,.cw-code-inspector-mode button:hover { border-color:var(--border-strong); color:var(--text); outline:0; }
-  .cw-code-inspector-mode { display:flex; gap:2px; padding:2px; border:1px solid var(--border); border-radius:9px; background:var(--surface-2); }
-  .cw-code-inspector-mode button { min-height:28px; padding:0 9px; border:0; background:transparent; }
-  .cw-code-inspector-mode button.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(24,20,17,.09); }
-  .cw-code-inspector-body { position:relative; min-height:0; flex:1; overflow:auto; background:var(--bg); overscroll-behavior:contain; }
+  .cw-code-inspector-action.active { border-color:color-mix(in srgb,var(--accent) 35%,var(--border)); background:var(--accent-soft); color:var(--accent); }
+  .cw-code-inspector-mode { display:flex; gap:1px; padding:2px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); }
+  .cw-code-inspector-mode button { min-height:26px; padding:0 9px; border:0; background:transparent; }
+  .cw-code-inspector-mode button.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(24,20,17,.09); border-radius:6px; }
+  .cw-code-inspector-workspace { position:relative; display:flex; min-height:0; flex:1; overflow:hidden; }
+  .cw-code-inspector-body { position:relative; min-width:0; min-height:0; flex:1; overflow:auto; background:var(--bg); overscroll-behavior:contain; }
+  .cw-code-tree { display:none; width:238px; min-width:190px; max-width:42%; flex:0 0 auto; flex-direction:column; overflow:hidden; border-right:1px solid var(--border); background:var(--surface-2); }
+  .cw-code-tree.open { display:flex; }
+  .cw-code-tree-head { display:grid; grid-template-columns:minmax(0,1fr) 30px; gap:5px; padding:7px; border-bottom:1px solid var(--border); }
+  .cw-code-tree-search { width:100%; min-width:0; height:34px; padding:0 9px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:11.5px; }
+  .cw-code-tree-search:focus-visible { outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent); outline-offset:0; border-color:var(--accent); }
+  .cw-code-tree-refresh { display:grid; place-items:center; align-self:center; width:30px; height:30px; padding:0; border:1px solid transparent; border-radius:8px; background:transparent; color:var(--text-subtle); cursor:pointer; transition:background-color .14s ease,border-color .14s ease,color .14s ease,box-shadow .14s ease; }
+  .cw-code-tree-refresh svg { width:15px; height:15px; }
+  .cw-code-tree-refresh:hover { color:var(--text-muted); border-color:var(--border); background:var(--surface); }
+  .cw-code-tree-refresh:focus-visible { color:var(--text); border-color:var(--border-strong); outline:0; box-shadow:0 0 0 3px color-mix(in srgb,#8b8178 28%,transparent); }
+  .cw-code-tree-body { min-height:0; flex:1; overflow:auto; padding:5px; }
+  .cw-code-tree-empty { padding:18px 10px; color:var(--text-muted); text-align:center; font-size:11px; line-height:1.55; }
+  .cw-code-tree-row { display:grid; grid-template-columns:14px 16px minmax(0,1fr) auto; align-items:center; gap:5px; width:100%; min-height:30px; padding:0 6px; border:0; border-radius:6px; background:transparent; color:var(--text-muted); text-align:left; cursor:pointer; }
+  .cw-code-tree-row:hover,.cw-code-tree-row:focus-visible,.cw-code-tree-row.active { background:var(--surface); color:var(--text); outline:0; }
+  .cw-code-tree-row svg { width:14px; height:14px; stroke:currentColor; }
+  .cw-code-tree-chevron { width:14px; color:var(--text-subtle); text-align:center; font-size:10px; transition:transform .16s ease; }
+  .cw-code-tree-row.expanded .cw-code-tree-chevron { transform:rotate(90deg); }
+  .cw-code-tree-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 11.5px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .cw-code-tree-status { min-width:14px; font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace; text-align:center; }
+  .cw-code-tree-status.M,.cw-code-tree-status.R { color:#d97706; }
+  .cw-code-tree-status.A { color:#16834b; }
+  .cw-code-tree-status.D { color:#c83a35; }
+  .cw-code-tree-status.dot { color:var(--text-subtle); }
+  .cw-code-terminal-shell { display:flex; min-height:100%; height:100%; flex-direction:column; overflow:hidden; background:#0c0a09; color:#f5f5f4; }
+  .cw-code-terminal-toolbar { display:flex; align-items:center; gap:5px; min-height:40px; padding:5px 8px; border-bottom:1px solid #292524; background:#1c1917; }
+  .cw-code-terminal-toolbar strong { min-width:0; flex:1; overflow:hidden; color:#f5f5f4; text-overflow:ellipsis; white-space:nowrap; font:600 11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .cw-code-terminal-state { display:flex; align-items:center; gap:5px; color:#a8a29e; font-size:10.5px; }
+  .cw-code-terminal-state::before { content:""; width:7px; height:7px; border-radius:999px; background:#22c55e; }
+  .cw-code-terminal-state.exited::before,.cw-code-terminal-state.error::before { background:#ef4444; }
+  .cw-code-terminal-toolbar button { min-height:30px; padding:0 9px; border:1px solid #44403c; border-radius:7px; background:#292524; color:#d6d3d1; font:600 10.5px/1 inherit; cursor:pointer; }
+  .cw-code-terminal-toolbar button:hover,.cw-code-terminal-toolbar button:focus-visible { border-color:#78716c; color:#fff; outline:0; }
+  .cw-code-terminal-toolbar button.danger { color:#fca5a5; }
+  .cw-code-terminal-mount { min-height:0; flex:1; padding:8px 7px 5px; overflow:hidden; }
+  .cw-code-terminal-mount .xterm { height:100%; }
+  .cw-code-terminal-mount .xterm-viewport { overscroll-behavior:contain; }
+  .cw-code-terminal-fallback { width:100%; height:100%; margin:0; padding:10px; overflow:auto; border:0; outline:0; background:#0c0a09; color:#e7e5e4; white-space:pre-wrap; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
   .cw-code-inspector-empty,.cw-code-inspector-error { display:grid; place-items:center; min-height:100%; padding:40px; color:var(--text-muted); text-align:center; font-size:12px; line-height:1.6; }
   .cw-code-inspector-error { color:#bb3d38; }
   .cw-code-source { min-width:max-content; padding:8px 0 32px; font:12px/1.62 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; tab-size:2; }
@@ -6983,8 +7242,288 @@
     .cw-code-inspector-action.icon { width:44px; }
     .cw-code-inspector-breadcrumb { font-size:10.5px; }
     .cw-code-source { font-size:11.5px; }
+    .cw-code-tree { position:absolute; z-index:7; inset:0; width:100%; min-width:0; max-width:none; border-right:0; }
+    .cw-code-tree-head { grid-template-columns:minmax(0,1fr) 44px; padding:8px; }
+    .cw-code-tree-search { height:44px; }
+    .cw-code-tree-refresh { width:44px; height:44px; }
+    .cw-code-tree-row { min-height:44px; padding:0 10px; }
+    .cw-code-terminal-toolbar { min-height:52px; padding:4px 7px; }
+    .cw-code-terminal-toolbar button { min-height:44px; padding:0 10px; }
   }
-  @media (prefers-reduced-motion:reduce) { #mainPane { transition:none; } }
+  @media (prefers-reduced-motion:reduce) { #mainPane { transition:none; } .cw-code-tree-chevron { transition:none; } }
+
+  /* ===== 2026 UI polish: Claude-like controls, visual-only ===== */
+  :root {
+    --cw-control-primary:#2f2b28;
+    --cw-control-primary-hover:#211e1c;
+    --cw-control-primary-text:#fff;
+    --cw-control-surface:color-mix(in srgb,var(--surface) 88%,var(--surface-2));
+    --cw-control-surface-hover:color-mix(in srgb,var(--surface-2) 82%,var(--surface));
+    --cw-control-border:color-mix(in srgb,var(--border-strong) 48%,var(--border));
+    --cw-control-ring:color-mix(in srgb,#8b8178 34%,transparent);
+    --cw-control-radius:9px;
+    --cw-control-height:34px;
+  }
+  :root.dark {
+    --cw-control-primary:#eee9e3;
+    --cw-control-primary-hover:#fff;
+    --cw-control-primary-text:#24211f;
+    --cw-control-surface:color-mix(in srgb,var(--surface) 84%,var(--surface-2));
+    --cw-control-surface-hover:color-mix(in srgb,var(--surface-2) 72%,#fff 4%);
+    --cw-control-ring:color-mix(in srgb,#d6d0ca 36%,transparent);
+  }
+
+  .btn,
+  .cw-code-compact-btn,
+  .cw-code-list-actions button,
+  .cw-code-diagnostic-actions button,
+  .plan-card-actions button,
+  .notify-actions button,
+  .cfg-actionbar button {
+    min-height:var(--cw-control-height);
+    padding:0 12px;
+    border-radius:var(--cw-control-radius);
+    font-family:inherit;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:-.005em;
+    line-height:1;
+    transition:background-color .14s ease,border-color .14s ease,color .14s ease,box-shadow .14s ease,opacity .14s ease;
+  }
+  .btn-primary {
+    border-color:var(--cw-control-primary);
+    background:var(--cw-control-primary);
+    color:var(--cw-control-primary-text);
+    box-shadow:0 1px 2px rgba(31,27,24,.12);
+  }
+  .btn-primary:hover {
+    border-color:var(--cw-control-primary-hover);
+    background:var(--cw-control-primary-hover);
+    box-shadow:0 2px 5px rgba(31,27,24,.14);
+  }
+  .btn-soft,
+  .cw-code-compact-btn,
+  .cw-code-list-actions button,
+  .cw-code-diagnostic-actions button {
+    border-color:var(--cw-control-border);
+    background:var(--cw-control-surface);
+    color:var(--text);
+  }
+  .btn-soft:hover,
+  .cw-code-compact-btn:hover,
+  .cw-code-list-actions button:hover,
+  .cw-code-diagnostic-actions button:hover {
+    border-color:var(--border-strong);
+    background:var(--cw-control-surface-hover);
+  }
+  .btn:focus-visible,
+  .cw-code-compact-btn:focus-visible,
+  .cw-code-list-actions button:focus-visible,
+  .cw-code-diagnostic-actions button:focus-visible,
+  .plan-card-actions button:focus-visible,
+  .notify-actions button:focus-visible,
+  .cfg-actionbar button:focus-visible {
+    outline:0;
+    box-shadow:0 0 0 3px var(--cw-control-ring);
+  }
+  .btn:disabled,
+  .cw-code-compact-btn:disabled,
+  .cw-code-list-actions button:disabled,
+  .cw-code-diagnostic-actions button:disabled {
+    cursor:not-allowed;
+    opacity:.48;
+    box-shadow:none;
+  }
+
+  /* Chat and Code share the same compact composer controls. */
+  .composer {
+    border-color:color-mix(in srgb,#b8ada3 42%,var(--border)) !important;
+    box-shadow:0 10px 30px rgba(45,38,32,.065) !important;
+  }
+  .composer:focus-within {
+    border-color:color-mix(in srgb,#8b8178 62%,var(--border)) !important;
+    box-shadow:0 0 0 3px color-mix(in srgb,#8b8178 14%,transparent),0 12px 34px rgba(45,38,32,.075) !important;
+  }
+  .composer-btn {
+    width:32px !important;
+    height:32px !important;
+    border-radius:9px !important;
+    color:var(--text-muted);
+    transition:background-color .14s ease,color .14s ease,box-shadow .14s ease !important;
+  }
+  .composer-btn:hover { background:var(--cw-control-surface-hover); color:var(--text); }
+  .composer-btn:focus-visible,
+  #cwComposerSettingsBtn:focus-visible,
+  .composer-send:focus-visible {
+    outline:0;
+    box-shadow:0 0 0 3px var(--cw-control-ring) !important;
+  }
+  #cwComposerSettingsBtn {
+    min-height:34px !important;
+    padding:0 9px !important;
+    border:0 !important;
+    border-radius:9px !important;
+    background:transparent !important;
+    color:var(--text) !important;
+    font-size:13px !important;
+    font-weight:650 !important;
+  }
+  #cwComposerSettingsBtn:hover,
+  #cwComposerSettingsBtn[aria-expanded="true"] { background:var(--cw-control-surface-hover) !important; }
+  #cwComposerSettingsBtn .cw-mode-trigger-caret { width:14px; height:14px; color:var(--text-subtle); }
+  .composer-send {
+    width:36px !important;
+    height:36px !important;
+    border-radius:11px !important;
+    background:var(--cw-control-primary) !important;
+    color:var(--cw-control-primary-text) !important;
+    box-shadow:0 1px 2px rgba(31,27,24,.13) !important;
+    transition:background-color .14s ease,box-shadow .14s ease,opacity .14s ease !important;
+  }
+  .composer-send:hover {
+    background:var(--cw-control-primary-hover) !important;
+    color:var(--cw-control-primary-text) !important;
+    box-shadow:0 3px 8px rgba(31,27,24,.16) !important;
+    transform:none !important;
+  }
+  .composer-send:active { box-shadow:0 1px 2px rgba(31,27,24,.12) !important; }
+  .composer-send:disabled {
+    background:var(--surface-3) !important;
+    color:var(--text-subtle) !important;
+    box-shadow:none !important;
+    opacity:.78;
+  }
+  .composer-btn-stop {
+    width:36px !important;
+    height:36px !important;
+    border:1px solid #202428 !important;
+    border-radius:11px !important;
+    background:#202428 !important;
+    color:#fff !important;
+    box-shadow:0 1px 2px rgba(31,27,24,.13) !important;
+  }
+  .composer-btn-stop:hover { border-color:#15191d !important; background:#15191d !important; color:#fff !important; }
+  .composer-btn-stop svg { width:20px !important; height:20px !important; }
+  :root.dark .composer-btn-stop { border-color:#202428 !important; background:#202428 !important; color:#fff !important; }
+  :root.dark .composer-btn-stop:hover { border-color:#15191d !important; background:#15191d !important; color:#fff !important; }
+
+  /* Modal surfaces and context usage actions. */
+  .modal-backdrop { background:rgba(35,31,28,.48); backdrop-filter:blur(7px); }
+  .modal-box:not(.settings-modal) {
+    border:1px solid color-mix(in srgb,var(--border-strong) 40%,transparent);
+    border-radius:18px;
+    box-shadow:0 28px 72px rgba(28,25,23,.18),0 6px 18px rgba(28,25,23,.07);
+  }
+  #cwContextUsageModal .modal-box { width:min(680px,calc(100vw - 32px)); max-width:680px !important; }
+  #cwContextUsageModal .cw-code-review-head {
+    min-height:68px;
+    padding:16px 20px;
+    background:var(--surface);
+  }
+  #cwContextUsageModal .cw-code-review-title { font-size:16px; }
+  #cwContextUsageModal .cw-code-review-sub { margin-top:2px; font-size:11.5px; }
+  #cwContextUsageModal .cw-code-review-body { padding:18px 20px 20px; }
+  #cwContextUsageModal .cw-context-overview { gap:8px; margin-bottom:12px; }
+  #cwContextUsageModal .cw-context-metric {
+    min-height:86px;
+    padding:13px 14px;
+    border-color:color-mix(in srgb,var(--border) 74%,transparent);
+    border-radius:11px;
+    background:color-mix(in srgb,var(--surface-2) 72%,var(--surface));
+  }
+  #cwContextUsageModal .cw-context-metric span { font-size:10.5px; }
+  #cwContextUsageModal .cw-context-metric strong { margin-top:6px; font-size:18px; letter-spacing:-.02em; }
+  #cwContextUsageModal .cw-context-list { max-height:36vh; }
+  #cwContextUsageModal .cw-activity-empty { padding:18px 12px; }
+  #cwContextUsageModal #cwContextCompactBtn,
+  #cwContextUsageModal #cwContextRefreshBtn { min-height:34px; padding:0 12px; border-radius:9px; font-size:12px; }
+  #cwContextUsageModal #cwContextCompactBtn {
+    border-color:var(--cw-control-primary);
+    background:var(--cw-control-primary);
+    color:var(--cw-control-primary-text);
+    box-shadow:0 1px 2px rgba(31,27,24,.12);
+  }
+  #cwContextUsageModal #cwContextCompactBtn:hover { border-color:var(--cw-control-primary-hover); background:var(--cw-control-primary-hover); }
+  #cwContextUsageModal #cwContextRefreshBtn { background:transparent; }
+
+  /* Code inspector toolbar and file picker. */
+  .cw-code-inspector-head { min-height:44px; padding:5px 9px 5px 12px; gap:8px; }
+  .cw-code-inspector-actions { gap:4px; }
+  .cw-code-inspector-action,
+  .cw-code-inspector-mode button {
+    min-height:30px;
+    padding:0 9px;
+    border-color:var(--cw-control-border);
+    border-radius:8px;
+    background:transparent;
+    color:var(--text-muted);
+    font-size:11px;
+    font-weight:580;
+    transition:background-color .14s ease,border-color .14s ease,color .14s ease,box-shadow .14s ease;
+  }
+  .cw-code-inspector-action.icon { width:32px; padding:0; }
+  .cw-code-inspector-action:hover,
+  .cw-code-inspector-mode button:hover { border-color:var(--border-strong); background:var(--cw-control-surface-hover); color:var(--text); }
+  .cw-code-inspector-action:focus-visible,
+  .cw-code-inspector-mode button:focus-visible { outline:0; box-shadow:0 0 0 3px var(--cw-control-ring); }
+  .cw-code-inspector-mode { gap:1px; padding:2px; border-color:var(--cw-control-border); border-radius:9px; background:var(--surface-2); }
+  .cw-code-inspector-mode button { min-height:26px; border:0; border-radius:6px; }
+  .cw-code-inspector-mode button.active { background:var(--surface); box-shadow:0 1px 3px rgba(24,20,17,.08); }
+  .cw-code-inspector-chooser { padding:18px; }
+  .cw-code-inspector-chooser h3 { margin-bottom:5px; font-size:13px; font-weight:650; }
+  .cw-code-inspector-chooser p { margin-bottom:14px; color:var(--text-subtle); font-size:11.5px; }
+  .cw-code-form-row { gap:8px; margin-top:10px; }
+  .cw-code-form-row input {
+    min-height:40px;
+    padding:0 12px;
+    border-color:var(--cw-control-border);
+    border-radius:10px;
+    background:var(--surface);
+    font-size:12.5px;
+    box-shadow:none;
+  }
+  .cw-code-form-row input:focus {
+    border-color:color-mix(in srgb,#8b8178 64%,var(--border));
+    box-shadow:0 0 0 3px var(--cw-control-ring);
+  }
+  .cw-code-form-row button {
+    min-height:40px;
+    padding:0 15px;
+    border-radius:10px;
+    background:var(--cw-control-primary);
+    color:var(--cw-control-primary-text);
+    font-size:12px;
+    font-weight:650;
+    box-shadow:0 1px 2px rgba(31,27,24,.12);
+    transition:background-color .14s ease,box-shadow .14s ease;
+  }
+  .cw-code-form-row button:hover { background:var(--cw-control-primary-hover); box-shadow:0 2px 5px rgba(31,27,24,.14); }
+  .cw-code-form-row button:focus-visible { outline:0; box-shadow:0 0 0 3px var(--cw-control-ring); }
+
+  @media (max-width:900px) {
+    .composer-btn { width:40px !important; height:40px !important; }
+    .composer-send,.composer-btn-stop { width:44px !important; height:44px !important; border-radius:13px !important; }
+    #cwComposerSettingsBtn { min-height:40px !important; }
+    .cw-code-inspector-head { min-height:54px; }
+    .cw-code-inspector-action { min-height:44px; }
+    .cw-code-inspector-action.icon { width:44px; }
+    .cw-code-inspector-mode button { min-height:38px; }
+  }
+  @media (max-width:640px) {
+    #cwContextUsageModal .modal-box { width:100%; max-width:none !important; border-radius:18px 18px 0 0; }
+    #cwContextUsageModal .cw-code-review-head { min-height:64px; padding:12px 14px 12px 16px; }
+    #cwContextUsageModal .cw-code-review-body { padding:12px 12px calc(16px + env(safe-area-inset-bottom)); }
+    #cwContextUsageModal .cw-context-overview { grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+    #cwContextUsageModal .cw-context-metric { min-height:72px; padding:10px; }
+    #cwContextUsageModal .cw-context-metric strong { font-size:15px; }
+    #cwContextUsageModal #cwContextCompactBtn,
+    #cwContextUsageModal #cwContextRefreshBtn { min-height:44px; }
+    .cw-code-form-row { grid-template-columns:1fr; }
+    .cw-code-form-row input,.cw-code-form-row button { min-height:44px; }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    .btn,.composer-btn,.composer-send,.cw-code-compact-btn,.cw-code-inspector-action,.cw-code-inspector-mode button,.cw-code-form-row button { transition:none !important; }
+  }
 </style>
 </head>
 <body class="h-screen flex">
@@ -7178,14 +7717,33 @@
     <div class="cw-project-manager-head">
       <div class="min-w-0">
         <div class="cw-project-manager-title">项目管理</div>
-        <div class="cw-project-manager-sub">选择当前工作目录，或添加一个本地项目</div>
+        <div class="cw-project-manager-sub" id="cwProjectManagerSub">选择当前工作目录，或添加一个本地项目</div>
       </div>
       <button type="button" id="cwProjectManagerClose" class="cw-project-manager-close" aria-label="关闭项目管理">×</button>
     </div>
     <div class="cw-project-manager-body">
       <div class="cw-project-add-row">
         <input id="cwProjectManagerInput" placeholder="输入项目路径，例如 /Users/heng/claude-web" />
+        <button type="button" id="cwProjectManagerBrowse" class="cw-project-browse-btn" aria-label="浏览目录">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z"/></svg>
+          <span>浏览</span>
+        </button>
         <button type="button" id="cwProjectManagerAdd" class="cw-project-add-btn">添加</button>
+      </div>
+      <div id="cwDirectoryPicker" class="cw-directory-picker hidden" aria-label="选择项目目录">
+        <div id="cwDirectoryShortcuts" class="cw-directory-shortcuts"></div>
+        <div class="cw-directory-toolbar">
+          <button type="button" id="cwDirectoryBack" class="cw-directory-back" aria-label="返回上级目录">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <div id="cwDirectoryPath" class="cw-directory-path"></div>
+        </div>
+        <div id="cwDirectoryList" class="cw-directory-list"></div>
+        <div class="cw-directory-footer">
+          <div id="cwDirectorySelection" class="cw-directory-selection"></div>
+          <button type="button" id="cwDirectoryCancel" class="cw-directory-action">取消</button>
+          <button type="button" id="cwDirectoryChoose" class="cw-directory-action primary">选择此目录</button>
+        </div>
       </div>
       <div id="cwProjectManagerList" class="cw-project-manager-list"></div>
       <div class="cw-project-manager-meta">
@@ -7465,7 +8023,7 @@
           </div>
           <div class="flex items-center gap-1.5">
             <button type="button" id="stopBtn" class="hidden composer-btn composer-btn-stop" title="停止">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>
             </button>
             <button type="submit" id="send" class="composer-send" title="发送 (Enter)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
@@ -7522,6 +8080,8 @@
   <div class="cw-code-inspector-head">
     <div id="cwCodeInspectorBreadcrumb" class="cw-code-inspector-breadcrumb"></div>
     <div class="cw-code-inspector-actions">
+      <button id="cwCodeTreeToggle" class="cw-code-inspector-action" type="button" title="浏览项目文件" aria-expanded="false">文件</button>
+      <button id="cwCodeTerminalNew" class="cw-code-inspector-action" type="button" title="新建终端">终端＋</button>
       <div id="cwCodeInspectorMode" class="cw-code-inspector-mode" aria-label="查看模式">
         <button type="button" data-inspector-mode="source" class="active">源码</button>
         <button type="button" data-inspector-mode="diff">Diff</button>
@@ -7530,7 +8090,16 @@
       <button id="cwCodeInspectorExternal" class="cw-code-inspector-action" type="button" title="用本机编辑器打开">打开⌄</button>
     </div>
   </div>
-  <div id="cwCodeInspectorBody" class="cw-code-inspector-body"><div class="cw-code-inspector-empty">从回答、工具调用或改动列表中打开文件</div></div>
+  <div class="cw-code-inspector-workspace">
+    <aside id="cwCodeTree" class="cw-code-tree" aria-label="项目文件" aria-hidden="true">
+      <div class="cw-code-tree-head">
+        <input id="cwCodeTreeSearch" class="cw-code-tree-search" type="search" autocomplete="off" spellcheck="false" placeholder="搜索项目文件" aria-label="搜索项目文件">
+        <button id="cwCodeTreeRefresh" class="cw-code-tree-refresh" type="button" title="刷新文件树" aria-label="刷新文件树"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+      </div>
+      <div id="cwCodeTreeBody" class="cw-code-tree-body"><div class="cw-code-tree-empty">打开文件浏览器后按需加载项目目录</div></div>
+    </aside>
+    <div id="cwCodeInspectorBody" class="cw-code-inspector-body"><div class="cw-code-inspector-empty">从回答、工具调用、改动列表或文件树中打开文件</div></div>
+  </div>
   <div id="cwCodeInspectorStatus" class="cw-code-inspector-status"><span>Code 项目内只读预览</span><span></span></div>
   <div id="cwCodeInspectorExternalMenu" class="cw-code-inspector-external hidden" role="menu"></div>
 </aside>
@@ -8754,10 +9323,20 @@ const cwWorkspacePresetName = $('cwWorkspacePresetName');
 const cwWorkspacePresetSave = $('cwWorkspacePresetSave');
 const cwProjectManagerPanel = $('cwProjectManagerPanel');
 const cwProjectManagerClose = $('cwProjectManagerClose');
+const cwProjectManagerSub = $('cwProjectManagerSub');
 const cwProjectManagerInput = $('cwProjectManagerInput');
+const cwProjectManagerBrowse = $('cwProjectManagerBrowse');
 const cwProjectManagerAdd = $('cwProjectManagerAdd');
 const cwProjectManagerList = $('cwProjectManagerList');
 const cwProjectPermSelect = $('cwProjectPermSelect');
+const cwDirectoryPicker = $('cwDirectoryPicker');
+const cwDirectoryShortcuts = $('cwDirectoryShortcuts');
+const cwDirectoryBack = $('cwDirectoryBack');
+const cwDirectoryPath = $('cwDirectoryPath');
+const cwDirectoryList = $('cwDirectoryList');
+const cwDirectorySelection = $('cwDirectorySelection');
+const cwDirectoryCancel = $('cwDirectoryCancel');
+const cwDirectoryChoose = $('cwDirectoryChoose');
 const cwBranchPanel = $('cwBranchPanel');
 const cwBranchPanelClose = $('cwBranchPanelClose');
 const cwBranchProjectLabel = $('cwBranchProjectLabel');
@@ -8939,6 +9518,9 @@ const cwCodeInspectorStatus = $('cwCodeInspectorStatus'), cwCodeInspectorMode = 
 const cwCodeInspectorClose = $('cwCodeInspectorClose'), cwCodeInspectorReference = $('cwCodeInspectorReference');
 const cwCodeInspectorExternal = $('cwCodeInspectorExternal'), cwCodeInspectorExternalMenu = $('cwCodeInspectorExternalMenu');
 const cwCodeInspectorResizer = $('cwCodeInspectorResizer');
+const cwCodeTreeToggle = $('cwCodeTreeToggle'), cwCodeTerminalNew = $('cwCodeTerminalNew');
+const cwCodeTree = $('cwCodeTree'), cwCodeTreeSearch = $('cwCodeTreeSearch');
+const cwCodeTreeRefresh = $('cwCodeTreeRefresh'), cwCodeTreeBody = $('cwCodeTreeBody');
 const rewindPreviewModal = $('rewindPreviewModal'), rewindPreviewSummary = $('rewindPreviewSummary');
 const rewindPreviewList = $('rewindPreviewList'), rewindPreviewConfirm = $('rewindPreviewConfirm');
 const cwFileContextChips = $('cwFileContextChips');
@@ -8996,6 +9578,10 @@ function renderMarkdown(text) {
 const codeInspectorState = {
   tabs: [], activeId: '', sessionId: '', pollTimer: null, openingQuery: '',
 };
+const codeTreeState = {
+  open:false, nodes:new Map(), expanded:new Set(), loading:new Set(), query:'', timer:null,
+};
+let codeTerminalAssetPromise = null;
 
 function parseCodeFileTarget(raw) {
   let value = String(raw || '').trim().replace(/^`|`$/g, '');
@@ -9031,18 +9617,22 @@ function setCodeInspectorOpen(open) {
 }
 
 function resetCodeInspector() {
+  codeInspectorState.tabs.forEach(disposeCodeTerminalClient);
   codeInspectorState.tabs = [];
   codeInspectorState.activeId = '';
   codeInspectorState.sessionId = sessionId || '';
   renderCodeInspectorTabs();
-  if (cwCodeInspectorBody) cwCodeInspectorBody.innerHTML = '<div class="cw-code-inspector-empty">从回答、工具调用或改动列表中打开文件</div>';
+  codeTreeState.nodes.clear(); codeTreeState.expanded.clear(); codeTreeState.query = '';
+  if (cwCodeTreeSearch) cwCodeTreeSearch.value = '';
+  setCodeTreeOpen(false);
+  if (cwCodeInspectorBody) cwCodeInspectorBody.innerHTML = '<div class="cw-code-inspector-empty">从回答、工具调用、改动列表或文件树中打开文件</div>';
   setCodeInspectorOpen(false);
 }
 
 function renderCodeInspectorTabs() {
   if (!cwCodeInspectorTabs) return;
-  cwCodeInspectorTabs.innerHTML = codeInspectorState.tabs.map(tab => `<button type="button" class="cw-code-inspector-tab ${tab.id === codeInspectorState.activeId ? 'active' : ''}" role="tab" aria-selected="${tab.id === codeInspectorState.activeId ? 'true' : 'false'}" data-inspector-tab="${escapeHtml(tab.id)}" title="${escapeHtml(tab.path || tab.query || '')}">
-    ${tab.stale ? '<span class="cw-code-inspector-tab-state" title="文件已更新"></span>' : ''}<span class="cw-code-inspector-tab-label">${escapeHtml(pathBasename(tab.path || tab.query || '文件'))}</span><span class="cw-code-inspector-tab-close" role="button" tabindex="0" data-inspector-tab-close="${escapeHtml(tab.id)}" aria-label="关闭">×</span>
+  cwCodeInspectorTabs.innerHTML = codeInspectorState.tabs.map(tab => `<button type="button" class="cw-code-inspector-tab ${tab.id === codeInspectorState.activeId ? 'active' : ''}" role="tab" aria-selected="${tab.id === codeInspectorState.activeId ? 'true' : 'false'}" data-inspector-tab="${escapeHtml(tab.id)}" title="${escapeHtml(tab.kind === 'terminal' ? (tab.cwd || tab.title || '终端') : (tab.path || tab.query || ''))}">
+    ${tab.kind === 'terminal' ? `<span class="cw-code-inspector-tab-state ${tab.status === 'running' ? '' : 'terminal-exited'}" title="${escapeHtml(tab.status || '终端')}"></span>` : (tab.stale ? '<span class="cw-code-inspector-tab-state" title="文件已更新"></span>' : '')}<span class="cw-code-inspector-tab-label">${escapeHtml(tab.kind === 'terminal' ? (tab.title || '终端') : pathBasename(tab.path || tab.query || '文件'))}</span><span class="cw-code-inspector-tab-close" role="button" tabindex="0" data-inspector-tab-close="${escapeHtml(tab.id)}" aria-label="关闭">×</span>
   </button>`).join('');
   cwCodeInspectorTabs.querySelectorAll('[data-inspector-tab]').forEach(button => button.addEventListener('click', event => {
     if (event.target.closest('[data-inspector-tab-close]')) return;
@@ -9055,8 +9645,10 @@ function renderCodeInspectorTabs() {
       if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
       const index = codeInspectorState.tabs.findIndex(tab => tab.id === button.dataset.inspectorTabClose);
       if (index < 0) return;
-      const wasActive = codeInspectorState.activeId === codeInspectorState.tabs[index].id;
+      const closingTab = codeInspectorState.tabs[index];
+      const wasActive = codeInspectorState.activeId === closingTab.id;
       codeInspectorState.tabs.splice(index, 1);
+      closeCodeInspectorTab(closingTab);
       if (wasActive) codeInspectorState.activeId = codeInspectorState.tabs[Math.max(0, index - 1)]?.id || codeInspectorState.tabs[0]?.id || '';
       if (!codeInspectorState.tabs.length) { resetCodeInspector(); return; }
       renderCodeInspector();
@@ -9099,6 +9691,23 @@ function renderCodeInspector() {
   const tab = activeCodeInspectorTab();
   if (!tab || !cwCodeInspectorBody) return;
   setCodeInspectorOpen(true);
+  if (tab.kind === 'terminal') {
+    if (cwCodeInspectorBreadcrumb) cwCodeInspectorBreadcrumb.innerHTML = `<span>终端</span><span>›</span><strong>${escapeHtml(tab.shell || 'shell')}</strong>`;
+    if (cwCodeInspectorMode) cwCodeInspectorMode.classList.add('hidden');
+    cwCodeInspectorReference?.classList.add('hidden');
+    cwCodeInspectorExternal?.classList.add('hidden');
+    cwCodeInspectorBody.innerHTML = renderCodeTerminalShell(tab);
+    const statusLeft = cwCodeInspectorStatus?.firstElementChild;
+    const statusRight = cwCodeInspectorStatus?.lastElementChild;
+    if (statusLeft) statusLeft.textContent = `PTY · ${tab.status === 'running' ? '运行中' : '已结束'}`;
+    if (statusRight) statusRight.textContent = tab.cwd || '';
+    requestAnimationFrame(() => mountCodeTerminal(tab));
+    renderCodeTree();
+    return;
+  }
+  if (cwCodeInspectorMode) cwCodeInspectorMode.classList.remove('hidden');
+  cwCodeInspectorReference?.classList.remove('hidden');
+  cwCodeInspectorExternal?.classList.remove('hidden');
   if (cwCodeInspectorBreadcrumb) cwCodeInspectorBreadcrumb.innerHTML = codeInspectorBreadcrumb(tab.path || tab.query);
   cwCodeInspectorMode?.querySelectorAll('[data-inspector-mode]').forEach(button => button.classList.toggle('active', button.dataset.inspectorMode === tab.mode));
   if (tab.loading) cwCodeInspectorBody.innerHTML = '<div class="cw-code-inspector-empty">正在读取文件…</div>';
@@ -9124,6 +9733,7 @@ function renderCodeInspector() {
     else renderCodeInspector();
   }));
   if (tab.mode === 'source' && tab.lineStart) requestAnimationFrame(() => cwCodeInspectorBody.querySelector(`[data-code-line="${tab.lineStart}"]`)?.scrollIntoView({ block:'center' }));
+  renderCodeTree();
 }
 
 function renderCodeInspectorCandidates(tab, data) {
@@ -9208,7 +9818,7 @@ async function openCodeDiffInspector(path, diff, options = {}) {
 
 async function pollCodeInspectorFile() {
   const tab = activeCodeInspectorTab();
-  if (!codeMode || !sessionId || !tab || tab.loading || document.hidden) return;
+  if (!codeMode || !sessionId || !tab || tab.kind === 'terminal' || tab.loading || document.hidden) return;
   try {
     const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/code-file/stat?` + new URLSearchParams({ path:tab.path }));
     if (!response.ok) return;
@@ -9251,6 +9861,245 @@ function openCodeInspectorPicker() {
   const form = $('cwCodeInspectorPickerForm'), picker = $('cwCodeInspectorPickerInput');
   form?.addEventListener('submit', event => { event.preventDefault(); openCodeFileInspector(picker?.value || ''); });
   requestAnimationFrame(() => picker?.focus());
+}
+
+function codeTreeIcon(type) {
+  return type === 'directory'
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.8A1.8 1.8 0 0 1 4.8 5h4l2 2h8.4A1.8 1.8 0 0 1 21 8.8v8.4a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 17.2z"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5"/></svg>';
+}
+
+function setCodeTreeOpen(open) {
+  codeTreeState.open = !!open && codeMode;
+  cwCodeTree?.classList.toggle('open', codeTreeState.open);
+  cwCodeTree?.setAttribute('aria-hidden', codeTreeState.open ? 'false' : 'true');
+  cwCodeTreeToggle?.setAttribute('aria-expanded', codeTreeState.open ? 'true' : 'false');
+  cwCodeTreeToggle?.classList.toggle('active', codeTreeState.open);
+  if (codeTreeState.open && !codeTreeState.nodes.has('') && !codeTreeState.loading.has('')) loadCodeTree('');
+}
+
+async function loadCodeTree(path = '', options = {}) {
+  if (!codeMode || !sessionId) return;
+  const queryValue = String(options.query ?? '').trim();
+  const key = queryValue ? `?${queryValue}` : String(path || '');
+  if (codeTreeState.loading.has(key)) return;
+  codeTreeState.loading.add(key);
+  if (cwCodeTreeBody && (!codeTreeState.nodes.size || queryValue)) cwCodeTreeBody.innerHTML = '<div class="cw-code-tree-empty">正在读取项目文件…</div>';
+  try {
+    const query = new URLSearchParams();
+    if (queryValue) query.set('q', queryValue);
+    else if (path) query.set('path', path);
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/code-tree?${query}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || '读取文件树失败');
+    codeTreeState.nodes.set(key, data.entries || []);
+    if (queryValue) codeTreeState.query = queryValue;
+    renderCodeTree();
+  } catch (error) {
+    if (cwCodeTreeBody) cwCodeTreeBody.innerHTML = `<div class="cw-code-tree-empty" style="color:#bb3d38">${escapeHtml(error.message || '读取文件树失败')}</div>`;
+  } finally { codeTreeState.loading.delete(key); }
+}
+
+function renderCodeTree() {
+  if (!cwCodeTreeBody) return;
+  const queryValue = codeTreeState.query;
+  const activePath = activeCodeInspectorTab()?.path || '';
+  const rowHtml = (entry, depth) => {
+    const directory = entry.type === 'directory';
+    const expanded = directory && codeTreeState.expanded.has(entry.path);
+    const status = String(entry.status || '');
+    return `<button type="button" class="cw-code-tree-row ${expanded ? 'expanded' : ''} ${entry.path === activePath ? 'active' : ''}" data-code-tree-path="${escapeHtml(entry.path)}" data-code-tree-type="${escapeHtml(entry.type)}" style="padding-left:${6 + Math.min(depth, 12) * 13}px" title="${escapeHtml(entry.path)}"><span class="cw-code-tree-chevron">${directory ? '›' : ''}</span>${codeTreeIcon(entry.type)}<span class="cw-code-tree-name">${escapeHtml(entry.name)}</span><span class="cw-code-tree-status ${escapeHtml(status || 'dot')}">${escapeHtml(status)}</span></button>`;
+  };
+  let html = '';
+  if (queryValue) {
+    const results = codeTreeState.nodes.get(`?${queryValue}`) || [];
+    html = results.map(entry => rowHtml(entry, 0)).join('');
+  } else {
+    const append = (path, depth) => {
+      for (const entry of (codeTreeState.nodes.get(path) || [])) {
+        html += rowHtml(entry, depth);
+        if (entry.type === 'directory' && codeTreeState.expanded.has(entry.path)) append(entry.path, depth + 1);
+      }
+    };
+    append('', 0);
+  }
+  cwCodeTreeBody.innerHTML = html || `<div class="cw-code-tree-empty">${queryValue ? '没有匹配的项目文件' : '项目目录为空'}</div>`;
+  cwCodeTreeBody.querySelectorAll('[data-code-tree-path]').forEach(row => row.addEventListener('click', async () => {
+    const path = row.dataset.codeTreePath;
+    if (row.dataset.codeTreeType === 'directory') {
+      if (queryValue) { codeTreeState.query = ''; if (cwCodeTreeSearch) cwCodeTreeSearch.value = ''; }
+      if (codeTreeState.expanded.has(path)) codeTreeState.expanded.delete(path);
+      else { codeTreeState.expanded.add(path); if (!codeTreeState.nodes.has(path)) await loadCodeTree(path); }
+      renderCodeTree();
+      return;
+    }
+    await openCodeFileInspector(path);
+    if (window.innerWidth <= 900) setCodeTreeOpen(false);
+  }));
+}
+
+function terminalTabFromPayload(item, index = 0) {
+  return { id:`terminal:${item.id}`, kind:'terminal', terminalId:item.id, title:`终端 ${index + 1}`, cwd:item.cwd || '', shell:item.shell || 'shell', status:item.status || 'running', exitCode:item.exit_code, client:null };
+}
+
+function disposeCodeTerminalClient(tab) {
+  if (!tab || tab.kind !== 'terminal' || !tab.client) return;
+  const client = tab.client;
+  tab.client = null;
+  try { client.resizeObserver?.disconnect(); } catch {}
+  try { client.socket?.close(); } catch {}
+  try { client.terminal?.dispose(); } catch {}
+}
+
+async function closeCodeInspectorTab(tab) {
+  disposeCodeTerminalClient(tab);
+  if (tab?.kind !== 'terminal' || !sessionId || !tab.terminalId) return;
+  try { await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/terminals/${encodeURIComponent(tab.terminalId)}`, { method:'DELETE' }); } catch {}
+}
+
+async function loadCodeTerminals() {
+  if (!codeMode || !sessionId) return;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/terminals`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.supported === false) return;
+    (data.terminals || []).forEach((item, index) => {
+      const id = `terminal:${item.id}`;
+      if (!codeInspectorState.tabs.some(tab => tab.id === id)) codeInspectorState.tabs.push(terminalTabFromPayload(item, index));
+    });
+    renderCodeInspectorTabs();
+  } catch {}
+}
+
+async function createCodeTerminal() {
+  if (!codeMode || !sessionId) { toast('请先打开一个 Code 会话'); return; }
+  const previousLabel = cwCodeTerminalNew.textContent;
+  cwCodeTerminalNew.disabled = true; cwCodeTerminalNew.textContent = '创建中…'; cwCodeTerminalNew.setAttribute('aria-busy', 'true');
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/terminals`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cols:100, rows:30 }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || '创建终端失败');
+    const terminalCount = codeInspectorState.tabs.filter(tab => tab.kind === 'terminal').length;
+    const tab = terminalTabFromPayload(data.terminal, terminalCount);
+    codeInspectorState.tabs.push(tab); codeInspectorState.activeId = tab.id; codeInspectorState.sessionId = sessionId;
+    renderCodeInspector();
+  } catch (error) { toast(error.message || '创建终端失败'); }
+  finally { cwCodeTerminalNew.disabled = false; cwCodeTerminalNew.textContent = previousLabel; cwCodeTerminalNew.removeAttribute('aria-busy'); }
+}
+
+function renderCodeTerminalShell(tab) {
+  const ended = tab.status !== 'running';
+  return `<div class="cw-code-terminal-shell"><div class="cw-code-terminal-toolbar"><span class="cw-code-terminal-state ${ended ? 'exited' : ''}" data-terminal-state>${ended ? `已结束${tab.exitCode == null ? '' : ` · ${tab.exitCode}`}` : '连接中…'}</span><strong title="${escapeHtml(tab.cwd)}">${escapeHtml(tab.cwd || tab.shell || '终端')}</strong><button type="button" data-terminal-action="analyze">让 Claude 分析</button><button type="button" data-terminal-action="clear">清屏</button><button type="button" class="danger" data-terminal-action="stop">${ended ? '关闭' : '停止'}</button></div><div class="cw-code-terminal-mount" id="cwCodeTerminalMount"></div></div>`;
+}
+
+function base64Bytes(value) {
+  const raw = atob(String(value || ''));
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
+  return bytes;
+}
+
+function terminalWebSocketUrl(tab) {
+  const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${scheme}//${location.host}/api/sessions/${encodeURIComponent(sessionId)}/terminals/${encodeURIComponent(tab.terminalId)}/ws`;
+}
+
+function ensureCodeTerminalAssets() {
+  if (window.Terminal) return Promise.resolve();
+  if (codeTerminalAssetPromise) return codeTerminalAssetPromise;
+  codeTerminalAssetPromise = new Promise((resolve, reject) => {
+    if (!$('cwXtermCss')) {
+      const style = document.createElement('link');
+      style.id = 'cwXtermCss'; style.rel = 'stylesheet';
+      style.href = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css';
+      document.head.appendChild(style);
+    }
+    const existing = $('cwXtermScript');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once:true });
+      existing.addEventListener('error', () => reject(new Error('终端组件加载失败')), { once:true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'cwXtermScript'; script.src = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js'; script.async = true;
+    script.addEventListener('load', () => resolve(), { once:true });
+    script.addEventListener('error', () => reject(new Error('终端组件加载失败')), { once:true });
+    document.head.appendChild(script);
+  });
+  return codeTerminalAssetPromise;
+}
+
+function insertTerminalSelection(tab) {
+  const selected = String(tab.client?.terminal?.getSelection?.() || '').trim();
+  if (!selected) { toast('请先在终端中选择需要分析的输出'); return; }
+  const clipped = selected.length > 12000 ? `${selected.slice(0, 12000)}\n…（终端输出已截断）` : selected;
+  const prompt = `请分析下面这段终端输出，定位原因并给出下一步建议：\n\n\`\`\`text\n${clipped}\n\`\`\`\n`;
+  input.value = `${input.value}${input.value ? '\n\n' : ''}${prompt}`;
+  input.dispatchEvent(new Event('input', { bubbles:true })); input.focus();
+  toast('已把所选终端输出放入输入框');
+}
+
+async function mountCodeTerminal(tab) {
+  if (!tab || tab.kind !== 'terminal' || tab.id !== codeInspectorState.activeId) return;
+  const mount = $('cwCodeTerminalMount');
+  if (!mount) return;
+  disposeCodeTerminalClient(tab);
+  try { await ensureCodeTerminalAssets(); }
+  catch {
+    mount.innerHTML = '<div class="cw-code-terminal-fallback">终端组件加载失败。请检查网络后刷新页面；终端进程仍在后台运行。</div>';
+    return;
+  }
+  if (!mount.isConnected || tab.id !== codeInspectorState.activeId || !window.Terminal) return;
+  const terminal = new window.Terminal({ cursorBlink:true, convertEol:false, fontSize:12, lineHeight:1.2, scrollback:5000, theme:{ background:'#0c0a09', foreground:'#e7e5e4', cursor:'#f5f5f4', selectionBackground:'#57534e99' }, fontFamily:'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' });
+  terminal.open(mount);
+  const socket = new WebSocket(terminalWebSocketUrl(tab));
+  socket.binaryType = 'arraybuffer';
+  const resize = () => {
+    const cols = Math.max(20, Math.floor(mount.clientWidth / 7.35));
+    const rows = Math.max(4, Math.floor(mount.clientHeight / 15.5));
+    try { terminal.resize(cols, rows); } catch {}
+    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type:'resize', cols, rows }));
+  };
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(mount);
+  tab.client = { terminal, socket, resizeObserver };
+  terminal.onData(data => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type:'input', data })); });
+  socket.addEventListener('open', () => {
+    const state = cwCodeInspectorBody.querySelector('[data-terminal-state]');
+    if (state) state.textContent = '已连接';
+    resize();
+  });
+  socket.addEventListener('message', event => {
+    if (typeof event.data !== 'string') { terminal.write(new Uint8Array(event.data)); return; }
+    let message = null; try { message = JSON.parse(event.data); } catch { terminal.write(event.data); return; }
+    if (message.type === 'ready') {
+      tab.status = message.terminal?.status || tab.status;
+      tab.exitCode = message.terminal?.exit_code;
+      if (message.backlog) terminal.write(base64Bytes(message.backlog));
+      requestAnimationFrame(resize);
+    } else if (message.type === 'exit') {
+      tab.status = 'exited'; tab.exitCode = message.exit_code;
+      terminal.write(`\r\n\x1b[90m[进程已结束，退出码 ${message.exit_code ?? '-'}]\x1b[0m\r\n`);
+      renderCodeInspectorTabs();
+      const state = cwCodeInspectorBody.querySelector('[data-terminal-state]');
+      if (state) { state.classList.add('exited'); state.textContent = `已结束 · ${message.exit_code ?? '-'}`; }
+    }
+  });
+  socket.addEventListener('close', () => {
+    if (tab.client?.socket !== socket || tab.status !== 'running') return;
+    const state = cwCodeInspectorBody.querySelector('[data-terminal-state]');
+    if (state) { state.classList.add('error'); state.textContent = '连接已断开'; }
+  });
+  cwCodeInspectorBody.querySelector('[data-terminal-action="analyze"]')?.addEventListener('click', () => insertTerminalSelection(tab));
+  cwCodeInspectorBody.querySelector('[data-terminal-action="clear"]')?.addEventListener('click', () => terminal.clear());
+  cwCodeInspectorBody.querySelector('[data-terminal-action="stop"]')?.addEventListener('click', async () => {
+    await closeCodeInspectorTab(tab);
+    const index = codeInspectorState.tabs.indexOf(tab);
+    if (index >= 0) codeInspectorState.tabs.splice(index, 1);
+    codeInspectorState.activeId = codeInspectorState.tabs[Math.max(0, index - 1)]?.id || codeInspectorState.tabs[0]?.id || '';
+    if (codeInspectorState.activeId) renderCodeInspector(); else resetCodeInspector();
+  });
+  requestAnimationFrame(() => { resize(); terminal.focus(); });
 }
 function pathBasename(p) { const i = p.lastIndexOf('/'); return i >= 0 ? p.slice(i+1) : p; }
 function normalizeToolNames(list) {
@@ -15880,6 +16729,8 @@ async function loadSession(id, options = {}) {
     if (!r.ok) return;
     const data = await r.json();
     sessionId = data.id;
+    if (codeMode && codeInspectorState.sessionId && codeInspectorState.sessionId !== data.id) resetCodeInspector();
+    codeInspectorState.sessionId = data.id;
     activateCodeQueueForSession(data.id);
     loadPersistedCodeQueue(data.id);
     currentCodeRuntime = data.runtime_origin || 'unknown';
@@ -15944,6 +16795,7 @@ async function loadSession(id, options = {}) {
     restoreActiveAgentLoopForSession();
     if (codeMode) {
       loadCodeProjectSettings();
+      loadCodeTerminals();
       scheduleNativeContextUsageRefresh(0);
       startNativeTurnRecovery(data.id, Number(data.total_event_count ?? data.events.length), asstContainer);
     }
@@ -16518,12 +17370,27 @@ function referenceActiveCodeInspectorLine() {
 
 cwOpenCodeFileBtn?.addEventListener('click', openCodeInspectorPicker);
 cwCodeInspectorClose?.addEventListener('click', () => setCodeInspectorOpen(false));
+cwCodeTreeToggle?.addEventListener('click', () => setCodeTreeOpen(!codeTreeState.open));
+cwCodeTerminalNew?.addEventListener('click', createCodeTerminal);
+cwCodeTreeRefresh?.addEventListener('click', () => {
+  codeTreeState.nodes.clear(); codeTreeState.expanded.clear(); codeTreeState.query = '';
+  if (cwCodeTreeSearch) cwCodeTreeSearch.value = '';
+  loadCodeTree('');
+});
+cwCodeTreeSearch?.addEventListener('input', () => {
+  clearTimeout(codeTreeState.timer);
+  const query = cwCodeTreeSearch.value.trim();
+  codeTreeState.timer = setTimeout(() => {
+    if (!query) { codeTreeState.query = ''; renderCodeTree(); return; }
+    loadCodeTree('', { query });
+  }, 220);
+});
 cwCodeInspectorReference?.addEventListener('click', referenceActiveCodeInspectorLine);
 cwCodeInspectorExternal?.addEventListener('click', toggleCodeInspectorExternalMenu);
 cwCodeInspectorMode?.addEventListener('click', async event => {
   const button = event.target.closest('[data-inspector-mode]');
   const tab = activeCodeInspectorTab();
-  if (!button || !tab) return;
+  if (!button || !tab || tab.kind === 'terminal') return;
   tab.mode = button.dataset.inspectorMode;
   if (tab.mode === 'diff') await loadCodeInspectorDiff(tab);
   else if (!tab.content && !tab.binary) { await reloadCodeInspectorTab(tab); return; }
@@ -16554,6 +17421,7 @@ document.addEventListener('keydown', event => {
   }
   if (event.key === 'Escape' && document.body.classList.contains('cw-code-inspector-open')) {
     if (cwCodeInspectorExternalMenu && !cwCodeInspectorExternalMenu.classList.contains('hidden')) cwCodeInspectorExternalMenu.classList.add('hidden');
+    else if (codeTreeState.open) setCodeTreeOpen(false);
     else setCodeInspectorOpen(false);
   }
 });
@@ -20045,6 +20913,126 @@ function projectManagerItemIcon() {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z"/></svg>';
 }
 
+const directoryPickerState = { path: '', parent: '', roots: [], entries: [], loading: false };
+
+function directoryPickerChevronIcon() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+}
+
+function directoryPickerBreadcrumbs(path) {
+  const value = String(path || '');
+  const windows = /^[A-Za-z]:[\\/]/.test(value);
+  const parts = value.split(/[\\/]+/).filter(Boolean);
+  const crumbs = [];
+  if (windows) {
+    let current = parts.shift() || value.slice(0, 2);
+    crumbs.push({ label: current, path: current + '\\' });
+    parts.forEach(part => {
+      current += '\\' + part;
+      crumbs.push({ label: part, path: current });
+    });
+  } else {
+    let current = '';
+    crumbs.push({ label: '/', path: '/' });
+    parts.forEach(part => {
+      current += '/' + part;
+      crumbs.push({ label: part, path: current });
+    });
+  }
+  return crumbs;
+}
+
+function renderDirectoryPicker() {
+  if (!cwDirectoryPicker) return;
+  if (cwDirectorySelection) {
+    cwDirectorySelection.textContent = directoryPickerState.path || '选择一个项目目录';
+    cwDirectorySelection.title = directoryPickerState.path || '';
+  }
+  if (cwDirectoryBack) {
+    cwDirectoryBack.disabled = !directoryPickerState.parent || directoryPickerState.loading;
+  }
+  if (cwDirectoryShortcuts) {
+    cwDirectoryShortcuts.innerHTML = directoryPickerState.roots.map(root => `
+      <button type="button" class="cw-directory-shortcut" data-directory-path="${escapeHtml(root.path)}" title="${escapeHtml(root.path)}">
+        ${projectManagerItemIcon()}<span>${escapeHtml(root.name)}</span>
+      </button>
+    `).join('');
+  }
+  if (cwDirectoryPath) {
+    const crumbs = directoryPickerBreadcrumbs(directoryPickerState.path);
+    cwDirectoryPath.innerHTML = crumbs.map((crumb, index) => `${index ? '<span class="cw-directory-path-separator">›</span>' : ''}<button type="button" class="cw-directory-path-segment" data-directory-path="${escapeHtml(crumb.path)}">${escapeHtml(crumb.label)}</button>`).join('');
+    requestAnimationFrame(() => { cwDirectoryPath.scrollLeft = cwDirectoryPath.scrollWidth; });
+  }
+  if (cwDirectoryList) {
+    if (directoryPickerState.loading) {
+      cwDirectoryList.innerHTML = '<div class="cw-directory-empty">正在读取目录…</div>';
+    } else if (!directoryPickerState.entries.length) {
+      cwDirectoryList.innerHTML = '<div class="cw-directory-empty">这个目录中没有可选择的子目录<br>可以直接选择当前目录</div>';
+    } else {
+      cwDirectoryList.innerHTML = directoryPickerState.entries.map(entry => `
+        <button type="button" class="cw-directory-item" data-directory-path="${escapeHtml(entry.path)}" title="${escapeHtml(entry.path)}">
+          ${projectManagerItemIcon()}
+          <span class="cw-directory-item-name">${escapeHtml(entry.name)}</span>
+          ${directoryPickerChevronIcon()}
+        </button>
+      `).join('');
+    }
+  }
+  cwDirectoryPicker.querySelectorAll('[data-directory-path]').forEach(button => {
+    button.addEventListener('click', () => loadProjectDirectory(button.dataset.directoryPath || ''));
+  });
+}
+
+async function loadProjectDirectory(path = '', quiet = false) {
+  directoryPickerState.loading = true;
+  renderDirectoryPicker();
+  try {
+    const query = new URLSearchParams();
+    if (path) query.set('path', path);
+    const r = await fetch('/api/directories?' + query.toString());
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || '无法读取目录');
+    directoryPickerState.path = data.path || '';
+    directoryPickerState.parent = data.parent || '';
+    directoryPickerState.roots = Array.isArray(data.roots) ? data.roots : [];
+    directoryPickerState.entries = Array.isArray(data.entries) ? data.entries : [];
+  } catch (error) {
+    if (!quiet) toast(error.message || '无法读取目录');
+    throw error;
+  } finally {
+    directoryPickerState.loading = false;
+    renderDirectoryPicker();
+  }
+}
+
+function setDirectoryPickerOpen(open) {
+  cwDirectoryPicker?.classList.toggle('hidden', !open);
+  cwProjectManagerPanel?.classList.toggle('directory-open', !!open);
+  if (cwProjectManagerSub) {
+    cwProjectManagerSub.textContent = open ? '浏览这台设备上的项目目录' : '选择当前工作目录，或添加一个本地项目';
+  }
+}
+
+async function openProjectDirectoryPicker() {
+  setDirectoryPickerOpen(true);
+  const requested = (cwProjectManagerInput?.value || cwdInput?.value || '').trim();
+  try {
+    await loadProjectDirectory(requested, !!requested);
+  } catch {
+    if (requested) {
+      try { await loadProjectDirectory(''); }
+      catch (error) { toast(error.message || '无法打开目录选择器'); }
+    }
+  }
+}
+
+async function chooseProjectDirectory() {
+  if (!directoryPickerState.path || !cwProjectManagerInput) return;
+  cwProjectManagerInput.value = directoryPickerState.path;
+  setDirectoryPickerOpen(false);
+  await addProjectFromManager();
+}
+
 function renderProjectManager() {
   if (!cwProjectManagerList) return;
   const current = (cwdInput?.value || '').trim();
@@ -20080,7 +21068,10 @@ function setProjectManagerOpen(open, focus = 'project') {
   if (!cwProjectManagerPanel) return;
   cwProjectManagerPanel.classList.toggle('hidden', !open);
   headerMoreBtn?.classList.toggle('toolbar-btn-active', !!open);
-  if (!open) return;
+  if (!open) {
+    setDirectoryPickerOpen(false);
+    return;
+  }
   setComposerContextMenuOpen(false);
   setPermissionModeMenuOpen(false);
   cwBranchPanel?.classList.add('hidden');
@@ -20114,11 +21105,35 @@ function selectProjectFromManager(cwd) {
 }
 
 async function addProjectFromManager() {
-  const next = (cwProjectManagerInput?.value || '').trim();
+  let next = (cwProjectManagerInput?.value || '').trim();
   if (!next) {
     toast('请输入项目路径');
     cwProjectManagerInput?.focus();
     return;
+  }
+  const originalLabel = cwProjectManagerAdd?.textContent || '添加';
+  if (cwProjectManagerAdd) {
+    cwProjectManagerAdd.disabled = true;
+    cwProjectManagerAdd.textContent = '检查中';
+  }
+  try {
+    const r = await fetch('/api/projects/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd: next }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || '项目目录不可用');
+    next = data.cwd || next;
+  } catch (error) {
+    toast(error.message || '项目目录不可用');
+    cwProjectManagerInput?.focus();
+    return;
+  } finally {
+    if (cwProjectManagerAdd) {
+      cwProjectManagerAdd.disabled = false;
+      cwProjectManagerAdd.textContent = originalLabel;
+    }
   }
   extraCwdOptions = normalizeProjectList([next, ...extraCwdOptions]);
   LS.set(EXTRA_PROJECTS_KEY, extraCwdOptions);
@@ -20705,7 +21720,16 @@ cwPermissionModeMenu?.addEventListener('keydown', (e) => {
 });
 
 cwProjectManagerClose?.addEventListener('click', () => setProjectManagerOpen(false));
+cwProjectManagerBrowse?.addEventListener('click', openProjectDirectoryPicker);
 cwProjectManagerAdd?.addEventListener('click', addProjectFromManager);
+cwDirectoryBack?.addEventListener('click', () => {
+  if (directoryPickerState.parent) loadProjectDirectory(directoryPickerState.parent);
+});
+cwDirectoryCancel?.addEventListener('click', () => {
+  setDirectoryPickerOpen(false);
+  cwProjectManagerInput?.focus();
+});
+cwDirectoryChoose?.addEventListener('click', chooseProjectDirectory);
 cwProjectManagerInput?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -20721,7 +21745,7 @@ cwBranchPanelClose?.addEventListener('click', () => setBranchPanelOpen(false));
 
 document.addEventListener('click', (e) => {
   if (!cwProjectManagerPanel || cwProjectManagerPanel.classList.contains('hidden')) return;
-  if (e.target.closest('#cwProjectManagerPanel')) return;
+  if (e.composedPath?.().includes(cwProjectManagerPanel) || e.target.closest('#cwProjectManagerPanel')) return;
   if (e.target.closest('#headerMoreBtn') || e.target.closest('#cwComposerContextBtn') || e.target.closest('#cwComposerContextMenu') || e.target.closest('#cwComposerProjectBtn') || e.target.closest('#cwComposerBranchBtn') || e.target.closest('#cwComposerPermBtn')) return;
   if (e.target.closest('#cwWorkspaceProjectBtn') || e.target.closest('#cwWorkspacePermBtn')) return;
   setProjectManagerOpen(false);
@@ -20729,7 +21753,7 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('click', (e) => {
   if (!cwBranchPanel || cwBranchPanel.classList.contains('hidden')) return;
-  if (e.target.closest('#cwBranchPanel')) return;
+  if (e.composedPath?.().includes(cwBranchPanel) || e.target.closest('#cwBranchPanel')) return;
   if (e.target.closest('#cwComposerContextBtn') || e.target.closest('#cwComposerContextMenu') || e.target.closest('#cwComposerBranchBtn')) return;
   setBranchPanelOpen(false);
 });
@@ -21223,12 +22247,18 @@ function renderHooksTab() {
   const err = configState.error ? cfgErrorBanner(`加载失败：${configState.error}`) : '';
   const rows = configState.hooksDraft;
   let html = err;
-  html += `<div class="cfg-info">PreToolUse / PostToolUse 可填 <code>matcher</code>（工具名正则），其他事件留空即可。命令将由 CLI 启动子进程时调用。</div>`;
+  html += `<div class="cfg-hooks-toolbar">
+    <div class="cfg-info">PreToolUse / PostToolUse 可填 <code>matcher</code>（工具名正则），其他事件留空即可。命令将由 CLI 启动子进程时调用。</div>
+    <button type="button" class="cfg-add-btn cfg-hook-add-btn" id="cfgHookAddBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      <span>新增 Hook</span>
+    </button>
+  </div>`;
   html += `<div class="cfg-row" style="font-weight:600;font-size:11px;color:var(--text-subtle);border-bottom:1px solid var(--border);">
     <div>事件 / Matcher</div><div>Shell 命令</div><div style="text-align:center;">启用</div><div></div>
   </div>`;
   if (!rows.length) {
-    html += '<div class="cfg-empty">尚未配置 hook。点击下方按钮添加。</div>';
+    html += '<div class="cfg-empty">尚未配置 Hook。点击右上角“新增 Hook”开始设置。</div>';
   } else {
     rows.forEach((row, idx) => {
       const showMatcher = cfgHookMatcherVisible(row.event);
@@ -21245,7 +22275,6 @@ function renderHooksTab() {
       </div>`;
     });
   }
-  html += `<button class="cfg-add-btn" id="cfgHookAddBtn">+ 新增 hook</button>`;
   configBodyHooks.innerHTML = html;
 
   configBodyHooks.querySelectorAll('.cfg-hook-event').forEach(el => {

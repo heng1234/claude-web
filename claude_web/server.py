@@ -12,6 +12,7 @@ import re
 import secrets
 import shlex
 import shutil
+import signal
 import socket
 import sqlite3
 import struct
@@ -28,13 +29,18 @@ from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 from urllib.parse import quote, urlencode, urljoin, urlparse
 
-from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+if os.name != "nt":
+    import fcntl
+    import pty
+    import termios
 
 from claude_web import __version__
 from claude_web.agent_sdk_bridge import AgentSdkBridge, AgentSdkBridgeError, AgentSdkTurn
@@ -107,6 +113,7 @@ _update_check_cache: Dict[str, object] = {"ts": 0.0, "data": None}
 _NOTIFICATION_SETTINGS_META_KEY = "notification_settings_v1"
 _NOTIFICATION_DELIVERIES_META_KEY = "notification_deliveries_v1"
 _NOTIFICATION_LAST_UPDATE_META_KEY = "notification_last_update_version_v1"
+_SAVED_PROJECTS_META_KEY = "saved_projects_v1"
 _NOTIFICATION_MAX_DELIVERIES = 20
 _NOTIFICATION_TIMEOUT_SECONDS = 5
 _NOTIFICATION_MAX_RETRIES = 3
@@ -123,6 +130,13 @@ _CODE_DIFF_FILE_LIMIT = 80_000
 _CODE_DIFF_TURN_LIMIT = 240_000
 _CODE_FILE_MAX_BYTES = 2_000_000
 _CODE_FILE_SEARCH_LIMIT = 24
+_CODE_TREE_MAX_CHILDREN = 300
+_CODE_TREE_SEARCH_LIMIT = 200
+_CODE_TREE_MAX_DEPTH = 15
+_CODE_TERMINAL_BACKLOG_BYTES = 256 * 1024
+_CODE_TERMINAL_MAX_PER_SESSION = 4
+_CODE_TERMINAL_MAX_GLOBAL = 24
+_CODE_TERMINAL_IDLE_SECONDS = 30 * 60
 KNOWN_TOOL_NAMES = {
     "Bash", "Read", "Write", "Edit", "MultiEdit", "Grep", "Glob",
     "LS", "WebFetch", "WebSearch", "TodoWrite", "Task", "NotebookEdit",
@@ -143,6 +157,28 @@ _stopped_sessions: Set[str] = set()
 # clobbered by the incoming request that shares the same session_id.
 _terminated_processes: "Set[asyncio.subprocess.Process]" = set()
 _compacting_sessions: Set[str] = set()
+
+
+@dataclass
+class CodeTerminalRuntime:
+    id: str
+    session_id: str
+    cwd: str
+    shell: str
+    process: asyncio.subprocess.Process
+    master_fd: int
+    created_at: float
+    last_active_at: float
+    cols: int
+    rows: int
+    backlog: bytearray = field(default_factory=bytearray)
+    listeners: Set[asyncio.Queue] = field(default_factory=set)
+    reader_task: Optional[asyncio.Task] = None
+    exit_code: Optional[int] = None
+    closed: bool = False
+
+
+_code_terminals: Dict[str, CodeTerminalRuntime] = {}
 
 WARM_IDLE_TIMEOUT = 90.0  # seconds before an idle warm process is reaped
 MAX_WARM_PROCESSES = 4
@@ -415,6 +451,225 @@ async def _shutdown_terminate_running_processes() -> None:
     )
 
 
+def _code_terminal_payload(runtime: CodeTerminalRuntime) -> dict:
+    return {
+        "id": runtime.id,
+        "session_id": runtime.session_id,
+        "cwd": runtime.cwd,
+        "shell": Path(runtime.shell).name,
+        "pid": runtime.process.pid,
+        "created_at": runtime.created_at,
+        "last_active_at": runtime.last_active_at,
+        "cols": runtime.cols,
+        "rows": runtime.rows,
+        "status": "closed" if runtime.closed else ("exited" if runtime.exit_code is not None else "running"),
+        "exit_code": runtime.exit_code,
+    }
+
+
+def _broadcast_code_terminal(runtime: CodeTerminalRuntime, item: Union[bytes, dict]) -> None:
+    for queue in list(runtime.listeners):
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            queue.put_nowait(item)
+        except asyncio.QueueFull:
+            pass
+
+
+async def _read_code_terminal_fd(fd: int) -> bytes:
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future = loop.create_future()
+
+    def ready() -> None:
+        if future.done():
+            return
+        try:
+            chunk = os.read(fd, 8192)
+        except BlockingIOError:
+            return
+        except OSError as exc:
+            future.set_exception(exc)
+        else:
+            future.set_result(chunk)
+
+    loop.add_reader(fd, ready)
+    try:
+        return await future
+    finally:
+        loop.remove_reader(fd)
+
+
+async def _read_code_terminal(runtime: CodeTerminalRuntime) -> None:
+    try:
+        while not runtime.closed:
+            try:
+                chunk = await _read_code_terminal_fd(runtime.master_fd)
+            except OSError:
+                break
+            if not chunk:
+                break
+            runtime.last_active_at = time.time()
+            runtime.backlog.extend(chunk)
+            if len(runtime.backlog) > _CODE_TERMINAL_BACKLOG_BYTES:
+                del runtime.backlog[:-_CODE_TERMINAL_BACKLOG_BYTES]
+            _broadcast_code_terminal(runtime, bytes(chunk))
+    except asyncio.CancelledError:
+        raise
+    finally:
+        if runtime.process.returncode is None:
+            try:
+                await runtime.process.wait()
+            except Exception:
+                pass
+        runtime.exit_code = runtime.process.returncode
+        _broadcast_code_terminal(runtime, {"type": "exit", "exit_code": runtime.exit_code})
+
+
+def _code_terminal_resize(runtime: CodeTerminalRuntime, cols: int, rows: int) -> None:
+    if os.name == "nt" or runtime.closed:
+        return
+    runtime.cols = max(20, min(400, int(cols or 100)))
+    runtime.rows = max(5, min(200, int(rows or 30)))
+    packed = struct.pack("HHHH", runtime.rows, runtime.cols, 0, 0)
+    try:
+        fcntl.ioctl(runtime.master_fd, termios.TIOCSWINSZ, packed)
+    except OSError:
+        pass
+
+
+def _code_terminal_shell() -> str:
+    candidates = [os.environ.get("SHELL") or "", shutil.which("zsh") or "", shutil.which("bash") or "", shutil.which("sh") or ""]
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file() and os.access(candidate, os.X_OK):
+            return str(Path(candidate).resolve())
+    raise HTTPException(status_code=500, detail="找不到可用的本机 Shell")
+
+
+async def _spawn_code_terminal(session_id: str, cwd: str, cols: int, rows: int) -> CodeTerminalRuntime:
+    if os.name == "nt":
+        raise HTTPException(status_code=501, detail="当前版本的交互终端需要 macOS 或 Linux PTY")
+    active_for_session = [item for item in _code_terminals.values() if item.session_id == session_id and not item.closed]
+    if len(active_for_session) >= _CODE_TERMINAL_MAX_PER_SESSION:
+        raise HTTPException(status_code=409, detail=f"每个 Code 会话最多 {_CODE_TERMINAL_MAX_PER_SESSION} 个终端")
+    if len([item for item in _code_terminals.values() if not item.closed]) >= _CODE_TERMINAL_MAX_GLOBAL:
+        raise HTTPException(status_code=503, detail="终端数量已达到全局上限")
+    root = Path(os.path.expanduser(cwd or "~")).resolve()
+    if not root.is_dir():
+        raise HTTPException(status_code=400, detail="Code 项目目录不存在")
+    shell = _code_terminal_shell()
+    master_fd, slave_fd = pty.openpty()
+    safe_cols = max(20, min(400, int(cols or 100)))
+    safe_rows = max(5, min(200, int(rows or 30)))
+    try:
+        fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", safe_rows, safe_cols, 0, 0))
+        env = dict(os.environ)
+        env.update({"TERM": "xterm-256color", "COLORTERM": "truecolor", "PWD": str(root)})
+        process = await asyncio.create_subprocess_exec(
+            shell,
+            "-l",
+            cwd=str(root),
+            env=env,
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            start_new_session=True,
+            close_fds=True,
+        )
+    except Exception:
+        os.close(master_fd)
+        os.close(slave_fd)
+        raise
+    finally:
+        try:
+            os.close(slave_fd)
+        except OSError:
+            pass
+    os.set_blocking(master_fd, False)
+    now = time.time()
+    runtime = CodeTerminalRuntime(
+        id=uuid.uuid4().hex,
+        session_id=session_id,
+        cwd=str(root),
+        shell=shell,
+        process=process,
+        master_fd=master_fd,
+        created_at=now,
+        last_active_at=now,
+        cols=safe_cols,
+        rows=safe_rows,
+    )
+    _code_terminals[runtime.id] = runtime
+    runtime.reader_task = asyncio.create_task(_read_code_terminal(runtime))
+    return runtime
+
+
+async def _terminate_code_terminal(runtime: CodeTerminalRuntime) -> None:
+    if runtime.closed:
+        return
+    runtime.closed = True
+    if runtime.process.returncode is None:
+        try:
+            if os.name != "nt":
+                os.killpg(runtime.process.pid, signal.SIGHUP)
+            else:
+                runtime.process.terminate()
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            await asyncio.wait_for(runtime.process.wait(), timeout=2.0)
+        except asyncio.TimeoutError:
+            try:
+                if os.name != "nt":
+                    os.killpg(runtime.process.pid, signal.SIGKILL)
+                else:
+                    runtime.process.kill()
+            except (ProcessLookupError, PermissionError):
+                pass
+            try:
+                await runtime.process.wait()
+            except Exception:
+                pass
+    runtime.exit_code = runtime.process.returncode
+    if runtime.reader_task and runtime.reader_task is not asyncio.current_task() and not runtime.reader_task.done():
+        runtime.reader_task.cancel()
+        try:
+            await runtime.reader_task
+        except asyncio.CancelledError:
+            pass
+    try:
+        os.close(runtime.master_fd)
+    except OSError:
+        pass
+    _broadcast_code_terminal(runtime, {"type": "exit", "exit_code": runtime.exit_code})
+
+
+async def _terminate_session_code_terminals(session_id: str) -> None:
+    targets = [item for item in _code_terminals.values() if item.session_id == session_id]
+    await asyncio.gather(*(_terminate_code_terminal(item) for item in targets), return_exceptions=True)
+    for item in targets:
+        _code_terminals.pop(item.id, None)
+
+
+async def _shutdown_code_terminals() -> None:
+    targets = list(_code_terminals.values())
+    await asyncio.gather(*(_terminate_code_terminal(item) for item in targets), return_exceptions=True)
+    _code_terminals.clear()
+
+
+async def _code_terminal_reaper() -> None:
+    while True:
+        await asyncio.sleep(60)
+        cutoff = time.time() - _CODE_TERMINAL_IDLE_SECONDS
+        stale = [item for item in _code_terminals.values() if not item.listeners and item.last_active_at < cutoff]
+        for runtime in stale:
+            await _terminate_code_terminal(runtime)
+            _code_terminals.pop(runtime.id, None)
+
+
 _UPLOAD_RETENTION_SECONDS = 30 * 24 * 60 * 60  # 30 days
 
 
@@ -442,6 +697,7 @@ async def _lifespan(app: FastAPI):
     # Prune stale uploads in a background thread so startup isn't blocked on disk IO.
     asyncio.get_event_loop().run_in_executor(None, _prune_old_uploads)
     reaper_task = asyncio.create_task(_warm_reaper())
+    terminal_reaper_task = asyncio.create_task(_code_terminal_reaper())
     bridge_start_task = asyncio.create_task(_claude_agent_bridge.ensure_started())
     try:
         yield
@@ -454,10 +710,16 @@ async def _lifespan(app: FastAPI):
                 pass
         await _claude_agent_bridge.shutdown()
         reaper_task.cancel()
+        terminal_reaper_task.cancel()
         try:
             await reaper_task
         except asyncio.CancelledError:
             pass
+        try:
+            await terminal_reaper_task
+        except asyncio.CancelledError:
+            pass
+        await _shutdown_code_terminals()
         await _shutdown_terminate_running_processes()
 
 
@@ -1385,6 +1647,11 @@ class CodeFileOpenExternalRequest(BaseModel):
     editor: Optional[str] = "system"
 
 
+class CodeTerminalCreateRequest(BaseModel):
+    cols: Optional[int] = 100
+    rows: Optional[int] = 30
+
+
 class CodeWorkspacePresetRequest(BaseModel):
     name: str
     cwd: Optional[str] = ""
@@ -1394,6 +1661,10 @@ class CodeWorkspacePresetRequest(BaseModel):
     light_context: Optional[bool] = True
     validation_command: Optional[str] = ""
     validation_mode: Optional[str] = "ask"
+
+
+class ProjectPathRequest(BaseModel):
+    cwd: str
 
 
 class GitCheckoutRequest(BaseModel):
@@ -3703,8 +3974,8 @@ def _mobile_access_issue_session(request: Request, device_label: str, ttl_second
     }
 
 
-def _mobile_access_validate_cookie(request: Request) -> Optional[dict]:
-    token = (request.cookies.get(_MOBILE_ACCESS_COOKIE) or "").strip()
+def _mobile_access_validate_token(token: str, client_host: str) -> Optional[dict]:
+    token = str(token or "").strip()
     if not token:
         return None
     token_hash = _hash_secret(token)
@@ -3724,9 +3995,50 @@ def _mobile_access_validate_cookie(request: Request) -> Optional[dict]:
             return None
         conn.execute(
             "UPDATE mobile_access_sessions SET last_seen_at = ?, client_host = ? WHERE id = ?",
-            (now, _request_client_host(request)[:120], row["id"]),
+            (now, str(client_host or "")[:120], row["id"]),
         )
     return _mobile_access_public_session(row)
+
+
+def _mobile_access_validate_cookie(request: Request) -> Optional[dict]:
+    token = (request.cookies.get(_MOBILE_ACCESS_COOKIE) or "").strip()
+    return _mobile_access_validate_token(token, _request_client_host(request))
+
+
+def _websocket_client_host(websocket: WebSocket) -> str:
+    direct = _normalize_client_host(websocket.client.host if websocket.client else "")
+    if not _is_local_client_host(direct):
+        return direct
+    forwarded_for = (websocket.headers.get("x-forwarded-for") or "").split(",", 1)[0].strip()
+    if forwarded_for:
+        forwarded_host = _normalize_client_host(forwarded_for)
+        if _client_host_ip(forwarded_host) is not None or forwarded_host.lower() == "localhost":
+            return forwarded_host
+    return direct
+
+
+def _websocket_same_origin(websocket: WebSocket) -> bool:
+    origin = (websocket.headers.get("origin") or "").strip()
+    if not origin:
+        return True
+    try:
+        origin_host = urlparse(origin).netloc.lower()
+    except ValueError:
+        return False
+    request_host = (websocket.headers.get("host") or "").lower()
+    return bool(origin_host and request_host and hmac.compare_digest(origin_host, request_host))
+
+
+def _code_terminal_websocket_authorized(websocket: WebSocket) -> bool:
+    if not _websocket_same_origin(websocket):
+        return False
+    client_host = _websocket_client_host(websocket)
+    if _is_local_client_host(client_host):
+        return True
+    if not _mobile_access_enabled():
+        return False
+    token = websocket.cookies.get(_MOBILE_ACCESS_COOKIE) or ""
+    return bool(_mobile_access_validate_token(token, client_host))
 
 
 def _mobile_access_auth_required(request: Request) -> bool:
@@ -3938,6 +4250,39 @@ def _require_not_mobile_access(request: Request, detail: str = "this action can 
     _require_local_same_origin(request)
 
 
+def _saved_project_values() -> List[str]:
+    raw = _app_meta_get(_SAVED_PROJECTS_META_KEY)
+    if not raw:
+        return []
+    try:
+        values = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(values, list):
+        return []
+    projects: List[str] = []
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        try:
+            normalized = str(Path(os.path.expanduser(value.strip())).resolve())
+        except Exception:
+            continue
+        if normalized not in projects:
+            projects.append(normalized)
+    return projects[:50]
+
+
+def _remember_project_path(cwd: str) -> str:
+    target = Path(os.path.expanduser(str(cwd or "").strip())).resolve()
+    if not target.is_dir():
+        raise HTTPException(status_code=400, detail="项目目录不存在或不可访问")
+    normalized = str(target)
+    values = [normalized, *[value for value in _saved_project_values() if value != normalized]]
+    _app_meta_set(_SAVED_PROJECTS_META_KEY, json.dumps(values[:50], ensure_ascii=False))
+    return normalized
+
+
 def _known_cwd_values() -> Set[str]:
     with db_connect() as conn:
         rows = conn.execute("SELECT DISTINCT cwd FROM sessions WHERE cwd <> ''").fetchall()
@@ -3951,6 +4296,7 @@ def _known_cwd_values() -> Set[str]:
             values.add(str(Path(os.path.expanduser(raw)).resolve()))
         except Exception:
             pass
+    values.update(_saved_project_values())
     return values
 
 
@@ -7301,6 +7647,149 @@ def _code_file_candidate_payload(root: Path, candidates: List[Path]) -> List[dic
     ]
 
 
+def _code_tree_should_skip(name: str, show_hidden: bool = False) -> bool:
+    if name in IGNORED_DIRS or name in {".svn", ".hg", ".tox", ".pytest_cache", ".mypy_cache", ".ruff_cache", "coverage", ".nyc_output"}:
+        return True
+    if name in {".DS_Store", "Thumbs.db", "desktop.ini"}:
+        return True
+    return not show_hidden and name.startswith(".")
+
+
+async def _code_tree_git_statuses(root: Path) -> Dict[str, str]:
+    raw = await _git_run_raw(str(root), "status", "--porcelain=v1", "-z", "--untracked-files=all")
+    if not raw:
+        return {}
+    parts = [part for part in raw.split("\0") if part]
+    statuses: Dict[str, str] = {}
+    index = 0
+    while index < len(parts):
+        item = parts[index]
+        if len(item) < 4:
+            index += 1
+            continue
+        raw_status = item[:2]
+        path = item[3:].replace("\\", "/")
+        if "R" in raw_status or "C" in raw_status:
+            index += 1
+        label = _git_status_label(raw_status)
+        statuses[path] = label
+        parent = Path(path).parent
+        while parent.as_posix() not in {"", "."}:
+            statuses.setdefault(parent.as_posix(), "•")
+            parent = parent.parent
+        index += 1
+    return statuses
+
+
+async def _code_tree_ignored_paths(root: Path, paths: List[str]) -> Set[str]:
+    if not paths or not (root / ".git").exists():
+        return set()
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "git", "-C", str(root), "check-ignore", "-z", "--stdin",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        payload = "\0".join(paths).encode("utf-8", errors="surrogateescape") + b"\0"
+        stdout, _ = await asyncio.wait_for(process.communicate(payload), timeout=5.0)
+        if process.returncode not in {0, 1}:
+            return set()
+        return {item.decode("utf-8", errors="replace").replace("\\", "/") for item in stdout.split(b"\0") if item}
+    except Exception:
+        return set()
+
+
+def _code_tree_entry(root: Path, target: Path, statuses: Dict[str, str]) -> Optional[dict]:
+    try:
+        resolved = target.resolve()
+        relative = target.relative_to(root).as_posix()
+        if os.path.commonpath((str(root), str(resolved))) != str(root):
+            return None
+        stat = target.stat()
+    except (OSError, ValueError):
+        return None
+    is_directory = target.is_dir()
+    return {
+        "name": target.name,
+        "path": relative,
+        "type": "directory" if is_directory else "file",
+        "extension": "" if is_directory else target.suffix.lower().lstrip("."),
+        "status": statuses.get(relative, ""),
+        "size": None if is_directory else stat.st_size,
+        "mtime": stat.st_mtime,
+        "symlink": target.is_symlink(),
+    }
+
+
+async def _code_tree_children(root: Path, relative_path: str, show_hidden: bool) -> List[dict]:
+    directory = _code_preview_target(str(root), relative_path or ".")
+    if not directory.exists() or not directory.is_dir():
+        raise HTTPException(status_code=404, detail="项目目录不存在")
+    try:
+        candidates = [item for item in directory.iterdir() if not _code_tree_should_skip(item.name, show_hidden)]
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"无法读取项目目录：{exc}") from exc
+    candidates = candidates[:_CODE_TREE_MAX_CHILDREN * 2]
+    relative_candidates = []
+    for item in candidates:
+        try:
+            relative_candidates.append(item.relative_to(root).as_posix())
+        except ValueError:
+            continue
+    ignored = await _code_tree_ignored_paths(root, relative_candidates)
+    statuses = await _code_tree_git_statuses(root)
+    entries = [entry for item in candidates if item.relative_to(root).as_posix() not in ignored if (entry := _code_tree_entry(root, item, statuses))]
+    entries.sort(key=lambda item: (0 if item["type"] == "directory" else 1, item["name"].lower(), item["path"]))
+    return entries[:_CODE_TREE_MAX_CHILDREN]
+
+
+async def _code_tree_search(root: Path, query: str, show_hidden: bool) -> List[dict]:
+    needle = query.strip().lower()
+    if not needle:
+        return await _code_tree_children(root, "", show_hidden)
+    matches: List[Path] = []
+    try:
+        for current_root, dirs, files in os.walk(root):
+            current = Path(current_root)
+            try:
+                depth = len(current.relative_to(root).parts)
+            except ValueError:
+                continue
+            if depth >= _CODE_TREE_MAX_DEPTH:
+                dirs[:] = []
+            else:
+                dirs[:] = [name for name in dirs if not _code_tree_should_skip(name, show_hidden)]
+            for name in [*dirs, *files]:
+                if _code_tree_should_skip(name, show_hidden):
+                    continue
+                target = current / name
+                try:
+                    relative = target.relative_to(root).as_posix()
+                except ValueError:
+                    continue
+                if needle not in name.lower() and needle not in relative.lower():
+                    continue
+                matches.append(target)
+                if len(matches) >= _CODE_TREE_SEARCH_LIMIT * 2:
+                    break
+            if len(matches) >= _CODE_TREE_SEARCH_LIMIT * 2:
+                break
+    except OSError:
+        return []
+    relative_matches = [item.relative_to(root).as_posix() for item in matches]
+    ignored = await _code_tree_ignored_paths(root, relative_matches)
+    statuses = await _code_tree_git_statuses(root)
+    entries = [entry for item in matches if item.relative_to(root).as_posix() not in ignored if (entry := _code_tree_entry(root, item, statuses))]
+    entries.sort(key=lambda item: (
+        0 if item["name"].lower().startswith(needle) else 1,
+        0 if item["status"] else 1,
+        len(Path(item["path"]).parts),
+        item["path"].lower(),
+    ))
+    return entries[:_CODE_TREE_SEARCH_LIMIT]
+
+
 def _code_file_payload(cwd: str, path: Path, *, include_content: bool) -> dict:
     root = Path(os.path.expanduser(cwd or "~")).resolve()
     target = path.resolve()
@@ -7408,6 +7897,36 @@ def _code_editor_command(editor: str, target: Path, line: Optional[int]) -> List
     raise HTTPException(status_code=400, detail="所选编辑器不可用")
 
 
+@app.get("/api/sessions/{session_id}/code-tree")
+async def read_code_tree(
+    session_id: str,
+    path: str = Query(default=""),
+    q: str = Query(default=""),
+    show_hidden: bool = Query(default=False),
+):
+    row = _agent_sdk_session_row(session_id)
+    root = Path(os.path.expanduser(row["cwd"] or "~")).resolve()
+    if not root.is_dir():
+        raise HTTPException(status_code=400, detail="Code 项目目录不存在")
+    if q.strip():
+        entries = await _code_tree_search(root, q[:200], show_hidden)
+    else:
+        entries = await _code_tree_children(root, path[:2000], show_hidden)
+    current = "" if q.strip() else str(path or "").strip("/")
+    parent = "" if not current else Path(current).parent.as_posix()
+    if parent == ".":
+        parent = ""
+    return {
+        "ok": True,
+        "root": root.name,
+        "path": current,
+        "parent": parent,
+        "query": q.strip(),
+        "entries": entries,
+        "truncated": len(entries) >= (_CODE_TREE_SEARCH_LIMIT if q.strip() else _CODE_TREE_MAX_CHILDREN),
+    }
+
+
 @app.get("/api/sessions/{session_id}/code-file")
 async def read_code_file(
     session_id: str,
@@ -7484,6 +8003,110 @@ async def open_code_file_external(request: Request, session_id: str, req: CodeFi
         detail = stderr.decode("utf-8", errors="replace").strip()[:1000] or "本机编辑器启动失败"
         raise HTTPException(status_code=400, detail=detail)
     return {"ok": True, "editor": req.editor or "system", "path": target.relative_to(root).as_posix()}
+
+
+def _session_code_terminal(session_id: str, terminal_id: str) -> CodeTerminalRuntime:
+    runtime = _code_terminals.get(str(terminal_id or ""))
+    if runtime is None or runtime.session_id != session_id:
+        raise HTTPException(status_code=404, detail="终端不存在")
+    return runtime
+
+
+@app.get("/api/sessions/{session_id}/terminals")
+async def list_code_terminals(session_id: str):
+    _agent_sdk_session_row(session_id)
+    terminals = [_code_terminal_payload(item) for item in _code_terminals.values() if item.session_id == session_id]
+    terminals.sort(key=lambda item: item["created_at"])
+    return {"ok": True, "terminals": terminals, "supported": os.name != "nt"}
+
+
+@app.post("/api/sessions/{session_id}/terminals")
+async def create_code_terminal(session_id: str, req: CodeTerminalCreateRequest):
+    row = _agent_sdk_session_row(session_id)
+    runtime = await _spawn_code_terminal(
+        session_id,
+        row["cwd"] or os.path.expanduser("~"),
+        req.cols or 100,
+        req.rows or 30,
+    )
+    return {"ok": True, "terminal": _code_terminal_payload(runtime)}
+
+
+@app.delete("/api/sessions/{session_id}/terminals/{terminal_id}")
+async def delete_code_terminal(session_id: str, terminal_id: str):
+    _agent_sdk_session_row(session_id)
+    runtime = _session_code_terminal(session_id, terminal_id)
+    await _terminate_code_terminal(runtime)
+    _code_terminals.pop(runtime.id, None)
+    return {"ok": True, "terminal": _code_terminal_payload(runtime)}
+
+
+async def _send_code_terminal_events(websocket: WebSocket, queue: asyncio.Queue) -> None:
+    while True:
+        item = await queue.get()
+        if isinstance(item, bytes):
+            await websocket.send_bytes(item)
+        else:
+            await websocket.send_json(item)
+
+
+def _write_code_terminal(runtime: CodeTerminalRuntime, data: str) -> None:
+    if runtime.closed or runtime.process.returncode is not None:
+        return
+    raw = str(data or "").encode("utf-8", errors="replace")[:64 * 1024]
+    view = memoryview(raw)
+    while view:
+        try:
+            written = os.write(runtime.master_fd, view)
+        except BlockingIOError:
+            break
+        except OSError:
+            break
+        view = view[written:]
+    runtime.last_active_at = time.time()
+
+
+@app.websocket("/api/sessions/{session_id}/terminals/{terminal_id}/ws")
+async def code_terminal_websocket(websocket: WebSocket, session_id: str, terminal_id: str):
+    if not _code_terminal_websocket_authorized(websocket):
+        await websocket.close(code=1008, reason="terminal authorization required")
+        return
+    try:
+        _agent_sdk_session_row(session_id)
+        runtime = _session_code_terminal(session_id, terminal_id)
+    except HTTPException as exc:
+        await websocket.close(code=1008, reason=str(exc.detail)[:120])
+        return
+    await websocket.accept()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=256)
+    runtime.listeners.add(queue)
+    runtime.last_active_at = time.time()
+    await websocket.send_json({
+        "type": "ready",
+        "terminal": _code_terminal_payload(runtime),
+        "backlog": base64.b64encode(bytes(runtime.backlog)).decode("ascii"),
+    })
+    sender = asyncio.create_task(_send_code_terminal_events(websocket, queue))
+    try:
+        while True:
+            message = await websocket.receive_json()
+            message_type = str(message.get("type") or "")
+            if message_type == "input":
+                _write_code_terminal(runtime, str(message.get("data") or ""))
+            elif message_type == "resize":
+                _code_terminal_resize(runtime, _safe_int(message.get("cols"), runtime.cols), _safe_int(message.get("rows"), runtime.rows))
+            elif message_type == "ping":
+                runtime.last_active_at = time.time()
+                await queue.put({"type": "pong", "ts": time.time()})
+    except (WebSocketDisconnect, RuntimeError, ValueError):
+        pass
+    finally:
+        runtime.listeners.discard(queue)
+        sender.cancel()
+        try:
+            await sender
+        except (asyncio.CancelledError, WebSocketDisconnect, RuntimeError):
+            pass
 
 
 @app.post("/api/sessions/{session_id}/permissions/preview-change")
@@ -9657,6 +10280,7 @@ async def delete_session(request: Request, session_id: str):
     if _session_control_busy(session_id):
         raise HTTPException(status_code=409, detail="session is busy")
     await _discard_session_runtime(session_id)
+    await _terminate_session_code_terminals(session_id)
     events = load_events(session_id)
     with db_connect() as conn:
         row = conn.execute("SELECT cwd FROM sessions WHERE id = ?", (session_id,)).fetchone()
@@ -9682,6 +10306,7 @@ async def clear_session(request: Request, session_id: str):
     if _session_control_busy(session_id):
         raise HTTPException(status_code=409, detail="session is busy")
     await _discard_session_runtime(session_id)
+    await _terminate_session_code_terminals(session_id)
     events = load_events(session_id)
     with db_connect() as conn:
         row = conn.execute("SELECT cwd FROM sessions WHERE id = ?", (session_id,)).fetchone()
@@ -11032,13 +11657,74 @@ async def translate_config_skills(request: Request, payload: SkillTranslateReque
     }
 
 
+def _directory_picker_payload(raw_path: str = "", *, show_hidden: bool = False) -> dict:
+    requested = str(raw_path or "").strip() or "~"
+    current = Path(os.path.expanduser(requested)).resolve()
+    if not current.exists() or not current.is_dir():
+        raise HTTPException(status_code=404, detail="目录不存在")
+    entries: List[dict] = []
+    try:
+        children = sorted(current.iterdir(), key=lambda item: item.name.casefold())
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="没有权限读取这个目录") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"无法读取目录：{exc}") from exc
+    for child in children:
+        if not show_hidden and child.name.startswith("."):
+            continue
+        try:
+            resolved = child.resolve()
+            if not resolved.is_dir():
+                continue
+        except (OSError, RuntimeError):
+            continue
+        entries.append({
+            "name": child.name,
+            "path": str(resolved),
+            "symlink": child.is_symlink(),
+        })
+        if len(entries) >= 250:
+            break
+    parent = "" if current.parent == current else str(current.parent)
+    home = Path.home().resolve()
+    roots = [{"name": "主目录", "path": str(home)}]
+    tmp = Path("/tmp").resolve()
+    if tmp.is_dir() and tmp != home:
+        roots.append({"name": "临时目录", "path": str(tmp)})
+    return {
+        "ok": True,
+        "path": str(current),
+        "name": current.name or str(current),
+        "parent": parent,
+        "entries": entries,
+        "roots": roots,
+        "truncated": len(entries) >= 250,
+    }
+
+
+@app.get("/api/directories")
+async def browse_directories(
+    path: str = Query(default=""),
+    show_hidden: bool = Query(default=False),
+):
+    return _directory_picker_payload(path, show_hidden=show_hidden)
+
+
+@app.post("/api/projects/register")
+async def register_project_path(req: ProjectPathRequest):
+    normalized = _remember_project_path(req.cwd)
+    target = Path(normalized)
+    return {"ok": True, "cwd": normalized, "name": target.name or normalized}
+
+
 @app.get("/api/cwds")
 async def list_cwds():
     with db_connect() as conn:
         rows = conn.execute(
             "SELECT cwd, MAX(updated_at) AS last FROM sessions WHERE cwd <> '' GROUP BY cwd ORDER BY last DESC LIMIT 10"
         ).fetchall()
-    return [r["cwd"] for r in rows]
+    values = [*_saved_project_values(), *[r["cwd"] for r in rows]]
+    return list(dict.fromkeys(value for value in values if value))[:50]
 
 
 @app.get("/api/tags")
