@@ -5138,6 +5138,23 @@
     font-size: 11.5px !important;
     text-align: left !important;
   }
+  body.code-mode #chatInner > .cw-reconnect-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #7b756f !important;
+    font-size: 12px !important;
+  }
+  .cw-reconnect-status svg {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    animation: cw-reconnect-pulse 1.15s ease-in-out infinite;
+  }
+  @keyframes cw-reconnect-pulse {
+    0%, 100% { opacity: .42; }
+    50% { opacity: 1; }
+  }
   body.code-mode .thinking-indicator {
     min-height: 28px;
     gap: 8px;
@@ -7975,6 +7992,10 @@
                       </button>
                     </span>
                   </span>
+                  <button type="button" class="cw-workspace-context-item" id="cwComposerReconnectBtn" role="menuitem" title="重建当前 Claude Agent SDK 会话连接">
+                    <span class="cw-workspace-context-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg></span>
+                    <span class="cw-workspace-context-copy"><span class="cw-workspace-context-title">重连当前会话</span><span class="cw-workspace-context-value">重建 SDK 连接，不重复执行任务</span></span>
+                  </button>
                 </div>
               </span>
               <span class="cw-mode-picker cw-composer-settings-picker">
@@ -9232,6 +9253,10 @@ const codeQueueOwnerBySession = new Map();
 const codeMessageQueues = new Map();
 const codeQueueDispatchingOwners = new Set();
 const codeQueuePauseReasons = new Map();
+// A Code turn belongs to the session that started it, even when the user
+// switches to another conversation. Never use the currently visible session
+// or a shared AbortController as the source of truth for a running Code turn.
+const codeSessionRuns = new Map();
 let codeQueueDrainTimer = null;
 let codeQueueSyncSerial = 0;
 let currentCodeAutoApprove = false;
@@ -9292,6 +9317,7 @@ class SessionState {
     this.dom = null;
     this.pendingEvents = [];
     this.pendingOverflow = false;
+    this.eventCount = 0;
     this.runtime = 'unknown';
     this.autoApprove = false;
     this.contextTokens = null;
@@ -9374,6 +9400,7 @@ const cwComposerPermIcon = $('cwComposerPermIcon');
 const cwComposerProjectBtn = $('cwComposerProjectBtn');
 const cwComposerBranchBtn = $('cwComposerBranchBtn');
 const cwComposerPermBtn = $('cwComposerPermBtn');
+const cwComposerReconnectBtn = $('cwComposerReconnectBtn');
 const cwComposerContextBtn = $('cwComposerContextBtn');
 const cwComposerContextMenu = $('cwComposerContextMenu');
 const cwPermissionModeMenu = $('cwPermissionModeMenu');
@@ -12465,6 +12492,7 @@ function addSystemInfo(text) {
   el.className = 'system-info text-center text-xs text-gray-400 py-1';
   el.textContent = text;
   chatInner.appendChild(el);
+  return el;
 }
 
 function addSystemAction(text, actionText, onClick) {
@@ -12482,6 +12510,7 @@ function addSystemAction(text, actionText, onClick) {
     el.appendChild(btn);
   }
   chatInner.appendChild(el);
+  return el;
 }
 
 // ===== token usage =====
@@ -12640,6 +12669,60 @@ async function openNativeContextUsage() {
   renderNativeContextUsage(data || latestNativeContextUsage || {});
 }
 
+function currentAgentSdkControlPayload() {
+  const perm = buildPermissionPayload();
+  return {
+    model: modelSelect.value || null,
+    effort: effectiveEffortForSend() || null,
+    permission_mode: perm.permission_mode || null,
+    allowed_tools: perm.allowed_tools || [],
+    disallowed_tools: perm.disallowed_tools || [],
+  };
+}
+
+async function reconnectCurrentCodeSession(options = {}) {
+  if (!codeMode || !sessionId || currentCodeRuntime !== 'claude_agent_sdk') {
+    if (!options.silent) toast('当前不是 Claude Agent SDK Code 会话');
+    return false;
+  }
+  const targetSessionId = sessionId;
+  if (codeRunForSession(targetSessionId) || nativeTurnRecoveryRunningSessionId === targetSessionId) {
+    if (!options.silent) toast('请先等待或停止当前 Code 回合');
+    return false;
+  }
+  const button = options.button || null;
+  if (button) button.disabled = true;
+  const status = addSystemInfo('正在重建 Claude Agent SDK 会话连接…');
+  status?.classList.add('cw-reconnect-status');
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/runtime/reconnect`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(currentAgentSdkControlPayload()),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    if (sessionId === targetSessionId) {
+      status.textContent = '连接已重建 · 下一轮将从原 Claude Session 继续';
+      scheduleNativeContextUsageRefresh(200);
+    }
+    if (!options.silent) toast('当前 Code 会话已重连');
+    return true;
+  } catch (error) {
+    if (sessionId === targetSessionId) {
+      status.textContent = `重连失败：${error.message || error}`;
+      addSystemAction('连接仍不可用', '打开 SDK 设置', () => {
+        openModal(settingsModal);
+        refreshAgentSdkStatus(false);
+      });
+    }
+    if (!options.silent) toast('重连失败：' + (error.message || error), { timeout: 4200 });
+    return false;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 tokenCounter?.setAttribute('tabindex', '0');
 tokenCounter?.setAttribute('role', 'button');
 tokenCounter?.setAttribute('aria-label', '查看 Code 上下文占用明细');
@@ -12746,7 +12829,10 @@ function addErrorBlock(message) {
   const actions = card.querySelector('.cw-code-diagnostic-actions');
   const addAction = (label, handler) => { const button=document.createElement('button'); button.type='button'; button.textContent=label; button.addEventListener('click',handler); actions.appendChild(button); };
   if (diagnostic[2] === 'context') addAction('查看上下文', openNativeContextUsage);
-  if (diagnostic[2] === 'sdk') addAction('打开 SDK 设置', () => { openModal(settingsModal); refreshAgentSdkStatus(false); });
+  if (diagnostic[2] === 'sdk') {
+    if (sessionId) addAction('重建会话连接', () => reconnectCurrentCodeSession());
+    addAction('打开 SDK 设置', () => { openModal(settingsModal); refreshAgentSdkStatus(false); });
+  }
   if (diagnostic[2] === 'permissions') addAction('查看授权规则', openPermissionRulesModal);
   addAction('复制错误', () => navigator.clipboard?.writeText(raw));
   if (sessionId && lastUserIndex >= 0) addAction('重试这一轮', () => retryTurnWithCurrentPermissions(sessionId,lastUserIndex));
@@ -13041,6 +13127,7 @@ function stopNativeTurnRecovery() {
   if (nativeTurnRecoveryTimer) clearTimeout(nativeTurnRecoveryTimer);
   nativeTurnRecoveryTimer = null;
   nativeTurnRecoveryRunningSessionId = null;
+  syncActiveCodeRunControls();
   renderCodeMessageQueue();
 }
 
@@ -13061,12 +13148,43 @@ function recoveredPermissionEvent(item) {
   };
 }
 
-function startNativeTurnRecovery(targetSessionId, initialEventCount, initialContainer = null) {
+function startNativeTurnRecovery(targetSessionId, initialEventCount, initialContainer = null, options = {}) {
   stopNativeTurnRecovery();
   if (!codeMode || !targetSessionId || currentCodeRuntime !== 'claude_agent_sdk') return;
   const serial = nativeTurnRecoverySerial;
   let eventCount = Number(initialEventCount || 0);
   let asstContainer = initialContainer;
+  const connectionLost = options.connectionLost === true;
+  const maxReconnectAttempts = Math.max(1, Number(options.maxAttempts || 5));
+  let reconnectAttempt = connectionLost ? 1 : 0;
+  let reconnectStatus = null;
+
+  const showReconnectStatus = (text) => {
+    if (serial !== nativeTurnRecoverySerial || sessionId !== targetSessionId) return;
+    if (!reconnectStatus || !reconnectStatus.isConnected) {
+      reconnectStatus = addSystemInfo(text);
+      reconnectStatus?.classList.add('cw-reconnect-status');
+      if (reconnectStatus) reconnectStatus.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12.6a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><path d="M12 20h.01"/></svg><span>${escapeHtml(text)}</span>`;
+    } else {
+      const label = reconnectStatus.querySelector('span');
+      if (label) label.textContent = text;
+    }
+  };
+  const markConnectionRestored = () => {
+    if (!reconnectStatus) return;
+    const status = reconnectStatus;
+    const label = status.querySelector('span');
+    if (label) label.textContent = '连接已恢复';
+    status.querySelector('svg')?.style.setProperty('animation', 'none');
+    setTimeout(() => status.remove(), 1800);
+    reconnectStatus = null;
+  };
+
+  if (connectionLost) {
+    nativeTurnRecoveryRunningSessionId = targetSessionId;
+    syncActiveCodeRunControls();
+    showReconnectStatus(`正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}`);
+  }
 
   const poll = async () => {
     if (
@@ -13078,11 +13196,12 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
     try {
       const stateResponse = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/permissions/pending`);
       if (!stateResponse.ok) {
-        nativeTurnRecoveryTimer = setTimeout(poll, 1200);
-        return;
+        throw new Error(`HTTP ${stateResponse.status}`);
       }
       const state = await stateResponse.json();
       if (serial !== nativeTurnRecoverySerial || sessionId !== targetSessionId) return;
+      markConnectionRestored();
+      reconnectAttempt = 0;
       for (const pending of (state.pending || [])) {
         const result = handleEvent(recoveredPermissionEvent(pending), asstContainer);
         if (result) asstContainer = result;
@@ -13104,7 +13223,7 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
       }
       if (state.running) {
         nativeTurnRecoveryRunningSessionId = targetSessionId;
-        stopBtn.classList.remove('hidden');
+        syncActiveCodeRunControls();
         if (!asstContainer) asstContainer = newAssistantBubble();
         if (!asstContainer.querySelector(':scope > [data-role="thinking"]')) {
           showThinking(asstContainer, '正在生成响应…');
@@ -13113,8 +13232,8 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
         nativeTurnRecoveryTimer = setTimeout(poll, 700);
       } else {
         nativeTurnRecoveryRunningSessionId = null;
-        stopBtn.classList.add('hidden');
-        hideThinking(asstContainer);
+        syncActiveCodeRunControls();
+        hideThinking(asstContainer, { force: true });
         finishPendingToolUses('已结束', 'done');
         scheduleNativeContextUsageRefresh(0);
         refreshSessions();
@@ -13123,7 +13242,22 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
         scheduleCodeQueueDrain(codeQueueOwnerForSession(targetSessionId));
       }
     } catch {
-      nativeTurnRecoveryTimer = setTimeout(poll, 1200);
+      if (!connectionLost) {
+        nativeTurnRecoveryTimer = setTimeout(poll, 1200);
+        return;
+      }
+      if (reconnectAttempt >= maxReconnectAttempts) {
+        nativeTurnRecoveryRunningSessionId = null;
+        syncActiveCodeRunControls();
+        hideThinking(asstContainer, { force: true });
+        showReconnectStatus(`连接暂未恢复 · 已尝试 ${maxReconnectAttempts} 次`);
+        addSystemAction('当前任务不会自动重复执行', '重建会话连接', () => reconnectCurrentCodeSession());
+        renderCodeMessageQueue();
+        return;
+      }
+      reconnectAttempt += 1;
+      showReconnectStatus(`正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}`);
+      nativeTurnRecoveryTimer = setTimeout(poll, Math.min(3200, 650 * reconnectAttempt));
     }
   };
   poll();
@@ -13687,6 +13821,25 @@ function formatThinkingElapsed(seconds) {
   return `${Math.floor(safeSeconds / 60)} 分 ${safeSeconds % 60} 秒`;
 }
 
+function ensureThinkingElapsedTimer(el, startedAt = Date.now()) {
+  if (!el) return;
+  const elapsed = el.querySelector('.thinking-elapsed');
+  if (!elapsed) return;
+  const safeStartedAt = Number.isFinite(Number(startedAt)) && Number(startedAt) > 0
+    ? Number(startedAt)
+    : Date.now();
+  el.dataset.startedAt = String(safeStartedAt);
+  const updateElapsed = () => {
+    elapsed.textContent = `（已用 ${formatThinkingElapsed((Date.now() - safeStartedAt) / 1000)}）`;
+  };
+  updateElapsed();
+  if (el._elapsedTimer) return;
+  // Code conversations are cached by detaching their DOM while another
+  // session is visible. Keep the per-session clock alive while detached; the
+  // authoritative turn cleanup clears this timer via hideThinking(force).
+  el._elapsedTimer = setInterval(updateElapsed, 1000);
+}
+
 function createThinkingIndicator(label, startedAt = Date.now()) {
   const el = document.createElement('div');
   el.className = 'thinking-indicator';
@@ -13700,26 +13853,27 @@ function createThinkingIndicator(label, startedAt = Date.now()) {
     const elapsed = document.createElement('span');
     elapsed.className = 'thinking-elapsed';
     elapsed.setAttribute('aria-hidden', 'true');
-    const updateElapsed = () => {
-      elapsed.textContent = `（已用 ${formatThinkingElapsed((Date.now() - startedAt) / 1000)}）`;
-    };
-    updateElapsed();
     el.appendChild(elapsed);
-    el._elapsedTimer = setInterval(() => {
-      if (!el.isConnected) {
-        clearInterval(el._elapsedTimer);
-        el._elapsedTimer = null;
-        return;
-      }
-      updateElapsed();
-    }, 1000);
+    ensureThinkingElapsedTimer(el, startedAt);
   }
   return el;
 }
 
 function showThinking(container, label) {
   if (!container) return null;
-  hideThinking(container);
+  const existing = container.querySelector(':scope > [data-role="thinking"]');
+  if (codeMode && existing?.dataset.codeRunStatus === 'true') {
+    const resolvedLabel = (!label || label === '正在思考') ? '正在生成响应…' : label;
+    const labelEl = existing.querySelector('.thinking-label');
+    if (labelEl) labelEl.textContent = resolvedLabel;
+    ensureThinkingElapsedTimer(existing, Number(existing.dataset.startedAt || container.dataset.turnStartedAt || 0));
+    // Keep the live row after the latest streamed/tool content so it remains
+    // visible at the bottom of a long Code response without resetting elapsed time.
+    if (container.lastElementChild !== existing) container.appendChild(existing);
+    scrollBottom();
+    return existing;
+  }
+  hideThinking(container, { force: true });
   let startedAt = Number(container.dataset.turnStartedAt || 0);
   if (!Number.isFinite(startedAt) || startedAt <= 0) {
     startedAt = Date.now();
@@ -13728,18 +13882,69 @@ function showThinking(container, label) {
   const resolvedLabel = codeMode && (!label || label === '正在思考') ? '正在生成响应…' : label;
   const el = createThinkingIndicator(resolvedLabel, startedAt);
   el.dataset.role = 'thinking';
+  if (codeMode) el.dataset.codeRunStatus = 'true';
   container.appendChild(el);
   scrollBottom();
   return el;
 }
 
-function hideThinking(container) {
+function hideThinking(container, options = {}) {
   if (!container) return;
   const existing = container.querySelector(':scope > [data-role="thinking"]');
   if (existing) {
+    // Code mode owns this status for the complete SDK turn. Intermediate
+    // assistant/tool/thinking events must not clear it while Stop is active;
+    // only an authoritative terminal path may pass force=true.
+    if (codeMode && existing.dataset.codeRunStatus === 'true' && options.force !== true) return;
     if (existing._elapsedTimer) clearInterval(existing._elapsedTimer);
     existing.remove();
   }
+}
+
+function nativeResultErrorMessage(result) {
+  if (!result || result.type !== 'result') return '';
+  const subtype = String(result.subtype || '').trim();
+  const failed = result.is_error === true || subtype.startsWith('error_');
+  if (!failed) return '';
+  const errors = Array.isArray(result.errors) ? result.errors : [];
+  const details = errors.map(item => {
+    if (typeof item === 'string') return item;
+    if (item && typeof item === 'object') return item.message || item.error || JSON.stringify(item);
+    return String(item || '');
+  }).filter(Boolean);
+  return details.join('\n')
+    || String(result.error || result.message || '').trim()
+    || `Claude Agent SDK 执行失败${subtype ? `（${subtype}）` : ''}`;
+}
+
+function nativeReconnectStatusText(obj) {
+  if (!obj || obj.type !== 'system' || obj.subtype !== 'status') return '';
+  const raw = String(obj.message || obj.status || obj.text || '').trim();
+  if (!raw || !/(reconnect|retry|connection|重连|连接)/i.test(raw)) return '';
+  const attempt = Number(obj.attempt ?? obj.retry_count ?? obj.retryCount ?? 0);
+  const max = Number(obj.max_attempts ?? obj.maxAttempts ?? obj.max_retries ?? 0);
+  if (/reconnect|retry/i.test(raw) && attempt > 0) {
+    return `正在重新连接 ${attempt}/${max > 0 ? max : 5}`;
+  }
+  return raw;
+}
+
+function nativeApiRetryStatusText(obj) {
+  if (!obj || obj.type !== 'system' || obj.subtype !== 'api_retry') return '';
+  const attempt = Math.max(1, Number(obj.attempt || 1));
+  const maxRetries = Math.max(attempt, Number(obj.max_retries || obj.maxRetries || 10));
+  const delayMs = Math.max(0, Number(obj.retry_delay_ms || obj.retryDelayMs || 0));
+  const delay = delayMs > 0 ? ` · ${Math.max(1, Math.ceil(delayMs / 1000))} 秒后` : '';
+  const status = Number(obj.error_status || obj.status || 0);
+  const reason = status === 429 ? '请求受限' : '请求暂时失败';
+  return `${reason}，正在重试 ${attempt}/${maxRetries}${delay}`;
+}
+
+function codeEventStoredByServer(obj) {
+  if (!obj || !obj.type) return false;
+  if (['meta', 'done', 'stream_event', 'permission_request', 'permission_auto_approved'].includes(obj.type)) return false;
+  if (obj.type === 'system' && String(obj.subtype || '').startsWith('hook_')) return false;
+  return obj.type !== 'user_input';
 }
 
 function handleEvent(obj, container, options = {}) {
@@ -13775,7 +13980,9 @@ function handleEvent(obj, container, options = {}) {
       notifyUser('Code 会话等待回答', obj.title || obj.description || 'Claude 有问题需要你回答');
       beep();
     }
-    return addNativePermissionRequest(container, obj);
+    const nextContainer = addNativePermissionRequest(container, obj);
+    if (!replay && codeMode) showThinking(nextContainer, '正在生成响应…');
+    return nextContainer;
   }
   if (obj.type === 'permission_auto_approved') {
     if (!replay) addSystemInfo(`替我审批 · 已允许 ${obj.tool_name || '工具请求'}`);
@@ -13785,10 +13992,12 @@ function handleEvent(obj, container, options = {}) {
     hideThinking(container);
     finishPendingToolUses('权限被拒绝', 'error');
     if (!replay && maybeScheduleCodePermissionAutoRetry(container, obj)) return container;
-    return addPermissionErrorBlock(container, obj);
+    const nextContainer = addPermissionErrorBlock(container, obj);
+    if (!replay && codeMode) showThinking(nextContainer, '正在生成响应…');
+    return nextContainer;
   }
-  if (obj.type === 'error') { finishPendingToolUses('出错', 'error'); addErrorBlock(obj.message); return container; }
-  if (obj.type === 'done') { finishPendingToolUses('已结束', 'done'); return container; }
+  if (obj.type === 'error') { hideThinking(container, { force: true }); finishPendingToolUses('出错', 'error'); addErrorBlock(obj.message); return container; }
+  if (obj.type === 'done') { hideThinking(container, { force: true }); finishPendingToolUses('已结束', 'done'); return container; }
   if (obj.type === 'raw') { addSystemInfo(obj.text); return container; }
   if (obj.type === 'system' && obj.subtype === 'init') {
     return container;
@@ -13805,7 +14014,20 @@ function handleEvent(obj, container, options = {}) {
     }
     return container;
   }
-  if (obj.type === 'system' && (obj.subtype === 'hook_started' || obj.subtype === 'hook_response' || obj.subtype === 'status')) {
+  if (obj.type === 'system' && obj.subtype === 'status') {
+    const reconnectText = nativeReconnectStatusText(obj);
+    if (!replay && reconnectText) {
+      const status = addSystemInfo(reconnectText);
+      status?.classList.add('cw-reconnect-status');
+    }
+    return container;
+  }
+  if (obj.type === 'system' && obj.subtype === 'api_retry') {
+    const retryText = nativeApiRetryStatusText(obj);
+    if (!replay && retryText) showThinking(container, retryText);
+    return container;
+  }
+  if (obj.type === 'system' && (obj.subtype === 'hook_started' || obj.subtype === 'hook_response')) {
     return container;
   }
   if (obj.type === 'code_validation') {
@@ -13843,6 +14065,7 @@ function handleEvent(obj, container, options = {}) {
         excerpt: answerText.slice(0, 500),
       });
     }
+    if (!replay && codeMode) showThinking(container, '正在生成响应…');
     scrollBottom();
     return container;
   }
@@ -13871,11 +14094,13 @@ function handleEvent(obj, container, options = {}) {
     return container;
   }
   if (obj.type === 'result') {
+    hideThinking(container, { force: true });
+    const resultError = nativeResultErrorMessage(obj);
     const cost = obj.total_cost_usd !== undefined ? ` · $${obj.total_cost_usd.toFixed(4)}` : '';
     const dur = obj.duration_ms !== undefined ? ` · ${(obj.duration_ms/1000).toFixed(1)}s` : '';
     const tokens = formatTurnUsage(obj.usage);
     const tokensSuffix = tokens ? ` · ${tokens}` : '';
-    addSystemInfo(`完成${dur}${cost}${tokensSuffix}`);
+    addSystemInfo(`${resultError ? '失败' : '完成'}${dur}${cost}${tokensSuffix}`);
     accumulateSessionTokens(obj.usage, obj.modelUsage);
     updateTokenCount();
     if (!replay) scheduleNativeContextUsageRefresh();
@@ -13900,10 +14125,16 @@ function handleEvent(obj, container, options = {}) {
         permission_denials: denials,
         hint: '请点击下方按钮放行工具后重试，或切换为「代理模式」或「自动模式」。',
       };
-      hideThinking(container);
+      hideThinking(container, { force: true });
       finishPendingToolUses('权限被拒绝', 'error');
       if (!replay && maybeScheduleCodePermissionAutoRetry(container, info)) return container;
       return addPermissionErrorBlock(container, info);
+    }
+    if (resultError) {
+      hideThinking(container, { force: true });
+      finishPendingToolUses('出错', 'error');
+      addErrorBlock(resultError);
+      return container;
     }
     finishPendingToolUses('已结束', 'done');
     return container;
@@ -13942,6 +14173,7 @@ function handleStreamEvent(ev, container) {
         ? addToolUseBlock(state.container, block.name, block.input || {}, { id: block.id, pending: true })
         : null;
       state.blocks[idx] = { type: 'tool_use', name: block.name, id: block.id, el, inputData: block.input || {}, inputJson: '' };
+      if (codeMode) showThinking(state.container, '正在生成响应…');
       if (el) scrollBottom();
     }
     return container;
@@ -13966,6 +14198,7 @@ function handleStreamEvent(ev, container) {
         block.el = el;
       }
       block.el.textContent = block.text;
+      if (codeMode) showThinking(state.container, '正在生成响应…');
       scrollBottom();
       scheduleArtifactDebounce(block, () => {
         const candidates = streamingArtifactCandidates(block.text);
@@ -13984,6 +14217,7 @@ function handleStreamEvent(ev, container) {
       } else {
         updateLiveThinkingBlock(state.container, block.text);
       }
+      if (codeMode) showThinking(state.container, '正在生成响应…');
       scrollBottom();
     } else if (d.type === 'input_json_delta' && block.type === 'tool_use') {
       block.inputJson += d.partial_json || '';
@@ -14784,6 +15018,7 @@ const builtinSlashCommands = [
   { group: '🔧 操作', kind: 'action', trigger: 'fork', name: '从当前位置分叉', desc: '基于最后一轮分叉到新会话', handler: slashFork, needSession: true, needHistory: true },
   { group: '💎 重操作', kind: 'heavy', trigger: 'compact', name: '压缩会话历史', desc: 'Code 使用 SDK 原生 compact；Chat 使用摘要备份', handler: slashCompact, needSession: true, needHistory: true },
   { group: '🔧 操作', kind: 'action', trigger: 'context', name: '查看上下文占用', desc: '查看 Claude Agent SDK 上下文明细', handler: openNativeContextUsage, needSession: true, codeOnly: true },
+  { group: '🔧 操作', kind: 'action', trigger: 'reconnect', name: '重连当前会话', desc: '重建 SDK runtime，从原 Session 继续且不重复执行任务', handler: reconnectCurrentCodeSession, needSession: true, codeOnly: true },
   { group: '💎 重操作', kind: 'heavy', trigger: 'init', name: '初始化 CLAUDE.md', desc: '扫项目并生成草稿到输入框', handler: slashInit },
   { group: '📝 模板', kind: 'template', trigger: 'recap', name: '总结当前进度', content: '请简要总结当前会话的目标、已完成、待办和风险，不超过 10 行。' },
   { group: '📝 模板', kind: 'template', trigger: 'test', name: '写测试', content: '请为下面的代码补充测试，覆盖正常路径、边界条件和错误路径：\n\n' },
@@ -15299,6 +15534,76 @@ function bindCodeQueueOwnerToSession(targetSessionId, owner = activeCodeQueueOwn
   });
 }
 
+function codeRunKey(targetSessionId, owner = activeCodeQueueOwner) {
+  const sid = String(targetSessionId || '').trim();
+  return sid ? `session:${sid}` : String(owner || '');
+}
+
+function codeRunForSession(targetSessionId) {
+  const sid = String(targetSessionId || '').trim();
+  if (!sid) return null;
+  const direct = codeSessionRuns.get(`session:${sid}`);
+  if (direct) return direct;
+  const owner = codeQueueOwnerBySession.get(sid);
+  return owner ? (codeSessionRuns.get(owner) || null) : null;
+}
+
+function codeRunForOwner(owner = activeCodeQueueOwner) {
+  const key = String(owner || '');
+  if (!key) return null;
+  const direct = codeSessionRuns.get(key);
+  if (direct) return direct;
+  for (const run of codeSessionRuns.values()) {
+    if (run.queueOwner === key) return run;
+  }
+  return null;
+}
+
+function registerCodeSessionRun(run) {
+  run.key = codeRunKey(run.sessionId, run.queueOwner);
+  codeSessionRuns.set(run.key, run);
+  return run;
+}
+
+function migrateCodeSessionRun(run, targetSessionId) {
+  const sid = String(targetSessionId || '').trim();
+  if (!run || !sid) return run;
+  if (run.key && codeSessionRuns.get(run.key) === run) codeSessionRuns.delete(run.key);
+  run.sessionId = sid;
+  run.key = `session:${sid}`;
+  codeSessionRuns.set(run.key, run);
+  bindCodeQueueOwnerToSession(sid, run.queueOwner);
+  return run;
+}
+
+function clearCodeSessionRun(run) {
+  if (!run) return;
+  if (run.key && codeSessionRuns.get(run.key) === run) codeSessionRuns.delete(run.key);
+  if (run.container && nativeTurnRecoveryRunningSessionId !== run.sessionId) {
+    hideThinking(run.container, { force: true });
+  }
+}
+
+function activeCodeSessionRun() {
+  if (!codeMode) return null;
+  return sessionId ? codeRunForSession(sessionId) : codeRunForOwner(activeCodeQueueOwner);
+}
+
+function syncActiveCodeRunControls() {
+  if (!codeMode) return;
+  const run = activeCodeSessionRun();
+  const recovering = !!sessionId && nativeTurnRecoveryRunningSessionId === sessionId;
+  stopBtn.classList.toggle('hidden', !(run || recovering));
+  if (run?.container && !run.container.querySelector(':scope > [data-role="thinking"]')) {
+    showThinking(run.container, '正在生成响应…');
+  }
+  // Compatibility for features such as plan approval that still consult the
+  // foreground controller. This pointer is derived, never shared ownership.
+  currentController = run?.controller || null;
+  currentControllerQueueOwner = run?.queueOwner || '';
+  sendBtn.disabled = !!contextCompactionRunning || !!agentLoopRunning;
+}
+
 function codeQueueSessionIsRecovering(owner) {
   if (!nativeTurnRecoveryRunningSessionId) return false;
   return codeQueueOwnerBySession.get(nativeTurnRecoveryRunningSessionId) === owner;
@@ -15306,15 +15611,8 @@ function codeQueueSessionIsRecovering(owner) {
 
 function isCodeQueueOwnerBusy(owner = activeCodeQueueOwner) {
   if (codeQueueDispatchingOwners.has(owner)) return true;
-  if (!!currentController && currentControllerQueueOwner === owner) return true;
-  if (owner === activeCodeQueueOwner && codeMode && !stopBtn.classList.contains('hidden')) return true;
+  if (codeRunForOwner(owner)) return true;
   if (codeQueueSessionIsRecovering(owner)) return true;
-  // Check per-session state for background sessions
-  const ownerSessionId = owner.startsWith('session:') ? owner.slice(8) : null;
-  if (ownerSessionId) {
-    const st = sessionStates.get(ownerSessionId);
-    if (st && st.controller) return true;
-  }
   return false;
 }
 
@@ -15950,13 +16248,21 @@ async function stopAgentLoop() {
 
 async function sendCore(message, displayMessage, imagePaths, options = {}) {
   const turnStartedAt = Date.now();
+  const turnIsCode = codeMode;
   const isFork = !!displayMessage;
   const forceNew = options.forceNew === true;
   const quiet = options.quiet === true;
   const composerSnapshot = options.composerSnapshot || null;
   const queueOwner = options.queueOwner || activeCodeQueueOwner;
+  let turnSessionId = sessionId;
+  const turnTitle = titleLabel.textContent;
   let snapshotUrlBlock = '';
   let turnSucceeded = false;
+  const turnViewIsActive = () => {
+    if (!turnIsCode) return true;
+    if (turnSessionId) return sessionId === turnSessionId;
+    return !sessionId && activeCodeQueueOwner === queueOwner;
+  };
 
   // Gemini-style: fetch detected URLs at send time
   if (!isFork && composerSnapshot?.urlEntries?.length) {
@@ -15977,7 +16283,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   if (!isFork) {
     const urlBlock = composerSnapshot ? snapshotUrlBlock : composeUrlContext();
     const docBlock = composerSnapshot
-      ? (!codeMode && composerSnapshot.docs?.length
+      ? (!turnIsCode && composerSnapshot.docs?.length
           ? composerSnapshot.docs.filter(doc => doc.content).map(doc => `【文档: ${doc.name}】\n---\n${doc.content}\n---`).join('\n\n') + '\n\n'
           : '')
       : composeDocContext();
@@ -16005,18 +16311,28 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
 
   const container = newAssistantBubble();
   container.dataset.turnStartedAt = String(turnStartedAt);
-  showThinking(container, codeMode ? '正在生成响应…' : '正在思考');
+  showThinking(container, turnIsCode ? '正在生成响应…' : '正在思考');
   forceScrollBottom();
 
-  sendBtn.disabled = !codeMode;
-  stopBtn.classList.remove('hidden');
+  sendBtn.disabled = !turnIsCode;
   const turnController = new AbortController();
-  const targetSessionId = sessionId;
-  const targetSessionState = getOrCreateSessionState(targetSessionId);
-  targetSessionState.controller = turnController;
-  targetSessionState.streaming = true;
-  currentController = turnController;
-  currentControllerQueueOwner = queueOwner;
+  const turnRun = turnIsCode
+    ? registerCodeSessionRun({ sessionId: turnSessionId, queueOwner, controller: turnController, startedAt: turnStartedAt, container })
+    : null;
+  let targetSessionState = turnIsCode && turnSessionId ? getOrCreateSessionState(turnSessionId) : null;
+  let turnRecoveryEventCount = Number(targetSessionState?.eventCount || 0);
+  let serverUserEventCounted = false;
+  if (targetSessionState) {
+    targetSessionState.controller = turnController;
+    targetSessionState.streaming = true;
+  }
+  if (turnIsCode) {
+    syncActiveCodeRunControls();
+  } else {
+    currentController = turnController;
+    currentControllerQueueOwner = queueOwner;
+    stopBtn.classList.remove('hidden');
+  }
   updateSidebarRunningIndicators();
   let lastResultEvent = null;
   let collectedAssistantText = '';
@@ -16026,10 +16342,15 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   const perm = buildPermissionPayload();
   const cwd = mobileCwdOrStop();
   if (cwd === null) {
+    hideThinking(container, { force: true });
     sendBtn.disabled = false;
-    stopBtn.classList.add('hidden');
-    targetSessionState.controller = null;
-    targetSessionState.streaming = false;
+    clearCodeSessionRun(turnRun);
+    if (targetSessionState) {
+      targetSessionState.controller = null;
+      targetSessionState.streaming = false;
+    }
+    if (turnIsCode) syncActiveCodeRunControls();
+    else stopBtn.classList.add('hidden');
     updateSidebarRunningIndicators();
     if (currentController === turnController) {
       currentController = null;
@@ -16044,14 +16365,14 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         message: actualMessage,
-        session_id: sessionId,
+        session_id: turnSessionId,
         cwd: cwd || null,
         images: imagePaths,
         docs: docMetadata.length ? docMetadata : null,
-        workspace_mode: codeMode ? 'code' : 'chat',
+        workspace_mode: turnIsCode ? 'code' : 'chat',
         model: modelSelect.value || null,
         effort: effectiveEffortForSend() || null,
-        system_prompt: codeMode ? null : (settings.systemPrompt || null),
+        system_prompt: turnIsCode ? null : (settings.systemPrompt || null),
         display_message: actualDisplay || null,
         permission_mode: perm.permission_mode,
         allowed_tools: perm.allowed_tools,
@@ -16062,13 +16383,15 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       signal: turnController.signal,
     });
     if (!resp.ok || !resp.body) {
-      hideThinking(container);
       let message = '请求失败: ' + resp.status;
       try {
         const data = await resp.clone().json();
         if (data?.detail) message = data.detail;
       } catch {}
-      addErrorBlock(message);
+      if (turnViewIsActive()) {
+        hideThinking(container, { force: true });
+        addErrorBlock(message);
+      }
       return { ok: false, accepted: false, status: resp.status, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
     }
 
@@ -16088,22 +16411,48 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         if (!line) continue;
         try {
           const obj = JSON.parse(line.slice(6));
-          if (obj.type === 'meta') serverAccepted = true;
+          const wasTurnViewActive = turnViewIsActive();
+          if (obj.type === 'meta') {
+            serverAccepted = true;
+            const acknowledgedSessionId = String(obj.session_id || '').trim();
+            if (turnIsCode && acknowledgedSessionId) {
+              turnSessionId = acknowledgedSessionId;
+              migrateCodeSessionRun(turnRun, acknowledgedSessionId);
+              targetSessionState = getOrCreateSessionState(acknowledgedSessionId);
+              if (targetSessionState) {
+                targetSessionState.controller = turnController;
+                targetSessionState.streaming = true;
+                if (!serverUserEventCounted) {
+                  turnRecoveryEventCount = Math.max(turnRecoveryEventCount, Number(targetSessionState.eventCount || 0)) + 1;
+                  targetSessionState.eventCount = turnRecoveryEventCount;
+                  serverUserEventCounted = true;
+                }
+              }
+              syncActiveCodeRunControls();
+              updateSidebarRunningIndicators();
+            }
+          }
           if (obj.type === 'user_input') continue;
           if (obj.type === 'error' || obj.type === 'permission_error') {
             streamErrorEvent = obj;
           }
-          if (obj.type === 'result') lastResultEvent = obj;
+          if (obj.type === 'result') {
+            lastResultEvent = obj;
+            const resultError = nativeResultErrorMessage(obj);
+            if (resultError) streamErrorEvent = { type: 'error', message: resultError, result: obj };
+          }
           if (obj.type === 'stream_event' && obj.event?.type === 'content_block_delta' && obj.event.delta?.type === 'text_delta') {
             collectedAssistantText += obj.event.delta.text || '';
           } else if (obj.type === 'assistant') {
             collectedAssistantText += '\n' + assistantTextFromEvent(obj);
           }
-          // Route event: foreground → render, background → buffer
-          if (sessionId === targetSessionId) {
+          // Route event only to the conversation that owns this turn. A meta
+          // event for a new active draft is still foreground before it assigns
+          // the server session id, hence the captured wasTurnViewActive flag.
+          if (turnViewIsActive() || (obj.type === 'meta' && wasTurnViewActive)) {
             const result = handleEvent(obj, asstContainer, { queueOwner });
             if (result) asstContainer = result;
-          } else {
+          } else if (targetSessionState) {
             const isCritical = obj.type === 'permission_request' || obj.type === 'result' || obj.type === 'error' || obj.type === 'permission_error';
             if (targetSessionState.pendingEvents.length >= SESSION_PENDING_EVENTS_MAX) {
               targetSessionState.pendingOverflow = true;
@@ -16117,30 +16466,68 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
               toast(`会话「${targetSessionState.id.slice(0, 8)}」需要权限确认`);
             }
           }
+          if (turnIsCode && targetSessionState && codeEventStoredByServer(obj)) {
+            turnRecoveryEventCount += 1;
+            targetSessionState.eventCount = turnRecoveryEventCount;
+          }
         } catch (e) { console.warn('parse fail', line, e); }
       }
     }
-    if (sessionId === targetSessionId) {
-      hideThinking(asstContainer);
-      finishPendingToolUses('已结束', 'done');
+    if (turnIsCode && serverAccepted && !lastResultEvent && !streamErrorEvent) {
+      streamErrorEvent = {
+        type: 'error',
+        message: 'Claude Agent SDK 连接在返回最终结果前结束；本轮不会自动重复执行。',
+        code: 'sdk_turn_incomplete',
+      };
+      if (turnViewIsActive()) addErrorBlock(streamErrorEvent.message);
+    }
+    if (turnViewIsActive()) {
+      hideThinking(asstContainer, { force: true });
+      finishPendingToolUses(streamErrorEvent ? '出错' : '已结束', streamErrorEvent ? 'error' : 'done');
     }
     if (streamErrorEvent) {
       return { ok: false, accepted: serverAccepted, error: streamErrorEvent, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
     }
     if (!quiet) {
-      if (sessionId === targetSessionId) {
-        notifyUser('Claude Code 已完成', titleLabel.textContent);
+      if (turnViewIsActive()) {
+        notifyUser('Claude Code 已完成', turnTitle);
         beep();
       } else {
         toast('后台会话已完成');
       }
     }
-    fetchFollowupSuggestions();
+    if (turnViewIsActive()) fetchFollowupSuggestions();
     turnSucceeded = true;
     return { ok: true, accepted: serverAccepted, result: lastResultEvent, usage: lastResultEvent?.usage || null, text: collectedAssistantText.trim() };
   } catch (e) {
-    if (sessionId === targetSessionId) {
-      hideThinking(container);
+    const recoverableDisconnect = turnIsCode
+      && serverAccepted
+      && !!turnSessionId
+      && e.name !== 'AbortError'
+      && /(failed to fetch|network|connection|load failed|terminated|socket|fetch)/i.test(String(e.message || e));
+    if (recoverableDisconnect) {
+      if (turnViewIsActive()) {
+        startNativeTurnRecovery(
+          turnSessionId,
+          Number(targetSessionState?.eventCount || turnRecoveryEventCount || 0),
+          container,
+          { connectionLost: true, maxAttempts: 5 },
+        );
+      }
+      // The server already accepted this turn. Treat it as owned/recovering so
+      // the queue never replays a task that may already have changed files.
+      turnSucceeded = true;
+      return {
+        ok: true,
+        accepted: true,
+        recovering: true,
+        error: e,
+        text: collectedAssistantText.trim(),
+        usage: lastResultEvent?.usage || null,
+      };
+    }
+    if (turnViewIsActive()) {
+      hideThinking(container, { force: true });
       if (e.name !== 'AbortError') {
         finishPendingToolUses('出错', 'error');
         addErrorBlock(e.message);
@@ -16151,10 +16538,15 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     }
     return { ok: false, accepted: serverAccepted, error: e, aborted: e.name === 'AbortError', text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
   } finally {
-    targetSessionState.controller = null;
-    targetSessionState.streaming = false;
+    clearCodeSessionRun(turnRun);
+    if (targetSessionState && targetSessionState.controller === turnController) {
+      targetSessionState.controller = null;
+      targetSessionState.streaming = false;
+    }
     updateSidebarRunningIndicators();
-    if (sessionId === targetSessionId) {
+    if (turnIsCode) {
+      syncActiveCodeRunControls();
+    } else if (turnViewIsActive()) {
       sendBtn.disabled = agentLoopRunning || contextCompactionRunning;
       if (currentController === turnController) {
         stopBtn.classList.add('hidden');
@@ -16162,7 +16554,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         currentControllerQueueOwner = '';
       }
     }
-    input.focus();
+    if (turnViewIsActive()) input.focus();
     refreshSessions();
     if (milestoneView) renderMilestones();
     refreshCwds();
@@ -16190,6 +16582,18 @@ stopBtn.addEventListener('click', async () => {
     await stopAgentLoop();
     return;
   }
+  if (codeMode) {
+    const targetSessionId = sessionId;
+    const run = targetSessionId ? codeRunForSession(targetSessionId) : codeRunForOwner(activeCodeQueueOwner);
+    const stopRequest = targetSessionId
+      ? fetch('/api/chat/stop/' + targetSessionId, { method:'POST' }).catch(() => null)
+      : null;
+    // Abort the matching browser stream immediately; the server interrupt runs
+    // in parallel and is still awaited so the SDK turn cannot continue unseen.
+    if (run?.controller) run.controller.abort();
+    if (stopRequest) await stopRequest;
+    return;
+  }
   if (sessionId) { try { await fetch('/api/chat/stop/' + sessionId, { method:'POST' }); } catch {} }
   if (currentController) currentController.abort();
 });
@@ -16201,10 +16605,12 @@ if (agentLoopStopBtn) agentLoopStopBtn.addEventListener('click', stopAgentLoop);
 // In headless mode there's no CLI approval prompt — without this the agent
 // would receive an error tool_result and re-call ExitPlanMode in a loop.
 function stopCurrentRunForPlan() {
-  if (!currentController) return;
+  const run = codeMode ? activeCodeSessionRun() : null;
+  const controller = run?.controller || currentController;
+  if (!controller) return;
   const sid = sessionId;
   if (sid) { fetch('/api/chat/stop/' + sid, { method: 'POST' }).catch(() => {}); }
-  try { currentController.abort(); } catch {}
+  try { controller.abort(); } catch {}
   try { toast('计划已就绪 · 已暂停运行，等待你审批'); } catch {}
 }
 
@@ -16914,9 +17320,11 @@ async function loadSession(id, options = {}) {
     }
 
     const targetState = getOrCreateSessionState(data.id);
+    let recoveryContainer = null;
     targetState.runtime = data.runtime_origin || 'unknown';
     targetState.autoApprove = !!data.auto_approve;
     targetState.feedback = data.feedback || {};
+    targetState.eventCount = Number(data.total_event_count ?? data.events.length ?? 0);
 
     // If overflow occurred, discard stale DOM cache and force server reload
     if (targetState.pendingOverflow) {
@@ -16939,6 +17347,7 @@ async function loadSession(id, options = {}) {
         });
         targetState.pendingEvents = [];
       }
+      recoveryContainer = chatInner.querySelector('.asst-wrap:last-child > div.flex-1') || null;
       targetState.needsPermission = false;
       restoreDraft();
       refreshGitStatus();
@@ -16975,6 +17384,7 @@ async function loadSession(id, options = {}) {
         }
       });
       if (!data.events.length) chatInner.appendChild(welcome);
+      recoveryContainer = asstContainer;
       if (targetState.pendingEvents.length > 0) {
         let lastContainer = chatInner.querySelector('.asst-wrap:last-child > div.flex-1') || null;
         targetState.pendingEvents.forEach(ev => {
@@ -16991,16 +17401,9 @@ async function loadSession(id, options = {}) {
       }
     }
 
-    // Sync currentController to the active session's controller
-    currentController = targetState.controller;
-    currentControllerQueueOwner = targetState.controller ? `session:${data.id}` : '';
-    if (targetState.controller) {
-      stopBtn.classList.remove('hidden');
-      sendBtn.disabled = !codeMode;
-    } else {
-      stopBtn.classList.add('hidden');
-      sendBtn.disabled = false;
-    }
+    // The visible controls are derived from this session's run. Switching
+    // conversations must never replace or abort another session's controller.
+    syncActiveCodeRunControls();
     highlightActiveSession();
     if (codeMode) refreshSessions();
     closeMobileSidebar();
@@ -17009,7 +17412,7 @@ async function loadSession(id, options = {}) {
       loadCodeProjectSettings();
       loadCodeTerminals();
       scheduleNativeContextUsageRefresh(0);
-      startNativeTurnRecovery(data.id, Number(data.total_event_count ?? data.events.length), asstContainer);
+      startNativeTurnRecovery(data.id, Number(data.total_event_count ?? data.events.length), recoveryContainer);
     }
   } catch (e) { console.warn(e); }
 }
@@ -21881,6 +22284,14 @@ cwComposerBranchBtn?.addEventListener('click', () => {
   setBranchPanelOpen(cwBranchPanel?.classList.contains('hidden'));
 });
 
+cwComposerReconnectBtn?.addEventListener('click', async (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setPermissionModeMenuOpen(false);
+  setComposerContextMenuOpen(false);
+  await reconnectCurrentCodeSession({ button: cwComposerReconnectBtn });
+});
+
 cwComposerPermBtn?.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
@@ -22796,7 +23207,7 @@ document.addEventListener('keydown', (e) => {
 
 window.addEventListener('beforeunload', (e) => {
   const hasQueuedCodeWork = codeMode && codeQueueFor(activeCodeQueueOwner).length > 0;
-  const hasRunningCodeWork = codeMode && !!currentController;
+  const hasRunningCodeWork = codeMode && codeSessionRuns.size > 0;
   if ((configState.dirty && !configCenter.classList.contains('hidden')) || hasQueuedCodeWork || hasRunningCodeWork) {
     e.preventDefault();
     e.returnValue = '';

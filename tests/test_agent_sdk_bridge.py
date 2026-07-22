@@ -67,6 +67,9 @@ class AgentSdkBridgeProtocolTest(unittest.IsolatedAsyncioTestCase):
                   } else if (command.method === 'context') {
                     write({id: command.id, type: 'response', ok: true,
                       usage: {totalTokens: 4300, maxTokens: 1000000, percentage: 0.43}});
+                  } else if (command.method === 'reconnect_session') {
+                    write({id: command.id, type: 'response', ok: true, reconnected: true,
+                      sessionId: command.params.resumeSessionId || command.params.sessionId});
                   } else if (command.method === 'pending_permissions') {
                     const pending = pendingPermissionTurn ? [{
                       approvalId: 'approval-1', sessionKey: command.params.sessionKey,
@@ -132,6 +135,13 @@ class AgentSdkBridgeProtocolTest(unittest.IsolatedAsyncioTestCase):
 
         context = await self.bridge.context_usage("local-session")
         self.assertEqual(1_000_000, context["usage"]["maxTokens"])
+
+        reconnect = await self.bridge.reconnect_session(
+            "local-session",
+            {"resumeSessionId": "native-session", "cwd": self.temp_dir.name},
+        )
+        self.assertTrue(reconnect["reconnected"])
+        self.assertEqual("native-session", reconnect["sessionId"])
 
     async def test_permission_response_resumes_the_same_native_turn(self):
         turn = await self.bridge.open_turn(

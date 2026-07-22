@@ -380,6 +380,19 @@ class AgentSdkBridge:
             timeout=timeout,
         )
 
+    async def reconnect_session(
+        self,
+        session_key: str,
+        params: Optional[dict] = None,
+        timeout: float = 30.0,
+    ) -> dict:
+        """Rebuild one persistent Query without replaying a user turn."""
+        return await self.request(
+            "reconnect_session",
+            {**(params or {}), "sessionKey": session_key},
+            timeout=timeout,
+        )
+
     async def set_model(
         self,
         session_key: str,

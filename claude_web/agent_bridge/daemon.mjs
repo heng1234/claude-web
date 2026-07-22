@@ -582,6 +582,27 @@ async function handleContext(command) {
   await write({ id: command.id, type: 'response', ok: true, usage, sessionId: runtime.sessionId });
 }
 
+async function handleReconnect(command) {
+  const params = command.params || {};
+  const key = String(params.sessionKey || '').trim();
+  if (!key) throw new Error('sessionKey is required');
+  const runtime = await withRuntimeMutation(async () => {
+    const current = runtimes.get(key);
+    if (current?.activeRequestId || current?.controlActive) {
+      throw new Error('Cannot reconnect while the Code runtime is active');
+    }
+    if (current) await disposeRuntime(current);
+    return createRuntime(key, params, runtimeSignature(params));
+  });
+  await write({
+    id: command.id,
+    type: 'response',
+    ok: true,
+    reconnected: true,
+    sessionId: runtime.sessionId,
+  });
+}
+
 async function handleSetModel(command) {
   const params = command.params || {};
   const key = String(params.sessionKey || '').trim();
@@ -748,6 +769,7 @@ async function handle(command) {
     case 'send': return handleSend(command);
     case 'interrupt': return handleInterrupt(command);
     case 'context': return handleContext(command);
+    case 'reconnect_session': return handleReconnect(command);
     case 'set_model': return handleSetModel(command);
     case 'set_permission_mode': return handleSetPermissionMode(command);
     case 'pending_permissions': return handlePendingPermissions(command);

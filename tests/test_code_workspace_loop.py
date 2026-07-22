@@ -233,6 +233,52 @@ class CodeWorkspaceLoopTest(unittest.IsolatedAsyncioTestCase):
 
 
 class CodeWorkspaceStaticContractTest(unittest.TestCase):
+    def test_code_turn_controls_are_owned_by_session_not_shared_globally(self):
+        source = (
+            Path(__file__).parents[1] / "claude_web" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("const codeSessionRuns = new Map()", source)
+        self.assertIn("function activeCodeSessionRun()", source)
+        self.assertIn("function syncActiveCodeRunControls()", source)
+        self.assertIn("session_id: turnSessionId", source)
+        self.assertIn("const run = targetSessionId ? codeRunForSession(targetSessionId)", source)
+        self.assertIn("if (run?.controller) run.controller.abort()", source)
+        self.assertIn("if (turnViewIsActive()) fetchFollowupSuggestions()", source)
+        self.assertNotIn(
+            "owner === activeCodeQueueOwner && codeMode && !stopBtn.classList.contains('hidden')",
+            source,
+        )
+
+    def test_sdk_result_errors_and_reconnect_controls_are_not_silently_completed(self):
+        source = (
+            Path(__file__).parents[1] / "claude_web" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("function nativeResultErrorMessage(result)", source)
+        self.assertIn("result.is_error === true || subtype.startsWith('error_')", source)
+        self.assertIn("Claude Agent SDK 连接在返回最终结果前结束", source)
+        self.assertIn("function reconnectCurrentCodeSession(options = {})", source)
+        self.assertIn("/runtime/reconnect", source)
+        self.assertIn("正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}", source)
+        self.assertIn("当前任务不会自动重复执行", source)
+
+    def test_code_generation_status_persists_until_authoritative_turn_end(self):
+        source = (
+            Path(__file__).parents[1] / "claude_web" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("el.dataset.codeRunStatus = 'true'", source)
+        self.assertIn("function hideThinking(container, options = {})", source)
+        self.assertIn("options.force !== true", source)
+        self.assertIn("hideThinking(asstContainer, { force: true })", source)
+        self.assertIn("hideThinking(container, { force: true })", source)
+        self.assertIn("startedAt: turnStartedAt, container", source)
+        self.assertIn("container.lastElementChild !== existing", source)
+        self.assertIn("if (run?.container && !run.container.querySelector", source)
+        self.assertIn("function ensureThinkingElapsedTimer(el, startedAt = Date.now())", source)
+        self.assertNotIn("if (!el.isConnected)", source)
+        self.assertIn("function nativeApiRetryStatusText(obj)", source)
+        self.assertIn("return `${reason}，正在重试", source)
+        self.assertIn("nativeTurnRecoveryRunningSessionId !== run.sessionId", source)
+
     def test_light_context_stays_default_on_and_permission_copy_is_current(self):
         source = (Path(__file__).parents[1] / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("lightContextMode: LS.get('lightContextMode', true)", source)

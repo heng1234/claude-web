@@ -74,6 +74,53 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
         finally:
             self._cleanup_session(session_id)
 
+    async def test_reconnect_rebuilds_only_the_requested_sdk_session_without_replay(self):
+        session_id = "runtime-reconnect-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/sdk-reconnect-project"
+        server.upsert_session(session_id, "reconnect", cwd, "code")
+        server.set_session_remote_state(session_id, "native-reconnect-session", True)
+        server.set_session_runtime_origin(session_id, server._RUNTIME_ORIGIN_AGENT_SDK)
+        try:
+            with patch.object(server._claude_agent_bridge, "ensure_started", AsyncMock(return_value=True)), \
+                    patch.object(
+                        server._claude_agent_bridge,
+                        "reconnect_session",
+                        AsyncMock(return_value={"ok": True, "reconnected": True}),
+                    ) as reconnect:
+                result = await server.reconnect_agent_sdk_session(
+                    session_id,
+                    server.NativeCompactRequest(
+                        model="opus",
+                        effort="high",
+                        permission_mode="acceptEdits",
+                        allowed_tools=["Read", "Edit"],
+                    ),
+                )
+            self.assertTrue(result["ok"])
+            self.assertEqual("native-reconnect-session", result["remote_session_id"])
+            reconnect.assert_awaited_once()
+            params = reconnect.await_args.args[1]
+            self.assertEqual("native-reconnect-session", params["resumeSessionId"])
+            self.assertNotIn("content", params)
+            self.assertEqual([], server.load_events(session_id))
+        finally:
+            self._cleanup_session(session_id)
+
+    async def test_context_usage_does_not_touch_runtime_during_active_turn(self):
+        session_id = "runtime-context-busy-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/sdk-context-busy-project"
+        server.upsert_session(session_id, "context", cwd, "code")
+        server.set_session_runtime_origin(session_id, server._RUNTIME_ORIGIN_AGENT_SDK)
+        server._agent_sdk_running_sessions.add(session_id)
+        try:
+            with patch.object(server._claude_agent_bridge, "context_usage", AsyncMock()) as context_usage:
+                with self.assertRaises(HTTPException) as raised:
+                    await server.agent_sdk_context_usage(session_id)
+            self.assertEqual(409, raised.exception.status_code)
+            context_usage.assert_not_awaited()
+        finally:
+            self._cleanup_session(session_id)
+
     async def test_agent_sdk_install_endpoint_forwards_selected_version(self):
         request = Request({
             "type": "http", "method": "POST", "path": "/api/agent-sdk/install", "headers": [],

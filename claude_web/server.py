@@ -7226,6 +7226,8 @@ async def agent_sdk_context_usage(
     allowed_tools: Optional[List[str]] = Query(default=None),
     disallowed_tools: Optional[List[str]] = Query(default=None),
 ):
+    if _session_runtime_busy(session_id):
+        raise HTTPException(status_code=409, detail="Code 回合运行中，稍后刷新上下文统计")
     row = _agent_sdk_session_row(session_id)
     if not _claude_agent_bridge.enabled or not await _claude_agent_bridge.ensure_started():
         raise HTTPException(status_code=503, detail=_claude_agent_bridge.last_error or "Claude Agent SDK is unavailable")
@@ -7250,6 +7252,34 @@ async def agent_sdk_context_usage(
         raise HTTPException(status_code=502, detail="Claude Agent SDK returned invalid context usage")
     set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
     return {"ok": True, "runtime": _RUNTIME_ORIGIN_AGENT_SDK, **usage}
+
+
+@app.post("/api/sessions/{session_id}/runtime/reconnect")
+async def reconnect_agent_sdk_session(session_id: str, req: NativeCompactRequest):
+    """Rebuild only this Code session's SDK Query; never replay its last turn."""
+    if _session_control_busy(session_id):
+        raise HTTPException(status_code=409, detail="请先等待或停止当前 Code 回合，再重建连接")
+    row = _agent_sdk_session_row(session_id)
+    if not _claude_agent_bridge.enabled or not await _claude_agent_bridge.ensure_started():
+        raise HTTPException(
+            status_code=503,
+            detail=_claude_agent_bridge.last_error or "Claude Agent SDK is unavailable",
+        )
+    params = _agent_sdk_control_params(row, req)
+    try:
+        response = await _claude_agent_bridge.reconnect_session(session_id, params, timeout=30.0)
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="Claude Agent SDK 重连超时") from exc
+    except AgentSdkBridgeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
+    return {
+        "ok": True,
+        "runtime": _RUNTIME_ORIGIN_AGENT_SDK,
+        "session_id": session_id,
+        "remote_session_id": (row["remote_session_id"] or "").strip() or row["id"],
+        "response": response,
+    }
 
 
 @app.post("/api/sessions/{session_id}/runtime/model")
