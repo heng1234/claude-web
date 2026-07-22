@@ -30,7 +30,7 @@ from contextlib import asynccontextmanager, contextmanager
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
-from urllib.parse import quote, urlencode, urljoin, urlparse
+from urllib.parse import quote, unquote, urlencode, urljoin, urlparse
 
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -390,6 +390,59 @@ async def _discard_warm_session(session_id: str) -> None:
 
 def _session_runtime_busy(session_id: str) -> bool:
     return session_id in _running_processes or session_id in _agent_sdk_running_sessions
+
+
+def _agent_sdk_turn_state(session_id: str, events: Optional[List[dict]] = None) -> dict:
+    """Return the authoritative state of the latest native Code turn.
+
+    Browser SSE ownership is deliberately separate from runtime ownership: a
+    disconnected browser can stop consuming the stream while the SDK keeps
+    working in the detached drain task.  The UI therefore needs both the live
+    runtime flag and the persisted terminal event for the latest user turn.
+    """
+    history = events if events is not None else load_events(session_id)
+    latest_user_index = -1
+    for index in range(len(history) - 1, -1, -1):
+        if history[index].get("type") == "user_input":
+            latest_user_index = index
+            break
+
+    terminal_index = -1
+    terminal_type = ""
+    terminal_event: Optional[dict] = None
+    for index in range(len(history) - 1, latest_user_index, -1):
+        event = history[index]
+        event_type = str(event.get("type") or "")
+        if event_type == "result" and not event.get("parent_tool_use_id"):
+            terminal_index = index
+            terminal_type = "result"
+            terminal_event = event
+            break
+        if event_type in {"error", "permission_error"}:
+            terminal_index = index
+            terminal_type = event_type
+            terminal_event = event
+            break
+
+    if session_id in _agent_sdk_running_sessions:
+        state = "stopping" if session_id in _stopped_sessions else "running"
+    elif terminal_type == "result":
+        subtype = str((terminal_event or {}).get("subtype") or "").lower()
+        state = "failed" if (terminal_event or {}).get("is_error") is True or subtype.startswith("error_") else "completed"
+    elif terminal_type:
+        message = str((terminal_event or {}).get("message") or "").lower()
+        state = "stopped" if "用户中止" in message or "user interrupt" in message else "failed"
+    elif latest_user_index >= 0:
+        state = "incomplete"
+    else:
+        state = "idle"
+
+    return {
+        "state": state,
+        "latest_user_index": latest_user_index,
+        "terminal_event_index": terminal_index,
+        "terminal_event_type": terminal_type or None,
+    }
 
 
 def _session_agent_loop_busy(session_id: str) -> bool:
@@ -1665,6 +1718,17 @@ class CodeWorkspacePresetRequest(BaseModel):
 
 class ProjectPathRequest(BaseModel):
     cwd: str
+
+
+class CodeDroppedPathItem(BaseModel):
+    name: str = ""
+    path: Optional[str] = ""
+    kind: Optional[str] = "file"
+
+
+class CodeDroppedPathsRequest(BaseModel):
+    cwd: Optional[str] = ""
+    items: List[CodeDroppedPathItem]
 
 
 class GitCheckoutRequest(BaseModel):
@@ -5663,12 +5727,16 @@ async def _drain_detached_agent_sdk_turn(
     workspace_mode: Optional[str],
     code_write_intent_seen: bool,
     code_write_targets: Set[str],
+    saw_top_level_result: bool = False,
+    saw_terminal_error: bool = False,
 ) -> None:
     """Keep a native turn alive after its browser SSE subscriber disconnects."""
+    daemon_done = False
     try:
         async for envelope in turn.events():
             envelope_type = envelope.get("type")
             if envelope_type == "done":
+                daemon_done = True
                 discovered = str(envelope.get("sessionId") or "").strip()
                 if discovered:
                     native_remote_id = discovered
@@ -5677,6 +5745,7 @@ async def _drain_detached_agent_sdk_turn(
             if envelope_type == "error":
                 if session_id in _stopped_sessions:
                     continue
+                saw_terminal_error = True
                 err_event = classify_claude_error(str(envelope.get("message") or "Claude Agent SDK failed"))
                 append_event(session_id, err_event)
                 _notification_send_chat_error(session_id, work_dir, err_event)
@@ -5714,6 +5783,10 @@ async def _drain_detached_agent_sdk_turn(
             if targets:
                 code_write_targets.update(targets)
             if event_type == "result" and not obj.get("parent_tool_use_id"):
+                saw_top_level_result = True
+                result_subtype = str(obj.get("subtype") or "").lower()
+                if obj.get("is_error") is True or result_subtype.startswith("error_"):
+                    saw_terminal_error = True
                 changed_files = await git_changed_files_since(work_dir, git_dirty_before, checkpoint)
                 obj["changed_files"] = filter_code_changed_files(
                     changed_files,
@@ -5733,6 +5806,17 @@ async def _drain_detached_agent_sdk_turn(
                             work_dir,
                             obj.get("changed_files") or [],
                         )
+        if (
+            daemon_done
+            and not saw_top_level_result
+            and not saw_terminal_error
+            and session_id not in _stopped_sessions
+        ):
+            err_event = classify_claude_error(
+                "Claude Agent SDK runtime ended before returning a final result"
+            )
+            append_event(session_id, err_event)
+            _notification_send_chat_error(session_id, work_dir, err_event)
     except asyncio.CancelledError:
         await _claude_agent_bridge.abandon_turn(turn)
         raise
@@ -5770,6 +5854,10 @@ def _agent_sdk_streaming_response(
         remote_became_ready = remote_ready
         code_write_intent_seen = False
         code_write_targets: Set[str] = set()
+        saw_top_level_result = False
+        saw_terminal_error = False
+        daemon_done = False
+        stopped_before_cleanup = False
         _stopped_sessions.discard(session_id)
         sdk_version = (_claude_agent_bridge.sdk_info or {}).get("version")
         meta = {
@@ -5785,6 +5873,7 @@ def _agent_sdk_streaming_response(
             async for envelope in turn.events():
                 envelope_type = envelope.get("type")
                 if envelope_type == "done":
+                    daemon_done = True
                     discovered = str(envelope.get("sessionId") or "").strip()
                     if discovered:
                         native_remote_id = discovered
@@ -5793,6 +5882,7 @@ def _agent_sdk_streaming_response(
                 if envelope_type == "error":
                     if session_id in _stopped_sessions:
                         continue
+                    saw_terminal_error = True
                     err_event = classify_claude_error(str(envelope.get("message") or "Claude Agent SDK failed"))
                     append_event(session_id, err_event)
                     _notification_send_chat_error(session_id, work_dir, err_event)
@@ -5855,6 +5945,10 @@ def _agent_sdk_streaming_response(
                 if targets:
                     code_write_targets.update(targets)
                 if event_type == "result" and not obj.get("parent_tool_use_id"):
+                    saw_top_level_result = True
+                    result_subtype = str(obj.get("subtype") or "").lower()
+                    if obj.get("is_error") is True or result_subtype.startswith("error_"):
+                        saw_terminal_error = True
                     changed_files = await git_changed_files_since(work_dir, git_dirty_before, checkpoint)
                     obj["changed_files"] = filter_code_changed_files(
                         changed_files,
@@ -5878,6 +5972,19 @@ def _agent_sdk_streaming_response(
                     )
                     if validation_event:
                         yield f"data: {json.dumps(validation_event, ensure_ascii=False)}\n\n"
+            if (
+                daemon_done
+                and not saw_top_level_result
+                and not saw_terminal_error
+                and session_id not in _stopped_sessions
+            ):
+                saw_terminal_error = True
+                err_event = classify_claude_error(
+                    "Claude Agent SDK runtime ended before returning a final result"
+                )
+                append_event(session_id, err_event)
+                _notification_send_chat_error(session_id, work_dir, err_event)
+                yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
         except (asyncio.CancelledError, GeneratorExit):
             detached = True
             task = asyncio.create_task(
@@ -5893,6 +6000,8 @@ def _agent_sdk_streaming_response(
                     workspace_mode=workspace_mode,
                     code_write_intent_seen=code_write_intent_seen,
                     code_write_targets=set(code_write_targets),
+                    saw_top_level_result=saw_top_level_result,
+                    saw_terminal_error=saw_terminal_error,
                 )
             )
             _agent_sdk_detached_turn_tasks[session_id] = task
@@ -5905,13 +6014,18 @@ def _agent_sdk_streaming_response(
                 yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
         finally:
             if not detached:
+                stopped_before_cleanup = session_id in _stopped_sessions
                 _agent_sdk_running_sessions.discard(session_id)
                 _stopped_sessions.discard(session_id)
                 upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode)
                 if remote_became_ready and native_remote_id:
                     set_session_remote_state(session_id, native_remote_id, True)
 
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        terminal_state = (
+            "completed" if saw_top_level_result and not saw_terminal_error
+            else ("stopped" if stopped_before_cleanup else "failed")
+        )
+        yield f"data: {json.dumps({'type': 'done', 'success': terminal_state == 'completed', 'turn_state': terminal_state})}\n\n"
 
     return StreamingResponse(
         generate(),
@@ -5969,7 +6083,10 @@ def _release_code_turn(session_id: str, turn_id: str) -> None:
 async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     session_id = req.session_id or str(uuid.uuid4())
     if _session_runtime_busy(session_id) or session_id in _compacting_sessions:
-        raise HTTPException(status_code=409, detail="session is busy")
+        raise HTTPException(
+            status_code=409,
+            detail="当前 Code 会话仍有回合在后台运行，请等待完成或先停止当前回合",
+        )
     if not agent_loop_owner and _session_agent_loop_busy(session_id):
         raise HTTPException(status_code=409, detail="session is owned by a running Agent Loop")
     existing_events = load_events(session_id) if req.session_id else []
@@ -7318,6 +7435,8 @@ async def set_agent_sdk_permission_mode(session_id: str, req: NativePermissionCo
 @app.get("/api/sessions/{session_id}/permissions/pending")
 async def pending_agent_sdk_permissions(session_id: str):
     _agent_sdk_session_row(session_id)
+    events = load_events(session_id)
+    turn = _agent_sdk_turn_state(session_id, events)
     pending: List[dict] = []
     if _claude_agent_bridge.running:
         try:
@@ -7328,8 +7447,11 @@ async def pending_agent_sdk_permissions(session_id: str):
     return {
         "ok": True,
         "running": session_id in _agent_sdk_running_sessions,
+        "turn_state": turn["state"],
+        "terminal_event_index": turn["terminal_event_index"],
+        "terminal_event_type": turn["terminal_event_type"],
         "pending": pending,
-        "event_count": len(load_events(session_id)),
+        "event_count": len(events),
     }
 
 
@@ -11745,6 +11867,143 @@ async def register_project_path(req: ProjectPathRequest):
     normalized = _remember_project_path(req.cwd)
     target = Path(normalized)
     return {"ok": True, "cwd": normalized, "name": target.name or normalized}
+
+
+def _dropped_path_search_roots(cwd: Path) -> List[Path]:
+    """Return a small, ordered set of roots for resolving browser file drops.
+
+    Browsers intentionally hide Finder/Explorer absolute paths.  The local app
+    can still resolve an exact dropped basename against the active workspace,
+    remembered projects, and a few conventional project locations.
+    """
+    home = Path.home().resolve()
+    raw_roots: List[Path] = [cwd, cwd.parent]
+    for value in _saved_project_values():
+        try:
+            saved = Path(os.path.expanduser(value)).resolve()
+        except (OSError, RuntimeError):
+            continue
+        raw_roots.extend((saved, saved.parent))
+    raw_roots.extend(
+        home / name
+        for name in ("Documents", "Desktop", "Downloads", "Projects", "Developer", "src", "git", "gitc")
+    )
+    roots: List[Path] = []
+    seen: Set[str] = set()
+    for root in raw_roots:
+        try:
+            resolved = root.resolve()
+        except (OSError, RuntimeError):
+            continue
+        key = str(resolved)
+        if key in seen or not resolved.is_dir():
+            continue
+        seen.add(key)
+        roots.append(resolved)
+    return roots
+
+
+def _find_dropped_path_by_name(cwd: Path, name: str) -> Optional[Path]:
+    clean_name = Path(str(name or "").strip().rstrip("/\\")).name
+    if not clean_name or clean_name in {".", ".."}:
+        return None
+
+    direct = cwd / clean_name
+    if direct.exists():
+        return direct.resolve()
+    if cwd.name == clean_name:
+        return cwd
+
+    roots = _dropped_path_search_roots(cwd)
+    for root in roots:
+        if root.name == clean_name:
+            return root
+        candidate = root / clean_name
+        if candidate.exists():
+            return candidate.resolve()
+
+    # Finder drops in a normal browser expose only the basename. Search a
+    # bounded depth under conventional roots; never crawl dependency/cache dirs.
+    visited = 0
+    max_visited = 8000
+    for root in roots:
+        try:
+            for current_root, dirs, files in os.walk(root):
+                current = Path(current_root)
+                try:
+                    depth = len(current.relative_to(root).parts)
+                except ValueError:
+                    continue
+                visited += 1
+                if visited > max_visited:
+                    return None
+                dirs[:] = [
+                    item for item in dirs
+                    if item not in IGNORED_DIRS and not item.startswith(".")
+                ]
+                if clean_name in dirs:
+                    return (current / clean_name).resolve()
+                if clean_name in files:
+                    return (current / clean_name).resolve()
+                if depth >= 4:
+                    dirs[:] = []
+        except OSError:
+            continue
+    return None
+
+
+def _resolve_dropped_code_paths(req: CodeDroppedPathsRequest) -> dict:
+    cwd = Path(os.path.expanduser(req.cwd or "~")).resolve()
+    if not cwd.is_dir():
+        raise HTTPException(status_code=400, detail="Code 项目目录不存在")
+    resolved_items: List[dict] = []
+    unresolved_items: List[dict] = []
+    seen: Set[str] = set()
+    for item in req.items[:50]:
+        raw_path = str(item.path or "").strip()
+        name = str(item.name or "").strip()
+        target: Optional[Path] = None
+        if raw_path.startswith("file://"):
+            parsed = urlparse(raw_path)
+            raw_path = unquote(parsed.path or "")
+        if raw_path:
+            candidate = Path(os.path.expanduser(raw_path))
+            if not candidate.is_absolute():
+                candidate = cwd / str(candidate).lstrip("/\\")
+            try:
+                if candidate.exists():
+                    target = candidate.resolve()
+            except (OSError, RuntimeError):
+                target = None
+        if target is None:
+            target = _find_dropped_path_by_name(cwd, name or raw_path)
+        if target is None:
+            unresolved_items.append({"name": name or Path(raw_path).name or raw_path, "kind": item.kind or "file"})
+            continue
+        key = str(target)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            relative = target.relative_to(cwd).as_posix()
+            reference = relative or "."
+            scope = "project"
+        except ValueError:
+            reference = str(target)
+            scope = "external"
+        resolved_items.append({
+            "path": reference,
+            "absolute_path": str(target),
+            "name": target.name or str(target),
+            "kind": "directory" if target.is_dir() else "file",
+            "scope": scope,
+        })
+    return {"ok": True, "items": resolved_items, "unresolved": unresolved_items}
+
+
+@app.post("/api/code/resolve-dropped-paths")
+async def resolve_dropped_code_paths(req: CodeDroppedPathsRequest):
+    return await asyncio.to_thread(_resolve_dropped_code_paths, req)
 
 
 @app.get("/api/cwds")

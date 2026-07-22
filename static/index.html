@@ -9908,7 +9908,7 @@ function renderCodeTree() {
     const directory = entry.type === 'directory';
     const expanded = directory && codeTreeState.expanded.has(entry.path);
     const status = String(entry.status || '');
-    return `<button type="button" class="cw-code-tree-row ${expanded ? 'expanded' : ''} ${entry.path === activePath ? 'active' : ''}" data-code-tree-path="${escapeHtml(entry.path)}" data-code-tree-type="${escapeHtml(entry.type)}" style="padding-left:${6 + Math.min(depth, 12) * 13}px" title="${escapeHtml(entry.path)}"><span class="cw-code-tree-chevron">${directory ? '›' : ''}</span>${codeTreeIcon(entry.type)}<span class="cw-code-tree-name">${escapeHtml(entry.name)}</span><span class="cw-code-tree-status ${escapeHtml(status || 'dot')}">${escapeHtml(status)}</span></button>`;
+    return `<button type="button" draggable="true" class="cw-code-tree-row ${expanded ? 'expanded' : ''} ${entry.path === activePath ? 'active' : ''}" data-code-tree-path="${escapeHtml(entry.path)}" data-code-tree-type="${escapeHtml(entry.type)}" data-code-tree-name="${escapeHtml(entry.name)}" style="padding-left:${6 + Math.min(depth, 12) * 13}px" title="${escapeHtml(entry.path)}"><span class="cw-code-tree-chevron">${directory ? '›' : ''}</span>${codeTreeIcon(entry.type)}<span class="cw-code-tree-name">${escapeHtml(entry.name)}</span><span class="cw-code-tree-status ${escapeHtml(status || 'dot')}">${escapeHtml(status)}</span></button>`;
   };
   let html = '';
   if (queryValue) {
@@ -9924,7 +9924,18 @@ function renderCodeTree() {
     append('', 0);
   }
   cwCodeTreeBody.innerHTML = html || `<div class="cw-code-tree-empty">${queryValue ? '没有匹配的项目文件' : '项目目录为空'}</div>`;
-  cwCodeTreeBody.querySelectorAll('[data-code-tree-path]').forEach(row => row.addEventListener('click', async () => {
+  cwCodeTreeBody.querySelectorAll('[data-code-tree-path]').forEach(row => {
+    row.addEventListener('dragstart', event => {
+      const payload = [{
+        path: row.dataset.codeTreePath || '',
+        name: row.dataset.codeTreeName || pathBasename(row.dataset.codeTreePath || ''),
+        kind: row.dataset.codeTreeType || 'file',
+      }];
+      event.dataTransfer?.setData('application/x-claude-web-paths', JSON.stringify(payload));
+      event.dataTransfer?.setData('text/plain', row.dataset.codeTreePath || '');
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy';
+    });
+    row.addEventListener('click', async () => {
     const path = row.dataset.codeTreePath;
     if (row.dataset.codeTreeType === 'directory') {
       if (queryValue) { codeTreeState.query = ''; if (cwCodeTreeSearch) cwCodeTreeSearch.value = ''; }
@@ -9935,7 +9946,8 @@ function renderCodeTree() {
     }
     await openCodeFileInspector(path);
     if (window.innerWidth <= 900) setCodeTreeOpen(false);
-  }));
+    });
+  });
 }
 
 function terminalTabFromPayload(item, index = 0) {
@@ -14391,6 +14403,91 @@ function filesFromTransfer(dt) {
   return files;
 }
 
+function codePathDragItems(dt) {
+  const results = [];
+  const seen = new Set();
+  const add = (item = {}) => {
+    const name = String(item.name || '').trim();
+    const path = String(item.path || '').trim();
+    const key = `${path}\n${name}`;
+    if ((!path && !name) || seen.has(key)) return;
+    seen.add(key);
+    results.push({ name, path, kind: item.kind === 'directory' ? 'directory' : 'file' });
+  };
+  try {
+    const custom = dt?.getData('application/x-claude-web-paths');
+    if (custom) {
+      const parsed = JSON.parse(custom);
+      for (const item of (Array.isArray(parsed) ? parsed : [parsed])) {
+        if (typeof item === 'string') add({ path:item, name:pathBasename(item) });
+        else add(item || {});
+      }
+    }
+  } catch {}
+  let pathText = '';
+  try { pathText = String(dt?.getData('text/uri-list') || dt?.getData('text/plain') || '').trim(); } catch {}
+  if (pathText && (/^(file:\/\/|\/|~\/|\.\.?\/|[A-Za-z]:[\\/])/.test(pathText))) {
+    for (const line of pathText.split(/\r?\n/).map(v => v.trim()).filter(v => v && !v.startsWith('#'))) {
+      add({ path:line, name:pathBasename(line.replace(/\/$/, '')) });
+    }
+  }
+  const files = Array.from(dt?.files || []);
+  const transferItems = Array.from(dt?.items || []).filter(item => item.kind === 'file');
+  files.forEach((file, index) => {
+    let entry = null;
+    try { entry = transferItems[index]?.webkitGetAsEntry?.() || null; } catch {}
+    const nativePath = typeof file.path === 'string' ? file.path : '';
+    const relativePath = file.webkitRelativePath || String(entry?.fullPath || '').replace(/^\/+/, '');
+    add({
+      name: file.name || entry?.name || '',
+      path: nativePath || relativePath,
+      kind: entry?.isDirectory ? 'directory' : 'file',
+    });
+  });
+  return results;
+}
+
+function isCodePathDrag(dt) {
+  const types = Array.from(dt?.types || []);
+  return codeMode && (types.includes('Files') || types.includes('application/x-claude-web-paths'));
+}
+
+async function handleCodePathDrop(dt) {
+  const files = filesFromTransfer(dt);
+  const images = files.filter(file => file.type?.startsWith('image/'));
+  if (images.length) {
+    for (const image of images) await uploadFile(image);
+    return true;
+  }
+  const items = codePathDragItems(dt);
+  if (!items.length) {
+    toast('没有读取到可引用的文件路径');
+    return true;
+  }
+  try {
+    const response = await fetch('/api/code/resolve-dropped-paths', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ cwd:cwdInput.value.trim() || '~', items }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || '路径解析失败');
+    for (const item of (data.items || [])) {
+      const label = `${item.name || pathBasename(item.path)}${item.kind === 'directory' ? '/' : ''}`;
+      insertCodeFileReference(item.path, label);
+    }
+    const unresolved = Array.isArray(data.unresolved) ? data.unresolved : [];
+    if (unresolved.length) {
+      const names = unresolved.map(item => item.name).filter(Boolean).slice(0, 3).join('、');
+      toast(`浏览器未提供 ${names || '所拖项目'} 的完整路径，请从项目文件树拖入或用项目管理选择目录`);
+    }
+    if (!(data.items || []).length && !unresolved.length) toast('没有找到可引用的文件路径');
+  } catch (error) {
+    toast(`路径引用失败：${error.message || error}`);
+  }
+  return true;
+}
+
 async function handleInputFile(file) {
   if (!file) return false;
   if (file.type.startsWith('image/')) {
@@ -14411,24 +14508,29 @@ document.addEventListener('paste', async (e) => {
 });
 let _formDragDepth = 0;
 form.addEventListener('dragenter', (e) => {
-  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+  if (!e.dataTransfer || (!isCodePathDrag(e.dataTransfer) && !Array.from(e.dataTransfer.types || []).includes('Files'))) return;
   e.preventDefault();
   _formDragDepth += 1;
   form.classList.add('drag-active');
 });
 form.addEventListener('dragover', (e) => {
-  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+  if (!e.dataTransfer || (!isCodePathDrag(e.dataTransfer) && !Array.from(e.dataTransfer.types || []).includes('Files'))) return;
   e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
 });
 form.addEventListener('dragleave', (e) => {
-  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+  if (!e.dataTransfer || (!isCodePathDrag(e.dataTransfer) && !Array.from(e.dataTransfer.types || []).includes('Files'))) return;
   _formDragDepth = Math.max(0, _formDragDepth - 1);
   if (_formDragDepth === 0) form.classList.remove('drag-active');
 });
-form.addEventListener('drop', (e) => {
+form.addEventListener('drop', async (e) => {
   e.preventDefault();
   _formDragDepth = 0;
   form.classList.remove('drag-active');
+  if (codeMode) {
+    await handleCodePathDrop(e.dataTransfer);
+    return;
+  }
   const files = Array.from(e.dataTransfer?.files || []);
   for (const f of files) handleInputFile(f);
 });
@@ -14529,6 +14631,31 @@ function addCodeFileReference(path, label) {
   codeFileReferences.set(normalized, String(label || pathBasename(normalized) || normalized));
   persistCodeFileReferences();
   renderCodeFileReferences();
+}
+
+function insertCodeFileReference(path, label) {
+  const normalized = String(path || '').trim();
+  if (!codeMode || !normalized) return false;
+  const token = '@' + normalized;
+  if (!input.value.includes(token)) {
+    const start = Number.isInteger(input.selectionStart) ? input.selectionStart : input.value.length;
+    const end = Number.isInteger(input.selectionEnd) ? input.selectionEnd : start;
+    const before = input.value.slice(0, start);
+    const after = input.value.slice(end);
+    const prefix = before && !/\s$/.test(before) ? ' ' : '';
+    const suffix = after && /^\s/.test(after) ? '' : ' ';
+    const inserted = prefix + token + suffix;
+    input.value = before + inserted + after;
+    const cursor = before.length + inserted.length;
+    input.selectionStart = input.selectionEnd = cursor;
+  }
+  addCodeFileReference(normalized, label);
+  updateTokenCount();
+  autosizeTextarea();
+  syncComposerDraftState();
+  saveDraft();
+  input.focus();
+  return true;
 }
 
 function pruneCodeFileReferences() {

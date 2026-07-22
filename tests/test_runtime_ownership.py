@@ -476,6 +476,15 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("claude_agent_sdk", meta)
             await iterator.aclose()
             self.assertIn(session_id, server._agent_sdk_detached_turn_tasks)
+            await queue.put({
+                "type": "event",
+                "event": {
+                    "type": "result",
+                    "subtype": "success",
+                    "session_id": "native-detach-finished",
+                    "usage": {},
+                },
+            })
             await queue.put({"type": "done", "sessionId": "native-detach-finished"})
             await asyncio.wait_for(server._agent_sdk_detached_turn_tasks[session_id], timeout=2)
             with server.db_connect() as conn:
@@ -492,6 +501,55 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
                 task.cancel()
                 with self.assertRaises(asyncio.CancelledError):
                     await task
+            self._cleanup_session(session_id)
+
+    async def test_native_turn_state_keeps_runtime_busy_until_persisted_terminal_event(self):
+        session_id = "native-state-" + uuid.uuid4().hex
+        server.upsert_session(session_id, "state", tempfile.gettempdir(), "code")
+        try:
+            server.save_events(session_id, [{"type": "user_input", "text": "work"}])
+            self.assertEqual("incomplete", server._agent_sdk_turn_state(session_id)["state"])
+
+            server._agent_sdk_running_sessions.add(session_id)
+            self.assertEqual("running", server._agent_sdk_turn_state(session_id)["state"])
+            server._agent_sdk_running_sessions.discard(session_id)
+
+            server.append_event(session_id, {"type": "result", "subtype": "success", "usage": {}})
+            state = server._agent_sdk_turn_state(session_id)
+            self.assertEqual("completed", state["state"])
+            self.assertEqual("result", state["terminal_event_type"])
+        finally:
+            self._cleanup_session(session_id)
+
+    async def test_native_stream_synthesizes_terminal_error_if_daemon_done_has_no_result(self):
+        session_id = "native-missing-result-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/native-missing-result-project"
+        server.upsert_session(session_id, "missing", cwd, "code")
+        server.save_events(session_id, [{"type": "user_input", "text": "work"}])
+        queue = asyncio.Queue()
+        turn = AgentSdkTurn("turn-missing", session_id, queue)
+        await queue.put({"type": "done", "success": True, "sessionId": "native-missing"})
+        server._agent_sdk_running_sessions.add(session_id)
+        response = server._agent_sdk_streaming_response(
+            turn=turn,
+            session_id=session_id,
+            remote_session_id="native-missing",
+            remote_ready=True,
+            work_dir=cwd,
+            display_text="work",
+            checkpoint=None,
+            git_dirty_before={},
+            workspace_mode="code",
+        )
+        try:
+            chunks = []
+            async for chunk in response.body_iterator:
+                chunks.append(chunk)
+            payload = "".join(chunks)
+            self.assertIn("runtime ended before returning a final result", payload)
+            self.assertIn('"turn_state": "failed"', payload)
+            self.assertEqual("failed", server._agent_sdk_turn_state(session_id)["state"])
+        finally:
             self._cleanup_session(session_id)
 
 

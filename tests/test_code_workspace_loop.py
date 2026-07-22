@@ -149,6 +149,26 @@ class CodeWorkspaceLoopTest(unittest.IsolatedAsyncioTestCase):
         stat = await server.stat_code_file(self.session_id, "demo.py")
         self.assertNotEqual(old_etag, stat["etag"])
 
+    async def test_code_drop_resolves_project_paths_without_uploading(self):
+        target = Path(self.cwd) / "src"
+        target.mkdir()
+        (target / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+        payload = await server.resolve_dropped_code_paths(
+            server.CodeDroppedPathsRequest(
+                cwd=self.cwd,
+                items=[
+                    server.CodeDroppedPathItem(name="src", path="src", kind="directory"),
+                    server.CodeDroppedPathItem(name="demo.py", path="src/demo.py", kind="file"),
+                ],
+            )
+        )
+
+        self.assertEqual([], payload["unresolved"])
+        self.assertEqual(["src", "src/demo.py"], [item["path"] for item in payload["items"]])
+        self.assertEqual(["directory", "file"], [item["kind"] for item in payload["items"]])
+        self.assertTrue(all(item["scope"] == "project" for item in payload["items"]))
+
     async def test_code_file_reader_stays_inside_project_and_reports_ambiguous_names(self):
         (Path(self.cwd) / "src").mkdir()
         (Path(self.cwd) / "tests").mkdir()
@@ -255,7 +275,13 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("function nativeResultErrorMessage(result)", source)
         self.assertIn("result.is_error === true || subtype.startsWith('error_')", source)
-        self.assertIn("Claude Agent SDK 连接在返回最终结果前结束", source)
+        self.assertIn("A browser EOF is not an authoritative SDK terminal signal", source)
+        self.assertIn("expectTerminal: true", source)
+        self.assertIn("state.turn_state", source)
+        self.assertIn("没有自动重放本轮，以免重复修改文件", source)
+        self.assertNotIn("code: 'sdk_turn_incomplete'", source)
+        self.assertIn("上一回合仍在后台运行，当前消息已保留在队列中", source)
+        self.assertIn("result?.busy ? 'queued' : 'paused'", source)
         self.assertIn("function reconnectCurrentCodeSession(options = {})", source)
         self.assertIn("/runtime/reconnect", source)
         self.assertIn("正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}", source)
@@ -358,6 +384,21 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         server_source = (Path(__file__).parents[1] / "claude_web" / "server.py").read_text(encoding="utf-8")
         self.assertIn('@app.get("/api/directories")', server_source)
         self.assertIn('@app.post("/api/projects/register")', server_source)
+
+    def test_code_drop_creates_path_references_instead_of_document_uploads(self):
+        source = (Path(__file__).parents[1] / "static" / "index.html").read_text(encoding="utf-8")
+        for marker in [
+            "function codePathDragItems",
+            "function handleCodePathDrop",
+            "function insertCodeFileReference",
+            "/api/code/resolve-dropped-paths",
+            "application/x-claude-web-paths",
+            'draggable="true" class="cw-code-tree-row',
+        ]:
+            self.assertIn(marker, source)
+        self.assertIn("if (codeMode) {\n    await handleCodePathDrop(e.dataTransfer);", source)
+        server_source = (Path(__file__).parents[1] / "claude_web" / "server.py").read_text(encoding="utf-8")
+        self.assertIn('@app.post("/api/code/resolve-dropped-paths")', server_source)
 
 
 if __name__ == "__main__":
