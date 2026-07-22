@@ -2,6 +2,17 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.0.7",
+      "date": "2026-07-22",
+      "highlights": [
+        { "type": "fix", "text": "浏览器 SSE 提前结束时继续监听原 Claude Agent SDK 回合，不再误报失败，也不会自动重放可能已经修改文件的任务" },
+        { "type": "fix", "text": "服务端提供运行中、停止中、完成、失败和结果缺失等权威终态；SDK 缺少最终 result 时会记录明确错误" },
+        { "type": "fix", "text": "上一回合仍在后台运行时，新消息自动保留在会话队列，结束后再发送，不再显示 session is busy 或丢失输入" },
+        { "type": "feature", "text": "Code 输入框支持从项目文件树或系统文件管理器拖入文件和目录并转换成安全的项目路径引用" },
+        { "type": "security", "text": "拖入路径仅在当前项目与有限候选根目录内解析，拒绝项目外路径、歧义匹配和无边界全盘搜索" }
+      ]
+    },
+    {
       "version": "2.0.6",
       "date": "2026-07-22",
       "highlights": [

@@ -1,3 +1,3 @@
 """Claude Code Web - Web UI for Claude Code CLI"""
 
-__version__ = "2.0.6"
+__version__ = "2.0.7"
