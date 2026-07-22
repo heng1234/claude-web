@@ -2,6 +2,20 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.0.6",
+      "date": "2026-07-22",
+      "highlights": [
+        { "type": "feature", "text": "Code 工作区新增项目文件树、多标签交互式 PTY 终端，以及 Codex 风格多标签源码 / Diff 检查器；全部限制在当前项目目录和 Code 模式" },
+        { "type": "feature", "text": "新增会话搜索、输入历史、工具分组、真实 MCP 健康检查、权限规则管理、工作区预设和持久化待发送队列" },
+        { "type": "feature", "text": "Code 改动审查支持逐 Hunk 保留或安全撤销、整轮回退、验证命令和失败后一键交给 Claude 修复" },
+        { "type": "fix", "text": "每个 Code 会话独立持有发送、停止、排队和恢复状态；切换多个会话不会再误停其他会话或共享停止按钮" },
+        { "type": "fix", "text": "Claude Agent SDK 的错误结果、连接中断和缺失最终结果不再误报成功；支持原会话重连与浏览器 SSE 最多 5 次恢复，且不会重复执行任务" },
+        { "type": "fix", "text": "正在生成与耗时覆盖完整 SDK turn，切换会话后持续计时；429 限流会显示重试次数和预计等待时间，不再表现为无响应" },
+        { "type": "fix", "text": "长 Code 会话默认仅渲染最近 40 轮并支持向前分页，降低历史 DOM 和浏览器内存占用" },
+        { "type": "ui", "text": "项目选择、输入区、停止/发送按钮、文件树、终端、配置中心和审查操作统一为更紧凑的 Claude / Codex 风格" }
+      ]
+    },
+    {
       "version": "2.0.5",
       "date": "2026-07-18",
       "highlights": [
