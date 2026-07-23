@@ -17,6 +17,8 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
     def _cleanup_session(self, session_id):
         server._agent_sdk_running_sessions.discard(session_id)
         server._agent_sdk_detached_turn_tasks.pop(session_id, None)
+        server._agent_sdk_context_usage_cache.pop(session_id, None)
+        server._stopped_sessions.discard(session_id)
         server._code_validation_processes.pop(session_id, None)
         server._code_validation_stop_requests.discard(session_id)
         server.save_events(session_id, [])
@@ -106,20 +108,106 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
         finally:
             self._cleanup_session(session_id)
 
-    async def test_context_usage_does_not_touch_runtime_during_active_turn(self):
+    async def test_context_usage_returns_cached_stale_value_during_active_turn(self):
         session_id = "runtime-context-busy-" + uuid.uuid4().hex
         cwd = tempfile.gettempdir() + "/sdk-context-busy-project"
         server.upsert_session(session_id, "context", cwd, "code")
         server.set_session_runtime_origin(session_id, server._RUNTIME_ORIGIN_AGENT_SDK)
         server._agent_sdk_running_sessions.add(session_id)
+        server._agent_sdk_context_usage_cache[session_id] = {
+            "totalTokens": 1200,
+            "maxTokens": 200000,
+        }
         try:
             with patch.object(server._claude_agent_bridge, "context_usage", AsyncMock()) as context_usage:
-                with self.assertRaises(HTTPException) as raised:
-                    await server.agent_sdk_context_usage(session_id)
-            self.assertEqual(409, raised.exception.status_code)
+                result = await server.agent_sdk_context_usage(session_id)
+            self.assertTrue(result["stale"])
+            self.assertTrue(result["available"])
+            self.assertEqual(1200, result["totalTokens"])
+            self.assertEqual(200000, result["maxTokens"])
             context_usage.assert_not_awaited()
         finally:
             self._cleanup_session(session_id)
+
+    async def test_agent_sdk_stop_is_idempotent_and_records_one_terminal_event(self):
+        session_id = "runtime-stop-idempotent-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/sdk-stop-idempotent-project"
+        server.upsert_session(session_id, "stop", cwd, "code")
+        server.set_session_runtime_origin(session_id, server._RUNTIME_ORIGIN_AGENT_SDK)
+        server._agent_sdk_running_sessions.add(session_id)
+        try:
+            with patch.object(
+                server._claude_agent_bridge,
+                "interrupt",
+                AsyncMock(return_value={"ok": True}),
+            ) as interrupt:
+                first = await server.stop_chat(session_id)
+                second = await server.stop_chat(session_id)
+            self.assertTrue(first["ok"])
+            self.assertTrue(second["already_stopping"])
+            interrupt.assert_awaited_once_with(session_id)
+            stops = [
+                event for event in server.load_events(session_id)
+                if event.get("type") == "error" and event.get("message") == "用户中止"
+            ]
+            self.assertEqual(1, len(stops))
+        finally:
+            self._cleanup_session(session_id)
+
+    def test_agent_sdk_contradictory_success_error_uses_reported_api_error(self):
+        result = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": True,
+            "errors": [],
+        }
+        normalized = server._normalize_agent_sdk_result(
+            result,
+            "API Error: Stream idle timeout - no chunks received",
+        )
+        self.assertEqual("error_during_execution", normalized["subtype"])
+        self.assertEqual("success", normalized["reported_subtype"])
+        self.assertEqual(
+            "API Error: Stream idle timeout - no chunks received",
+            normalized["error"],
+        )
+
+    async def test_transport_failure_auto_reconnects_without_replaying_content(self):
+        session_id = "runtime-auto-reconnect-" + uuid.uuid4().hex
+        remote_id = "native-auto-reconnect-" + uuid.uuid4().hex
+        statuses = []
+
+        async def on_status(attempt, maximum, restored, error):
+            statuses.append((attempt, maximum, restored, error))
+
+        with patch.object(
+            server._claude_agent_bridge,
+            "reconnect_session",
+            AsyncMock(side_effect=[
+                asyncio.TimeoutError(),
+                {"ok": True, "reconnected": True},
+            ]),
+        ) as reconnect, patch.object(server.asyncio, "sleep", AsyncMock()) as sleep:
+            restored, error = await server._auto_reconnect_agent_sdk_session(
+                session_id,
+                remote_id,
+                {
+                    "content": [{"type": "text", "text": "do not replay"}],
+                    "model": "opus",
+                    "permissionMode": "acceptEdits",
+                },
+                on_status=on_status,
+            )
+
+        self.assertTrue(restored)
+        self.assertEqual("", error)
+        self.assertEqual(2, reconnect.await_count)
+        sent_params = reconnect.await_args.args[1]
+        self.assertNotIn("content", sent_params)
+        self.assertEqual(remote_id, sent_params["resumeSessionId"])
+        self.assertEqual(remote_id, sent_params["runtimeEpoch"])
+        sleep.assert_awaited_once_with(1.0)
+        self.assertEqual((2, 5, True, ""), statuses[-1])
 
     async def test_agent_sdk_install_endpoint_forwards_selected_version(self):
         request = Request({

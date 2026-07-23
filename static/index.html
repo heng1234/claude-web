@@ -12591,6 +12591,11 @@ cwContextCompactBtn?.addEventListener('click', async () => {
 async function refreshNativeContextUsage(options = {}) {
   if (!codeMode || !sessionId || currentCodeRuntime !== 'claude_agent_sdk') return null;
   const targetSessionId = sessionId;
+  if (currentController || nativeTurnRecoveryRunningSessionId === targetSessionId) {
+    return latestNativeContextUsage
+      ? { ...latestNativeContextUsage, stale: true, available: true }
+      : null;
+  }
   const requestSerial = ++contextUsageRequestSerial;
   const perm = buildPermissionPayload();
   const params = new URLSearchParams();
@@ -15453,10 +15458,14 @@ async function persistCodeQueueEntry(entry) {
 async function setPersistedQueueState(entry, state, error = '') {
   const sid = queueSessionId(entry.owner);
   if (!sid) return;
-  await fetch(`/api/sessions/${encodeURIComponent(sid)}/queue/${encodeURIComponent(entry.id)}`, {
+  const response = await fetch(`/api/sessions/${encodeURIComponent(sid)}/queue/${encodeURIComponent(entry.id)}`, {
     method: 'PATCH', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ state, error }),
-  }).catch(() => {});
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `更新队列状态失败：HTTP ${response.status}`);
+  }
 }
 
 async function deletePersistedQueueEntry(entry) {
@@ -15602,10 +15611,13 @@ async function dispatchCodeQueueEntry(entry) {
   }
   codeQueueDispatchingOwners.add(owner);
   codeQueuePauseReasons.delete(owner);
-  setPersistedQueueState(entry, 'dispatching');
   renderCodeMessageQueue();
   let result = null;
   try {
+    // Immediate sends do not pass through enqueueCodeMessage(), so persist
+    // before PATCH and /api/chat to avoid a queue-state 404 race.
+    await persistCodeQueueEntry(entry);
+    await setPersistedQueueState(entry, 'dispatching');
     if (!entry.isFork && !await maybeAutoCompactBeforeSend(entry.message, { restoreOnFailure: false })) {
       enqueueCodeMessage(entry, { front: true, silent: true });
       pauseCodeMessageQueue(owner, '上下文压缩失败，队列已暂停');
@@ -15636,7 +15648,11 @@ async function dispatchCodeQueueEntry(entry) {
     if (!result?.accepted) {
       const queue = codeQueueFor(owner);
       if (!queue.some(item => item.id === entry.id)) queue.unshift(entry);
-      setPersistedQueueState(entry, 'paused', result?.error?.message || '上一轮未完成');
+      setPersistedQueueState(
+        entry,
+        result?.busy ? 'queued' : 'paused',
+        result?.error?.message || '上一轮未完成',
+      ).catch(() => loadPersistedCodeQueue(queueSessionId(owner)));
     }
     pauseCodeMessageQueue(owner, result?.aborted ? '当前任务已停止，队列已暂停' : '上一轮未完成，队列已暂停');
   }

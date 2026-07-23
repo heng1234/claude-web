@@ -149,6 +149,7 @@ _code_validation_stop_requests: Set[str] = set()
 _claude_agent_bridge = AgentSdkBridge()
 _agent_sdk_running_sessions: Set[str] = set()
 _agent_sdk_detached_turn_tasks: Dict[str, asyncio.Task] = {}
+_agent_sdk_context_usage_cache: Dict[str, dict] = {}
 _agent_sdk_install_lock = asyncio.Lock()
 _stopped_sessions: Set[str] = set()
 # Processes we terminated on purpose (duplicate-request replacement or stop).
@@ -5714,6 +5715,114 @@ def _agent_sdk_message_content(message: str, images: List[str]) -> List[dict]:
     return content if isinstance(content, list) else [{"type": "text", "text": message}]
 
 
+def _agent_sdk_reported_api_error(event: dict) -> str:
+    """Extract an upstream API failure that Claude emitted as assistant text."""
+    if event.get("type") != "assistant":
+        return ""
+    content = (event.get("message") or {}).get("content") or []
+    if not isinstance(content, list):
+        return ""
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "text":
+            continue
+        text = str(block.get("text") or "").strip()
+        if re.search(r"\bAPI Error\s*:", text, re.IGNORECASE):
+            return text
+        if "stream idle timeout" in text.lower():
+            return text
+    return ""
+
+
+def _normalize_agent_sdk_result(result: dict, reported_error: str = "") -> dict:
+    """Make contradictory SDK terminal fields deterministic for history and UI."""
+    if result.get("type") != "result" or result.get("parent_tool_use_id"):
+        return result
+    subtype = str(result.get("subtype") or "").strip()
+    failed = result.get("is_error") is True or subtype.lower().startswith("error_")
+    if not failed:
+        return result
+    if subtype.lower() in {"", "success"}:
+        if subtype:
+            result["reported_subtype"] = subtype
+        result["subtype"] = "error_during_execution"
+    errors = result.get("errors")
+    has_details = (
+        bool(errors) if isinstance(errors, list) else bool(errors)
+    ) or bool(result.get("error")) or bool(result.get("message"))
+    if reported_error and not has_details:
+        result["error"] = reported_error
+    return result
+
+
+def _agent_sdk_result_error_text(result: dict) -> str:
+    direct = str(result.get("error") or result.get("message") or "").strip()
+    if direct:
+        return direct
+    errors = result.get("errors")
+    if not isinstance(errors, list):
+        return ""
+    parts = []
+    for item in errors:
+        if isinstance(item, str):
+            parts.append(item)
+        elif isinstance(item, dict):
+            parts.append(str(item.get("message") or item.get("error") or "").strip())
+    return "\n".join(part for part in parts if part)
+
+
+def _recoverable_agent_sdk_transport_error(message: str) -> bool:
+    return bool(re.search(
+        r"stream idle timeout|no chunks received|runtime ended unexpectedly|connection (?:ended|closed|lost)",
+        str(message or ""),
+        re.IGNORECASE,
+    ))
+
+
+async def _auto_reconnect_agent_sdk_session(
+    session_id: str,
+    remote_session_id: str,
+    params: dict,
+    *,
+    on_status=None,
+    max_attempts: int = 5,
+) -> Tuple[bool, str]:
+    """Rebuild one SDK runtime after a transport failure without replaying input."""
+    delays = (1.0, 2.0, 4.0, 8.0, 12.0)
+    reconnect_params = {
+        key: value
+        for key, value in dict(params or {}).items()
+        if key not in {"content", "message", "sessionId"}
+    }
+    reconnect_params.update({
+        "resumeSessionId": remote_session_id,
+        "runtimeEpoch": remote_session_id,
+    })
+    last_error = ""
+    for attempt in range(1, max_attempts + 1):
+        if on_status is not None:
+            await on_status(attempt, max_attempts, False, "")
+        try:
+            response = await _claude_agent_bridge.reconnect_session(
+                session_id,
+                reconnect_params,
+                timeout=15.0,
+            )
+            if response.get("ok", True):
+                if on_status is not None:
+                    await on_status(attempt, max_attempts, True, "")
+                return True, ""
+            last_error = str(response.get("error") or "SDK reconnect failed")
+        except (asyncio.TimeoutError, AgentSdkBridgeError) as exc:
+            last_error = str(exc)
+        except Exception as exc:
+            last_error = str(exc)
+        if attempt < max_attempts:
+            await asyncio.sleep(delays[min(attempt - 1, len(delays) - 1)])
+    if on_status is not None:
+        await on_status(max_attempts, max_attempts, False, last_error)
+    return False, last_error
+
+
 async def _drain_detached_agent_sdk_turn(
     *,
     turn: AgentSdkTurn,
@@ -5729,6 +5838,8 @@ async def _drain_detached_agent_sdk_turn(
     code_write_targets: Set[str],
     saw_top_level_result: bool = False,
     saw_terminal_error: bool = False,
+    reported_api_error: str = "",
+    reconnect_params: Optional[dict] = None,
 ) -> None:
     """Keep a native turn alive after its browser SSE subscriber disconnects."""
     daemon_done = False
@@ -5746,7 +5857,10 @@ async def _drain_detached_agent_sdk_turn(
                 if session_id in _stopped_sessions:
                     continue
                 saw_terminal_error = True
-                err_event = classify_claude_error(str(envelope.get("message") or "Claude Agent SDK failed"))
+                bridge_error = str(envelope.get("message") or "Claude Agent SDK failed")
+                if _recoverable_agent_sdk_transport_error(bridge_error):
+                    reported_api_error = bridge_error
+                err_event = classify_claude_error(bridge_error)
                 append_event(session_id, err_event)
                 _notification_send_chat_error(session_id, work_dir, err_event)
                 continue
@@ -5761,6 +5875,9 @@ async def _drain_detached_agent_sdk_turn(
                 continue
             obj = envelope["event"]
             event_type = obj.get("type")
+            detected_api_error = _agent_sdk_reported_api_error(obj)
+            if detected_api_error:
+                reported_api_error = detected_api_error
             discovered = str(obj.get("session_id") or obj.get("sessionId") or "").strip()
             if discovered:
                 native_remote_id = discovered
@@ -5783,6 +5900,8 @@ async def _drain_detached_agent_sdk_turn(
             if targets:
                 code_write_targets.update(targets)
             if event_type == "result" and not obj.get("parent_tool_use_id"):
+                _normalize_agent_sdk_result(obj, reported_api_error)
+                reported_api_error = reported_api_error or _agent_sdk_result_error_text(obj)
                 saw_top_level_result = True
                 result_subtype = str(obj.get("subtype") or "").lower()
                 if obj.get("is_error") is True or result_subtype.startswith("error_"):
@@ -5817,6 +5936,16 @@ async def _drain_detached_agent_sdk_turn(
             )
             append_event(session_id, err_event)
             _notification_send_chat_error(session_id, work_dir, err_event)
+        if (
+            saw_terminal_error
+            and _recoverable_agent_sdk_transport_error(reported_api_error)
+            and native_remote_id
+        ):
+            await _auto_reconnect_agent_sdk_session(
+                session_id,
+                native_remote_id,
+                reconnect_params or {},
+            )
     except asyncio.CancelledError:
         await _claude_agent_bridge.abandon_turn(turn)
         raise
@@ -5845,6 +5974,7 @@ def _agent_sdk_streaming_response(
     checkpoint: Optional[dict],
     git_dirty_before: Dict[str, str],
     workspace_mode: Optional[str],
+    reconnect_params: Optional[dict] = None,
 ) -> StreamingResponse:
     """Forward native SDK messages through the existing SSE/history contract."""
 
@@ -5856,8 +5986,10 @@ def _agent_sdk_streaming_response(
         code_write_targets: Set[str] = set()
         saw_top_level_result = False
         saw_terminal_error = False
+        reported_api_error = ""
         daemon_done = False
         stopped_before_cleanup = False
+        auto_reconnect_failed = False
         _stopped_sessions.discard(session_id)
         sdk_version = (_claude_agent_bridge.sdk_info or {}).get("version")
         meta = {
@@ -5883,7 +6015,10 @@ def _agent_sdk_streaming_response(
                     if session_id in _stopped_sessions:
                         continue
                     saw_terminal_error = True
-                    err_event = classify_claude_error(str(envelope.get("message") or "Claude Agent SDK failed"))
+                    bridge_error = str(envelope.get("message") or "Claude Agent SDK failed")
+                    if _recoverable_agent_sdk_transport_error(bridge_error):
+                        reported_api_error = bridge_error
+                    err_event = classify_claude_error(bridge_error)
                     append_event(session_id, err_event)
                     _notification_send_chat_error(session_id, work_dir, err_event)
                     yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
@@ -5919,6 +6054,9 @@ def _agent_sdk_streaming_response(
 
                 obj = envelope["event"]
                 event_type = obj.get("type")
+                detected_api_error = _agent_sdk_reported_api_error(obj)
+                if detected_api_error:
+                    reported_api_error = detected_api_error
                 discovered = str(obj.get("session_id") or obj.get("sessionId") or "").strip()
                 if discovered:
                     native_remote_id = discovered
@@ -5945,6 +6083,8 @@ def _agent_sdk_streaming_response(
                 if targets:
                     code_write_targets.update(targets)
                 if event_type == "result" and not obj.get("parent_tool_use_id"):
+                    _normalize_agent_sdk_result(obj, reported_api_error)
+                    reported_api_error = reported_api_error or _agent_sdk_result_error_text(obj)
                     saw_top_level_result = True
                     result_subtype = str(obj.get("subtype") or "").lower()
                     if obj.get("is_error") is True or result_subtype.startswith("error_"):
@@ -6002,6 +6142,8 @@ def _agent_sdk_streaming_response(
                     code_write_targets=set(code_write_targets),
                     saw_top_level_result=saw_top_level_result,
                     saw_terminal_error=saw_terminal_error,
+                    reported_api_error=reported_api_error,
+                    reconnect_params=reconnect_params,
                 )
             )
             _agent_sdk_detached_turn_tasks[session_id] = task
@@ -6021,11 +6163,56 @@ def _agent_sdk_streaming_response(
                 if remote_became_ready and native_remote_id:
                     set_session_remote_state(session_id, native_remote_id, True)
 
+        if (
+            not detached
+            and saw_terminal_error
+            and _recoverable_agent_sdk_transport_error(reported_api_error)
+            and native_remote_id
+        ):
+            status_events: asyncio.Queue = asyncio.Queue()
+
+            async def record_reconnect_status(
+                attempt: int,
+                maximum: int,
+                restored: bool,
+                error: str,
+            ) -> None:
+                await status_events.put({
+                    "type": "system",
+                    "subtype": "status",
+                    "status": "connection_restored" if restored else (
+                        "reconnect_failed" if error and attempt >= maximum else "reconnecting"
+                    ),
+                    "message": "连接已恢复" if restored else (
+                        f"自动重连失败 · 已尝试 {maximum} 次"
+                        if error and attempt >= maximum
+                        else f"正在重新连接 {attempt}/{maximum}"
+                    ),
+                    "attempt": attempt,
+                    "max_attempts": maximum,
+                    "error": error,
+                })
+
+            reconnect_task = asyncio.create_task(_auto_reconnect_agent_sdk_session(
+                session_id,
+                native_remote_id,
+                reconnect_params or {},
+                on_status=record_reconnect_status,
+            ))
+            while not reconnect_task.done() or not status_events.empty():
+                try:
+                    status_event = await asyncio.wait_for(status_events.get(), timeout=0.25)
+                    yield f"data: {json.dumps(status_event, ensure_ascii=False)}\n\n"
+                except asyncio.TimeoutError:
+                    pass
+            reconnected, _ = await reconnect_task
+            auto_reconnect_failed = not reconnected
+
         terminal_state = (
             "completed" if saw_top_level_result and not saw_terminal_error
             else ("stopped" if stopped_before_cleanup else "failed")
         )
-        yield f"data: {json.dumps({'type': 'done', 'success': terminal_state == 'completed', 'turn_state': terminal_state})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'success': terminal_state == 'completed', 'turn_state': terminal_state, 'auto_reconnect_failed': auto_reconnect_failed})}\n\n"
 
     return StreamingResponse(
         generate(),
@@ -6248,6 +6435,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 checkpoint=checkpoint,
                 git_dirty_before=git_dirty_before,
                 workspace_mode=workspace_mode,
+                reconnect_params=agent_params,
             )
         # An explicit CLAUDE_WEB_CODE_RUNTIME=cli setting may select the legacy
         # runtime only for a new/unowned Code session. Once pinned, ownership is
@@ -7137,6 +7325,8 @@ async def stop_chat(session_id: str):
                 pass
         return {"ok": True, "runtime": "code_validation"}
     if session_id in _agent_sdk_running_sessions:
+        if session_id in _stopped_sessions:
+            return {"ok": True, "runtime": "claude_agent_sdk", "already_stopping": True}
         _stopped_sessions.add(session_id)
         try:
             await _claude_agent_bridge.interrupt(session_id)
@@ -7152,6 +7342,8 @@ async def stop_chat(session_id: str):
     process = _running_processes.get(session_id)
     if process is None:
         raise HTTPException(status_code=404, detail="no running process for this session")
+    if session_id in _stopped_sessions:
+        return {"ok": True, "runtime": "claude_cli", "already_stopping": True}
     _stopped_sessions.add(session_id)
     # Prefer sending an interrupt so the process can finish cleanly and the
     # SSE generator's finally block can decide whether to park it.  Fall back to
@@ -7343,9 +7535,16 @@ async def agent_sdk_context_usage(
     allowed_tools: Optional[List[str]] = Query(default=None),
     disallowed_tools: Optional[List[str]] = Query(default=None),
 ):
-    if _session_runtime_busy(session_id):
-        raise HTTPException(status_code=409, detail="Code 回合运行中，稍后刷新上下文统计")
     row = _agent_sdk_session_row(session_id)
+    if _session_runtime_busy(session_id):
+        cached = dict(_agent_sdk_context_usage_cache.get(session_id) or {})
+        return {
+            "ok": True,
+            "runtime": _RUNTIME_ORIGIN_AGENT_SDK,
+            "stale": True,
+            "available": bool(cached),
+            **cached,
+        }
     if not _claude_agent_bridge.enabled or not await _claude_agent_bridge.ensure_started():
         raise HTTPException(status_code=503, detail=_claude_agent_bridge.last_error or "Claude Agent SDK is unavailable")
     params = _agent_sdk_control_params(
@@ -7367,8 +7566,15 @@ async def agent_sdk_context_usage(
     usage = response.get("usage") or {}
     if not isinstance(usage, dict):
         raise HTTPException(status_code=502, detail="Claude Agent SDK returned invalid context usage")
+    _agent_sdk_context_usage_cache[session_id] = dict(usage)
     set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
-    return {"ok": True, "runtime": _RUNTIME_ORIGIN_AGENT_SDK, **usage}
+    return {
+        "ok": True,
+        "runtime": _RUNTIME_ORIGIN_AGENT_SDK,
+        "stale": False,
+        "available": True,
+        **usage,
+    }
 
 
 @app.post("/api/sessions/{session_id}/runtime/reconnect")
@@ -10433,6 +10639,7 @@ async def delete_session(request: Request, session_id: str):
         raise HTTPException(status_code=409, detail="session is busy")
     await _discard_session_runtime(session_id)
     await _terminate_session_code_terminals(session_id)
+    _agent_sdk_context_usage_cache.pop(session_id, None)
     events = load_events(session_id)
     with db_connect() as conn:
         row = conn.execute("SELECT cwd FROM sessions WHERE id = ?", (session_id,)).fetchone()
@@ -10477,6 +10684,7 @@ async def clear_session(request: Request, session_id: str):
             (time.time(), session_id),
         )
     set_session_remote_state(session_id, "", False)
+    _agent_sdk_context_usage_cache.pop(session_id, None)
     return {"ok": True}
 
 

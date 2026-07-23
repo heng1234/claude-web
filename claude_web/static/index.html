@@ -7992,10 +7992,6 @@
                       </button>
                     </span>
                   </span>
-                  <button type="button" class="cw-workspace-context-item" id="cwComposerReconnectBtn" role="menuitem" title="重建当前 Claude Agent SDK 会话连接">
-                    <span class="cw-workspace-context-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg></span>
-                    <span class="cw-workspace-context-copy"><span class="cw-workspace-context-title">重连当前会话</span><span class="cw-workspace-context-value">重建 SDK 连接，不重复执行任务</span></span>
-                  </button>
                 </div>
               </span>
               <span class="cw-mode-picker cw-composer-settings-picker">
@@ -9400,7 +9396,6 @@ const cwComposerPermIcon = $('cwComposerPermIcon');
 const cwComposerProjectBtn = $('cwComposerProjectBtn');
 const cwComposerBranchBtn = $('cwComposerBranchBtn');
 const cwComposerPermBtn = $('cwComposerPermBtn');
-const cwComposerReconnectBtn = $('cwComposerReconnectBtn');
 const cwComposerContextBtn = $('cwComposerContextBtn');
 const cwComposerContextMenu = $('cwComposerContextMenu');
 const cwPermissionModeMenu = $('cwPermissionModeMenu');
@@ -12735,6 +12730,25 @@ async function reconnectCurrentCodeSession(options = {}) {
   }
 }
 
+async function reconnectAndContinueCurrentCodeSession() {
+  const targetSessionId = sessionId;
+  if (!targetSessionId) return false;
+  const reconnected = await reconnectCurrentCodeSession();
+  if (!reconnected || sessionId !== targetSessionId) return false;
+  const continuationPrompt = [
+    '请从刚才因连接中断而停止的位置继续。',
+    '先检查当前文件、Git diff 和已经完成的工具操作，避免重复执行命令或重复修改文件；',
+    '确认现状后，只完成尚未完成的部分。',
+  ].join('');
+  await sendRaw(
+    continuationPrompt,
+    '继续刚才中断的任务',
+    [],
+    { forceNew: false },
+  );
+  return true;
+}
+
 tokenCounter?.setAttribute('tabindex', '0');
 tokenCounter?.setAttribute('role', 'button');
 tokenCounter?.setAttribute('aria-label', '查看 Code 上下文占用明细');
@@ -12754,6 +12768,11 @@ cwContextCompactBtn?.addEventListener('click', async () => {
 async function refreshNativeContextUsage(options = {}) {
   if (!codeMode || !sessionId || currentCodeRuntime !== 'claude_agent_sdk') return null;
   const targetSessionId = sessionId;
+  if (codeRunForSession(targetSessionId) || nativeTurnRecoveryRunningSessionId === targetSessionId) {
+    return latestNativeContextUsage
+      ? { ...latestNativeContextUsage, stale: true, available: true }
+      : null;
+  }
   const requestSerial = ++contextUsageRequestSerial;
   const perm = buildPermissionPayload();
   const params = new URLSearchParams();
@@ -12829,7 +12848,8 @@ function addErrorBlock(message) {
   const raw = String(message || '');
   const lower = raw.toLowerCase();
   let diagnostic = null;
-  if (lower.includes('did not acknowledge') || lower.includes('acknowledgement')) diagnostic = ['SDK 回合没有在确认窗口内接管请求','通常是 SDK runtime 正在重建、版本不兼容或桥接进程卡住。先检查 SDK 状态，再重试这一轮。','sdk'];
+  if (lower.includes('stream idle timeout') || lower.includes('no chunks received')) diagnostic = ['Claude 数据流长时间没有响应','命令可能已经执行或文件已经修改。请先检查当前变更，再重建当前会话连接；系统不会自动重放原任务。','sdk-idle'];
+  else if (lower.includes('did not acknowledge') || lower.includes('acknowledgement')) diagnostic = ['SDK 回合没有在确认窗口内接管请求','通常是 SDK runtime 正在重建、版本不兼容或桥接进程卡住。先检查 SDK 状态，再重试这一轮。','sdk'];
   else if (lower.includes('separator is not found') || lower.includes('chunk exceed') || lower.includes('frame')) diagnostic = ['流式数据帧过大或边界丢失','常见于旧 SDK、超大单段工具输出或附件。升级 SDK 后重试；超大输出应由工具写入文件再读取必要片段。','sdk'];
   else if (lower.includes('context') && (lower.includes('limit') || lower.includes('maximum') || lower.includes('too long'))) diagnostic = ['上下文接近或超过模型窗口','查看占用明细并执行 Claude Code 原生 compact，然后继续当前任务。','context'];
   else if (lower.includes('permission') || lower.includes('not allowed')) diagnostic = ['工具权限阻止了当前操作','检查当前运行模式和本会话授权规则；只对需要的工具放行。','permissions'];
@@ -12847,7 +12867,9 @@ function addErrorBlock(message) {
   }
   if (diagnostic[2] === 'permissions') addAction('查看授权规则', openPermissionRulesModal);
   addAction('复制错误', () => navigator.clipboard?.writeText(raw));
-  if (sessionId && lastUserIndex >= 0) addAction('重试这一轮', () => retryTurnWithCurrentPermissions(sessionId,lastUserIndex));
+  if (sessionId && lastUserIndex >= 0 && diagnostic[2] !== 'sdk-idle') {
+    addAction('重试这一轮', () => retryTurnWithCurrentPermissions(sessionId,lastUserIndex));
+  }
   chatInner.appendChild(card);
   return el;
 }
@@ -13936,9 +13958,10 @@ function nativeResultErrorMessage(result) {
     if (item && typeof item === 'object') return item.message || item.error || JSON.stringify(item);
     return String(item || '');
   }).filter(Boolean);
+  const safeSubtype = subtype && subtype.toLowerCase() !== 'success' ? subtype : '';
   return details.join('\n')
     || String(result.error || result.message || '').trim()
-    || `Claude Agent SDK 执行失败${subtype ? `（${subtype}）` : ''}`;
+    || `Claude Agent SDK 执行失败${safeSubtype ? `（${safeSubtype}）` : ''}`;
 }
 
 function nativeReconnectStatusText(obj) {
@@ -14043,6 +14066,18 @@ function handleEvent(obj, container, options = {}) {
     if (!replay && reconnectText) {
       const status = addSystemInfo(reconnectText);
       status?.classList.add('cw-reconnect-status');
+      if (obj.status === 'reconnect_failed') {
+        addSystemAction(
+          '自动恢复没有成功；不会自动重复执行上一条任务',
+          '手动重连',
+          () => reconnectCurrentCodeSession(),
+        );
+        addSystemAction(
+          '确认当前文件和命令状态后，可以让 Claude 继续未完成部分',
+          '重连并继续',
+          () => reconnectAndContinueCurrentCodeSession(),
+        );
+      }
     }
     return container;
   }
@@ -15157,7 +15192,6 @@ const builtinSlashCommands = [
   { group: '🔧 操作', kind: 'action', trigger: 'fork', name: '从当前位置分叉', desc: '基于最后一轮分叉到新会话', handler: slashFork, needSession: true, needHistory: true },
   { group: '💎 重操作', kind: 'heavy', trigger: 'compact', name: '压缩会话历史', desc: 'Code 使用 SDK 原生 compact；Chat 使用摘要备份', handler: slashCompact, needSession: true, needHistory: true },
   { group: '🔧 操作', kind: 'action', trigger: 'context', name: '查看上下文占用', desc: '查看 Claude Agent SDK 上下文明细', handler: openNativeContextUsage, needSession: true, codeOnly: true },
-  { group: '🔧 操作', kind: 'action', trigger: 'reconnect', name: '重连当前会话', desc: '重建 SDK runtime，从原 Session 继续且不重复执行任务', handler: reconnectCurrentCodeSession, needSession: true, codeOnly: true },
   { group: '💎 重操作', kind: 'heavy', trigger: 'init', name: '初始化 CLAUDE.md', desc: '扫项目并生成草稿到输入框', handler: slashInit },
   { group: '📝 模板', kind: 'template', trigger: 'recap', name: '总结当前进度', content: '请简要总结当前会话的目标、已完成、待办和风险，不超过 10 行。' },
   { group: '📝 模板', kind: 'template', trigger: 'test', name: '写测试', content: '请为下面的代码补充测试，覆盖正常路径、边界条件和错误路径：\n\n' },
@@ -15850,10 +15884,14 @@ async function persistCodeQueueEntry(entry) {
 async function setPersistedQueueState(entry, state, error = '') {
   const sid = queueSessionId(entry.owner);
   if (!sid) return;
-  await fetch(`/api/sessions/${encodeURIComponent(sid)}/queue/${encodeURIComponent(entry.id)}`, {
+  const response = await fetch(`/api/sessions/${encodeURIComponent(sid)}/queue/${encodeURIComponent(entry.id)}`, {
     method: 'PATCH', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ state, error }),
-  }).catch(() => {});
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `更新队列状态失败：HTTP ${response.status}`);
+  }
 }
 
 async function deletePersistedQueueEntry(entry) {
@@ -15999,10 +16037,14 @@ async function dispatchCodeQueueEntry(entry) {
   }
   codeQueueDispatchingOwners.add(owner);
   codeQueuePauseReasons.delete(owner);
-  setPersistedQueueState(entry, 'dispatching');
   renderCodeMessageQueue();
   let result = null;
   try {
+    // Immediate sends do not pass through enqueueCodeMessage(), so make sure
+    // the authoritative queue row exists before marking it dispatching. This
+    // also serializes the POST/PATCH pair and removes the former 404 race.
+    await persistCodeQueueEntry(entry);
+    await setPersistedQueueState(entry, 'dispatching');
     if (!entry.isFork && !await maybeAutoCompactBeforeSend(entry.message, { restoreOnFailure: false })) {
       enqueueCodeMessage(entry, { front: true, silent: true });
       pauseCodeMessageQueue(owner, '上下文压缩失败，队列已暂停');
@@ -16033,7 +16075,11 @@ async function dispatchCodeQueueEntry(entry) {
     if (!result?.accepted) {
       const queue = codeQueueFor(owner);
       if (!queue.some(item => item.id === entry.id)) queue.unshift(entry);
-      setPersistedQueueState(entry, result?.busy ? 'queued' : 'paused', result?.error?.message || '上一轮未完成');
+      setPersistedQueueState(
+        entry,
+        result?.busy ? 'queued' : 'paused',
+        result?.error?.message || '上一轮未完成',
+      ).catch(() => loadPersistedCodeQueue(queueSessionId(owner)));
     }
     if (!result?.busy) {
       pauseCodeMessageQueue(owner, result?.aborted ? '当前任务已停止，队列已暂停' : '上一轮未完成，队列已暂停');
@@ -16618,7 +16664,9 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
           if (obj.type === 'result') {
             lastResultEvent = obj;
             const resultError = nativeResultErrorMessage(obj);
-            if (resultError) streamErrorEvent = { type: 'error', message: resultError, result: obj };
+            if (resultError) {
+              streamErrorEvent = { type: 'error', message: resultError, result: obj };
+            }
           }
           if (obj.type === 'stream_event' && obj.event?.type === 'content_block_delta' && obj.event.delta?.type === 'text_delta') {
             collectedAssistantText += obj.event.delta.text || '';
@@ -22474,14 +22522,6 @@ cwComposerProjectBtn?.addEventListener('click', () => {
 cwComposerBranchBtn?.addEventListener('click', () => {
   setCodeMode(true);
   setBranchPanelOpen(cwBranchPanel?.classList.contains('hidden'));
-});
-
-cwComposerReconnectBtn?.addEventListener('click', async (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  setPermissionModeMenuOpen(false);
-  setComposerContextMenuOpen(false);
-  await reconnectCurrentCodeSession({ button: cwComposerReconnectBtn });
 });
 
 cwComposerPermBtn?.addEventListener('click', (e) => {
