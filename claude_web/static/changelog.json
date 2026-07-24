@@ -2,6 +2,17 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.0.8",
+      "date": "2026-07-24",
+      "highlights": [
+        { "type": "feature", "text": "普通聊天支持把 Markdown、PDF、Office、代码和文本文件固定为会话文档上下文，可随时添加、停用或移除" },
+        { "type": "fix", "text": "Claude Agent SDK 数据流空闲超时或连接意外结束时自动重建原生会话连接并展示进度，不会自动重放可能已执行的请求" },
+        { "type": "feature", "text": "连接恢复后可一键从中断处继续；续写前先检查当前文件与 Git diff，减少重复命令和重复修改" },
+        { "type": "fix", "text": "SDK 错误终态统一归一并保留上游 API 错误详情；运行中复用最近一次上下文统计，结束后刷新真实用量" },
+        { "type": "fix", "text": "收紧 Code 会话繁忙、停止、强制删除和清空时的 runtime 状态清理，减少残留状态阻塞后续操作" }
+      ]
+    },
+    {
       "version": "2.0.7",
       "date": "2026-07-22",
       "highlights": [
