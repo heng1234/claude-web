@@ -4726,6 +4726,71 @@
     background: #f5f3f0;
     border-color: #e2dcd5;
   }
+  /* ── Pinned Docs Context Bar ── */
+  .pinned-docs-bar {
+    display: none;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    font-size: 12px;
+  }
+  body:not(.code-mode) .pinned-docs-bar.active { display: block; }
+  .pinned-docs-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .pinned-docs-header button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-muted);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .pinned-docs-header button:hover { background: var(--surface-3); }
+  .pinned-docs-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pinned-doc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-size: 11.5px;
+    max-width: 240px;
+    color: var(--text);
+  }
+  .pinned-doc-chip.disabled {
+    opacity: 0.45;
+    text-decoration: line-through;
+  }
+  .pinned-doc-chip .pin-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pinned-doc-chip .pin-toggle,
+  .pinned-doc-chip .pin-remove {
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-size: 12px;
+    padding: 0 2px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .pinned-doc-chip .pin-toggle:hover,
+  .pinned-doc-chip .pin-remove:hover { color: var(--accent); }
   body.code-mode .cw-more-tools {
     display: none !important;
   }
@@ -7775,6 +7840,15 @@
   </div>
 
   <main id="chat" class="flex-1 overflow-y-auto w-full" style="background:var(--bg);">
+    <div id="pinnedDocsBar" class="pinned-docs-bar cw-chat-only">
+      <div class="pinned-docs-header">
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px;"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>文档上下文</span>
+        <button type="button" id="pinnedDocsAddBtn" title="添加文档到会话上下文">＋ 添加</button>
+        <span id="pinnedDocsHint" style="font-weight:400;font-size:11px;">（固定的文档会在本会话每轮对话中持续可见）</span>
+      </div>
+      <div id="pinnedDocsChips" class="pinned-docs-chips"></div>
+    </div>
+    <input type="file" id="pinnedDocsInput" class="hidden" multiple accept=".txt,.md,.pdf,.docx,.pptx,.xlsx,.xlsm,.xls,.html,.htm,.csv,.json,.log,.py,.js,.ts,.go,.java,.c,.cpp,.rs" />
     <div class="max-w-3xl w-full mx-auto px-6 py-8" id="chatInner">
     <div id="welcome" class="empty-hero">
       <div class="empty-logo">C</div>
@@ -9570,8 +9644,15 @@ function removeWelcome() {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+function repairTableNewlines(md) {
+  // LLMs sometimes emit a GFM table delimiter row fused with the following
+  // data row (no newline between them), e.g. "|---|---|| 01 | ... |". That
+  // breaks table detection and renders as raw pipes. Split them apart.
+  return md.replace(/(\|(?:\s*:?-+:?\s*\|)+)(\|)/g, '$1\n$2');
+}
+
 function renderMarkdown(text) {
-  const source = String(text || '');
+  const source = repairTableNewlines(String(text || ''));
   if (window.marked && window.DOMPurify) {
     return DOMPurify.sanitize(marked.parse(source));
   }
@@ -16365,6 +16446,8 @@ function startNewSession() {
   resetCodeReviewState();
   resetSessionStatsBar();
   refreshMemories();
+  pinnedDocs = [];
+  renderPinnedDocs();
   restoreDraft();
   updateViewTabs();
   setCodeMode(codeMode);
@@ -16919,6 +17002,7 @@ async function loadSession(id, options = {}) {
     if (data.cwd) cwdInput.value = data.cwd;
     updateWorkspaceLabels();
     refreshMemories();
+    loadPinnedDocs();
     suggestTitleBtn.classList.remove('hidden');
     chatInner.innerHTML = '';
     restoreDraft();
@@ -20691,6 +20775,98 @@ function composeDocContext() {
 
 function clearDocs() { pendingDocs.length = 0; renderDocChips(); }
 
+// ===== Pinned Docs Context Bar =====
+const pinnedDocsBar = $('pinnedDocsBar');
+const pinnedDocsChips = $('pinnedDocsChips');
+const pinnedDocsAddBtn = $('pinnedDocsAddBtn');
+const pinnedDocsInput = $('pinnedDocsInput');
+let pinnedDocs = [];
+
+async function loadPinnedDocs() {
+  if (!sessionId || codeMode) { pinnedDocs = []; renderPinnedDocs(); return; }
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/pinned-docs`);
+    if (!r.ok) { pinnedDocs = []; renderPinnedDocs(); return; }
+    pinnedDocs = await r.json();
+  } catch { pinnedDocs = []; }
+  renderPinnedDocs();
+}
+
+function renderPinnedDocs() {
+  if (!pinnedDocsBar) return;
+  if (codeMode || (!pinnedDocs.length && !sessionId)) {
+    pinnedDocsBar.classList.remove('active');
+    return;
+  }
+  pinnedDocsBar.classList.add('active');
+  if (!pinnedDocs.length) {
+    pinnedDocsChips.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">暂无固定文档，点击"＋ 添加"上传</span>';
+    return;
+  }
+  pinnedDocsChips.innerHTML = pinnedDocs.map(d => `
+    <div class="pinned-doc-chip ${d.enabled ? '' : 'disabled'}" data-id="${d.id}">
+      <span class="pin-name" title="${d.name} (${d.length || 0} 字)">${d.name}</span>
+      <button class="pin-toggle" title="${d.enabled ? '暂时排除' : '重新启用'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d.enabled ? '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>' : '<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>'}</svg></button>
+      <button class="pin-remove" title="移除"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg></button>
+    </div>
+  `).join('');
+  pinnedDocsChips.querySelectorAll('.pin-toggle').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const chip = btn.closest('.pinned-doc-chip');
+      const id = chip.dataset.id;
+      const doc = pinnedDocs.find(d => d.id === id);
+      if (!doc) return;
+      const newEnabled = !doc.enabled;
+      await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/pinned-docs/${id}`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ enabled: newEnabled }),
+      });
+      doc.enabled = newEnabled ? 1 : 0;
+      renderPinnedDocs();
+    });
+  });
+  pinnedDocsChips.querySelectorAll('.pin-remove').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const chip = btn.closest('.pinned-doc-chip');
+      const id = chip.dataset.id;
+      await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/pinned-docs/${id}`, { method: 'DELETE' });
+      pinnedDocs = pinnedDocs.filter(d => d.id !== id);
+      renderPinnedDocs();
+    });
+  });
+}
+
+if (pinnedDocsAddBtn) {
+  pinnedDocsAddBtn.addEventListener('click', () => {
+    if (!sessionId) { toast('请先发送一条消息以创建会话'); return; }
+    if (pinnedDocsInput) pinnedDocsInput.click();
+  });
+}
+if (pinnedDocsInput) {
+  pinnedDocsInput.addEventListener('change', async () => {
+    const files = Array.from(pinnedDocsInput.files || []);
+    pinnedDocsInput.value = '';
+    for (const file of files) {
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const r = await fetch('/api/upload-doc', { method: 'POST', body: fd });
+        if (!r.ok) { toast('上传失败: ' + file.name); continue; }
+        const data = await r.json();
+        const resp = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/pinned-docs`, {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ name: data.name, content: data.content, path: data.path, size: data.size }),
+        });
+        if (resp.ok) {
+          const doc = await resp.json();
+          pinnedDocs.push(doc);
+        }
+      } catch (e) { toast('上传失败: ' + e.message); }
+    }
+    renderPinnedDocs();
+  });
+}
+
 if (dismissMobileBannerBtn) {
   dismissMobileBannerBtn.addEventListener('click', () => {
     mobileBannerDismissed = true;
@@ -21541,6 +21717,7 @@ function setCodeMode(enabled, options = {}) {
   renderCodeFileReferences();
   renderSessionStatsBar();
   applyWebSearchBtnState();
+  renderPinnedDocs();
   if (!sessionId) {
     setText(titleLabel, codeMode ? 'Code 模式' : '新会话');
   }

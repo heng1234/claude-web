@@ -929,6 +929,26 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_pinned_docs (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL DEFAULT '',
+                size INTEGER NOT NULL DEFAULT 0,
+                length INTEGER NOT NULL DEFAULT 0,
+                content TEXT NOT NULL DEFAULT '',
+                position INTEGER NOT NULL DEFAULT 0,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pinned_docs_session "
+            "ON session_pinned_docs (session_id, enabled, position)"
+        )
         ensure_column(conn, "sessions", "pinned", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(conn, "sessions", "archived", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(conn, "sessions", "tags", "TEXT NOT NULL DEFAULT ''")
@@ -1409,14 +1429,56 @@ def load_enabled_memories(cwd: str, session_id: str) -> List[dict]:
     return [dict(r) for r in rows]
 
 
-def compose_system_prompt(memory_items: List[dict], user_system_prompt: Optional[str]) -> Optional[str]:
+def compose_system_prompt(
+    memory_items: List[dict],
+    user_system_prompt: Optional[str],
+    pinned_docs: Optional[List[dict]] = None,
+) -> Optional[str]:
     parts: List[str] = []
     if memory_items:
         memory_text = "\n".join(f"- {m['content']}" for m in memory_items if m.get("content"))
         parts.append("Persistent memory for this user/project/session:\n" + memory_text)
+    if pinned_docs:
+        doc_sections = []
+        for doc in pinned_docs:
+            content = doc.get("content", "")
+            if not content:
+                continue
+            name = doc.get("name", "文档")
+            doc_sections.append(f"【文档: {name}】\n---\n{content}\n---")
+        if doc_sections:
+            parts.append("以下文档已固定为本次会话的持久上下文，请在回答时参考：\n\n" + "\n\n".join(doc_sections))
     if user_system_prompt:
         parts.append(user_system_prompt)
     return "\n\n".join(parts) if parts else None
+
+
+def load_session_pinned_docs(session_id: str) -> List[dict]:
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, session_id, name, path, size, length, content, position, enabled, created_at
+            FROM session_pinned_docs
+            WHERE session_id = ? AND enabled = 1
+            ORDER BY position, created_at
+            """,
+            (session_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def load_all_session_pinned_docs(session_id: str) -> List[dict]:
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, session_id, name, path, size, length, position, enabled, created_at
+            FROM session_pinned_docs
+            WHERE session_id = ?
+            ORDER BY position, created_at
+            """,
+            (session_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def load_events(session_id: str) -> List[dict]:
@@ -6486,6 +6548,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
         effective_system_prompt = None if code_workspace else compose_system_prompt(
             load_enabled_memories(work_dir, session_id),
             req.system_prompt,
+            load_session_pinned_docs(session_id),
         )
         current_sig = _proc_sig(
             remote_session_id,
@@ -11062,6 +11125,73 @@ async def search_memories(q: str = Query(default=""), limit: int = Query(default
             (f"%{q.strip()}%", limit),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Session Pinned Docs ──────────────────────────────────────────────────────
+
+
+@app.get("/api/sessions/{session_id}/pinned-docs")
+async def list_pinned_docs(session_id: str):
+    return load_all_session_pinned_docs(session_id)
+
+
+@app.post("/api/sessions/{session_id}/pinned-docs")
+async def add_pinned_doc(session_id: str, request: Request):
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    content = (body.get("content") or "").strip()
+    if not name or not content:
+        raise HTTPException(status_code=400, detail="name and content required")
+    path = (body.get("path") or "").strip()
+    size = int(body.get("size") or 0)
+    length = len(content)
+    doc_id = uuid.uuid4().hex
+    with db_connect() as conn:
+        max_pos = conn.execute(
+            "SELECT COALESCE(MAX(position), -1) FROM session_pinned_docs WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()[0]
+        conn.execute(
+            """
+            INSERT INTO session_pinned_docs (id, session_id, name, path, size, length, content, position, enabled, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            """,
+            (doc_id, session_id, name, path, size, length, content, max_pos + 1, time.time()),
+        )
+    return {"id": doc_id, "name": name, "path": path, "size": size, "length": length, "position": max_pos + 1, "enabled": 1}
+
+
+@app.patch("/api/sessions/{session_id}/pinned-docs/{doc_id}")
+async def update_pinned_doc(session_id: str, doc_id: str, request: Request):
+    body = await request.json()
+    with db_connect() as conn:
+        row = conn.execute(
+            "SELECT id FROM session_pinned_docs WHERE id = ? AND session_id = ?",
+            (doc_id, session_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="pinned doc not found")
+        if "enabled" in body:
+            conn.execute(
+                "UPDATE session_pinned_docs SET enabled = ? WHERE id = ?",
+                (1 if body["enabled"] else 0, doc_id),
+            )
+        if "position" in body:
+            conn.execute(
+                "UPDATE session_pinned_docs SET position = ? WHERE id = ?",
+                (int(body["position"]), doc_id),
+            )
+    return {"ok": True}
+
+
+@app.delete("/api/sessions/{session_id}/pinned-docs/{doc_id}")
+async def delete_pinned_doc(session_id: str, doc_id: str):
+    with db_connect() as conn:
+        conn.execute(
+            "DELETE FROM session_pinned_docs WHERE id = ? AND session_id = ?",
+            (doc_id, session_id),
+        )
+    return {"ok": True}
 
 
 @app.get("/api/prompts")
