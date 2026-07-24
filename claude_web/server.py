@@ -6270,10 +6270,21 @@ def _release_code_turn(session_id: str, turn_id: str) -> None:
 async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     session_id = req.session_id or str(uuid.uuid4())
     if _session_runtime_busy(session_id) or session_id in _compacting_sessions:
-        raise HTTPException(
-            status_code=409,
-            detail="当前 Code 会话仍有回合在后台运行，请等待完成或先停止当前回合",
-        )
+        if session_id in _agent_sdk_running_sessions:
+            task = _agent_sdk_detached_turn_tasks.get(session_id)
+            if task is not None and task.done():
+                _agent_sdk_running_sessions.discard(session_id)
+                _stopped_sessions.discard(session_id)
+                _agent_sdk_detached_turn_tasks.pop(session_id, None)
+        if session_id in _running_processes:
+            process = _running_processes[session_id]
+            if process.returncode is not None:
+                _running_processes.pop(session_id, None)
+        if _session_runtime_busy(session_id) or session_id in _compacting_sessions:
+            raise HTTPException(
+                status_code=409,
+                detail="当前 Code 会话仍有回合在后台运行，请等待完成或先停止当前回合",
+            )
     if not agent_loop_owner and _session_agent_loop_busy(session_id):
         raise HTTPException(status_code=409, detail="session is owned by a running Agent Loop")
     existing_events = load_events(session_id) if req.session_id else []
@@ -7335,7 +7346,8 @@ async def stop_chat(session_id: str):
             try:
                 await _claude_agent_bridge.close_session(session_id)
             except Exception:
-                pass
+                _agent_sdk_running_sessions.discard(session_id)
+                _stopped_sessions.discard(session_id)
         stop_event = {"type": "error", "message": "用户中止", "ts": time.time()}
         append_event(session_id, stop_event)
         return {"ok": True, "runtime": "claude_agent_sdk"}
@@ -10633,10 +10645,25 @@ async def patch_session(request: Request, session_id: str, req: SessionPatch):
 
 
 @app.delete("/api/sessions/{session_id}")
-async def delete_session(request: Request, session_id: str):
+async def delete_session(request: Request, session_id: str, force: Optional[str] = None):
     _require_not_mobile_access(request)
     if _session_control_busy(session_id):
-        raise HTTPException(status_code=409, detail="session is busy")
+        if force:
+            _agent_sdk_running_sessions.discard(session_id)
+            _stopped_sessions.discard(session_id)
+            _compacting_sessions.discard(session_id)
+            _code_validation_processes.pop(session_id, None)
+            process = _running_processes.pop(session_id, None)
+            if process is not None and process.returncode is None:
+                _terminated_processes.add(process)
+                await _terminate_process(process)
+            for job_id, job in list(_agent_loop_jobs.items()):
+                if job.session_id == session_id and job.status == "running":
+                    job.status = "stopped"
+                    job.stop_requested = True
+                    _agent_loop_jobs.pop(job_id, None)
+        else:
+            raise HTTPException(status_code=409, detail="session is busy")
     await _discard_session_runtime(session_id)
     await _terminate_session_code_terminals(session_id)
     _agent_sdk_context_usage_cache.pop(session_id, None)

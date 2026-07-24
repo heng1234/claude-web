@@ -8170,8 +8170,11 @@
         <label class="block font-medium mb-1">测试命令（可选）</label>
         <input id="agentLoopTestCommand" type="text" placeholder="留空时自动检测：npm test、make test 或 pytest" class="w-full px-3 py-2 text-sm" />
       </div>
-      <div class="rounded p-3 text-xs" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);">
-        Loop 会在后端持续运行并复用当前权限策略和工作目录；预算只计算每轮新增提示和模型输出，不重复计算已有会话与缓存上下文。每轮失败最多自动重试 2 次，连续遇到相同测试失败会暂停。需要中断时点输入框上方的“停止”。
+      <div id=”agentLoopChatWarning” class=”rounded p-3 text-xs hidden” style=”background:var(--surface-2); border:1px solid var(--accent); color:var(--text-muted);”>
+        ⚠️ Agent Loop 是代码工作区能力：启动后当前会话会切换到<strong>代码工作区模式</strong>（启用文件读写、命令执行等全部工具）。原聊天记录会保留，但界面与可用工具会随之改变。
+      </div>
+      <div class=”rounded p-3 text-xs” style=”background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);”>
+        Loop 会在后端持续运行并复用当前权限策略和工作目录；预算只计算每轮新增提示和模型输出，不重复计算已有会话与缓存上下文。每轮失败最多自动重试 2 次，连续遇到相同测试失败会暂停。需要中断时点输入框上方的”停止”。
       </div>
       <div class="flex justify-end gap-2 pt-1">
         <button type="button" data-close class="px-3 py-1.5 rounded text-sm" style="background:var(--surface-2); color:var(--text-muted);">取消</button>
@@ -15559,8 +15562,20 @@ function buildPermissionPayload() {
   const mode = effectivePermissionModeForWorkspace(permSelect.value);
   const out = { permission_mode: null, allowed_tools: null, disallowed_tools: null };
   const applyWebToolPolicy = () => {
-    if (isWebSearchEnabled()) return out;
     const webTools = new Set(['WebSearch', 'WebFetch']);
+    if (isWebSearchEnabled()) {
+      if (Array.isArray(out.allowed_tools)) {
+        for (const t of webTools) {
+          if (!out.allowed_tools.includes(t)) out.allowed_tools.push(t);
+        }
+        out.allowed_tools = normalizeToolNames(out.allowed_tools);
+      }
+      if (Array.isArray(out.disallowed_tools)) {
+        out.disallowed_tools = out.disallowed_tools.filter(name => !webTools.has(name));
+        if (out.disallowed_tools.length === 0) out.disallowed_tools = null;
+      }
+      return out;
+    }
     if (Array.isArray(out.allowed_tools)) {
       out.allowed_tools = out.allowed_tools.filter(name => !webTools.has(name));
     } else {
@@ -16158,6 +16173,8 @@ function setAgentLoopStatus(text, active = agentLoopRunning) {
 function openAgentLoopModal() {
   if (!agentLoopModal) return;
   agentLoopGoal.value = input.value.trim();
+  const warn = $('agentLoopChatWarning');
+  if (warn) warn.classList.toggle('hidden', codeMode);
   openModal(agentLoopModal);
   setTimeout(() => agentLoopGoal.focus(), 0);
 }
