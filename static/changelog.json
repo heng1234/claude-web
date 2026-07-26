@@ -2,6 +2,36 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.0.9",
+      "date": "2026-07-26",
+      "highlights": [
+        {
+          "type": "feature",
+          "text": "浏览器扩展新增普通聊天 / Code 双模式：普通聊天只读并隔离项目工具，Code 模式绑定项目目录、权限和原生会话"
+        },
+        {
+          "type": "fix",
+          "text": "扩展切换模式时先停止服务端回合并恢复各自独立 Session，避免旧任务继续运行、停止错会话或跨模式串线"
+        },
+        {
+          "type": "ui",
+          "text": "Code 活动面板统一汇总任务、子代理和文件变更；无可执行操作的活动行不再显示误导性的点击状态"
+        },
+        {
+          "type": "feature",
+          "text": "Code 模式接入官方 Claude in Chrome，可按会话开启网页读取、点击、截图和控制台检查；普通聊天强制关闭"
+        },
+        {
+          "type": "fix",
+          "text": "旧版 Claude CLI 的普通聊天不再因 Chrome 参数失败；Code 浏览器不可用时会明确提示升级"
+        },
+        {
+          "type": "feature",
+          "text": "Claude Agent SDK 默认推荐最新稳定版；旧版备份保留到首个真实 Code 回合成功，明确兼容错误时自动回滚且不重放任务"
+        }
+      ]
+    },
+    {
       "version": "2.0.8",
       "date": "2026-07-24",
       "highlights": [
