@@ -12,8 +12,11 @@ let lastStreamedMessageId = "";
 let streamedMessageIds = new Set();
 let contextExpanded = false;
 let activeTabContext = null;
+let activeAssistantMode = "chat";
 let requestVersion = 0;
 let saveTimer = 0;
+let modeSwitchPending = false;
+let unresolvedServerSessionId = "";
 
 const TAB_STATES_KEY = "tabStates";
 const MAX_TAB_STATES = 20;
@@ -65,11 +68,11 @@ function normalizeStateUrl(value) {
   }
 }
 
-function tabStateKey(context = activeTabContext) {
+function tabStateKey(context = activeTabContext, mode = activeAssistantMode) {
   const tabId = context?.tabId;
   if (tabId == null) return "";
   const url = normalizeStateUrl(context.pageUrl || context.url || "");
-  return `${tabId}:${url}`;
+  return `${mode}:${tabId}:${url}`;
 }
 
 function createStateSnapshot() {
@@ -80,8 +83,10 @@ function createStateSnapshot() {
     openUrl: currentOpenUrl,
     answerText,
     contextExpanded,
+    assistantMode: activeAssistantMode,
     status: $("statusLine").textContent || "",
-    running: Boolean(currentController),
+    running: Boolean(currentController || unresolvedServerSessionId),
+    serverSessionUnresolved: Boolean(unresolvedServerSessionId),
     updatedAt: Date.now(),
   };
 }
@@ -124,6 +129,7 @@ function restoreTabState(snapshot) {
   requestVersion += 1;
   currentAsk = snapshot.ask;
   currentSessionId = snapshot.sessionId || "";
+  unresolvedServerSessionId = (snapshot.serverSessionUnresolved || snapshot.running) ? currentSessionId : "";
   currentOpenUrl = snapshot.openUrl || "";
   answerText = snapshot.answerText || "";
   lastStreamedMessageId = "";
@@ -172,11 +178,82 @@ function askMatchesActiveTab(ask) {
   return !askUrl || !activeUrl || askUrl === activeUrl;
 }
 
+function modeCopy() {
+  if (activeAssistantMode === "code") {
+    return {
+      eyebrow: "Code 项目",
+      title: "从当前页面开始一次 Code 任务",
+      description: "读取页面上下文并交给已配置的本地项目，用于定位代码、制定修改计划和验证页面表现。",
+      capture: "读取当前页",
+      placeholder: "描述要定位、修改或验证的问题",
+      subtitle: "选择页面内容，交给 Code 项目处理",
+      continueLabel: "去 Code 工作区",
+      quickLabels: ["审查页面", "定位问题", "生成计划"],
+    };
+  }
+  return {
+    eyebrow: "普通聊天",
+    title: "把当前网页交给本地 Claude",
+    description: "选中代码或文字后右键提问，或者直接读取当前页。普通聊天只分析页面内容，不使用项目写入能力。",
+    capture: "读取当前页",
+    placeholder: "输入问题，继续询问当前标签页",
+    subtitle: "选中网页内容后右键提问",
+    continueLabel: "去 Web 端继续",
+    quickLabels: ["总结页面", "解释重点", "整理清单"],
+  };
+}
+
+function renderAssistantMode() {
+  const copy = modeCopy();
+  document.body.dataset.assistantMode = activeAssistantMode;
+  document.querySelectorAll("[data-assistant-mode]").forEach((button) => {
+    const selected = button.dataset.assistantMode === activeAssistantMode;
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+    button.disabled = modeSwitchPending;
+  });
+  $("modeEyebrow").textContent = copy.eyebrow;
+  $("emptyTitle").textContent = copy.title;
+  $("emptyDescription").textContent = copy.description;
+  $("emptyCapturePageBtn").textContent = copy.capture;
+  $("customQuestion").placeholder = copy.placeholder;
+  $("continueBtn").title = copy.continueLabel;
+  $("continueBtn").setAttribute("aria-label", copy.continueLabel);
+  $("continueBtn").dataset.tooltip = copy.continueLabel;
+  document.querySelectorAll("[data-chat-question]").forEach((button, index) => {
+    button.textContent = copy.quickLabels[index] || button.textContent;
+  });
+  if (!currentAsk) $("subtitle").textContent = copy.subtitle;
+}
+
+async function setAssistantMode(mode, { persist = true } = {}) {
+  const next = mode === "code" ? "code" : "chat";
+  if (next === activeAssistantMode || modeSwitchPending) return;
+  modeSwitchPending = true;
+  renderAssistantMode();
+  try {
+    if (currentController || unresolvedServerSessionId) {
+      setStatus("正在停止当前任务...");
+      const stopped = await stopAsk();
+      if (!stopped) {
+        if (!persist) await chrome.storage.sync.set({ assistantMode: activeAssistantMode });
+        return;
+      }
+    }
+    await saveCurrentTabState().catch(() => {});
+    activeAssistantMode = next;
+    if (persist) await chrome.storage.sync.set({ assistantMode: next });
+    await restoreStateForActiveTab();
+  } finally {
+    modeSwitchPending = false;
+    renderAssistantMode();
+  }
+}
+
 function activeTabLabel() {
   return activeTabContext?.title || activeTabContext?.url || "当前标签页";
 }
 
-function resetPanel(message = "选中网页内容后右键提问") {
+function resetPanel(message = modeCopy().subtitle) {
   requestVersion += 1;
   if (saveTimer) {
     clearTimeout(saveTimer);
@@ -276,7 +353,7 @@ function pageContextText(result) {
 }
 
 async function captureCurrentPage() {
-  if (currentController) return false;
+  if (currentController || unresolvedServerSessionId) return false;
   setStatus("正在读取当前页面...");
   try {
     const tab = await getActiveTab();
@@ -323,6 +400,10 @@ async function startQuickPageAsk(question) {
 }
 
 async function startNewAsk() {
+  if (currentController || unresolvedServerSessionId) {
+    setStatus("正在停止当前任务...");
+    if (!await stopAsk()) return;
+  }
   const key = tabStateKey(currentAsk || activeTabContext);
   if (key) {
     const stored = await chrome.storage.local.get(TAB_STATES_KEY);
@@ -330,7 +411,7 @@ async function startNewAsk() {
     delete states[key];
     await chrome.storage.local.set({ [TAB_STATES_KEY]: states });
   }
-  resetPanel("选中网页内容后右键提问，或读取当前页");
+  resetPanel(modeCopy().subtitle);
 }
 
 function renderAsk(ask) {
@@ -394,7 +475,7 @@ function getEventText(obj) {
 }
 
 async function sendAsk() {
-  if (!currentAsk || currentController) return;
+  if (!currentAsk || currentController || unresolvedServerSessionId) return;
   if (!askMatchesActiveTab(currentAsk)) {
     resetForDifferentTab();
     return;
@@ -405,6 +486,12 @@ async function sendAsk() {
   if (thisRequestVersion !== requestVersion) return;
   if (!settings.token) {
     setStatus("请先在设置页填写 Token");
+    chrome.runtime.openOptionsPage();
+    return;
+  }
+  if (activeAssistantMode === "code" && !String(settings.cwd || "").trim()) {
+    setStatus("Code 模式需要先配置项目目录");
+    setLastError(new Error("请在扩展设置中填写 Code 项目目录"));
     chrome.runtime.openOptionsPage();
     return;
   }
@@ -432,7 +519,10 @@ async function sendAsk() {
   }
   saveCurrentTabState().catch(() => {});
 
+  if (!currentSessionId) currentSessionId = crypto.randomUUID();
+  unresolvedServerSessionId = currentSessionId;
   currentController = new AbortController();
+  let requestCompleted = false;
   answerText = "";
   $("answer").innerHTML = "";
   $("stopBtn").disabled = false;
@@ -457,10 +547,11 @@ async function sendAsk() {
         question,
         page_url: ask.pageUrl,
         page_title: ask.pageTitle,
-        cwd: settings.cwd || null,
+        cwd: activeAssistantMode === "code" ? settings.cwd : null,
         model: $("modelSelect").value || settings.model || null,
-        permission_mode: settings.permissionMode || "default",
-        session_id: currentSessionId || null,
+        permission_mode: activeAssistantMode === "code" ? (settings.permissionMode || "default") : "readonly",
+        workspace_mode: activeAssistantMode,
+        session_id: currentSessionId,
       }),
       signal: currentController.signal,
     });
@@ -508,6 +599,7 @@ async function sendAsk() {
         }
       }
     }
+    requestCompleted = true;
     if (!answerText.trim()) setStatus("完成，但没有文本输出");
     else setStatus("完成");
     saveCurrentTabState().catch(() => {});
@@ -518,9 +610,10 @@ async function sendAsk() {
     saveCurrentTabState().catch(() => {});
   } finally {
     if (thisRequestVersion !== requestVersion) return;
+    if (requestCompleted) unresolvedServerSessionId = "";
     currentController = null;
-    $("stopBtn").disabled = true;
-    $("askBtn").disabled = false;
+    $("stopBtn").disabled = !unresolvedServerSessionId;
+    $("askBtn").disabled = Boolean(unresolvedServerSessionId);
     $("copyBtn").disabled = !answerText.trim();
     $("continueBtn").disabled = !currentOpenUrl;
     saveCurrentTabState().catch(() => {});
@@ -528,16 +621,34 @@ async function sendAsk() {
 }
 
 async function stopAsk() {
-  if (currentController) currentController.abort();
-  const settings = await loadSettings();
-  if (currentSessionId && settings.token) {
-    let serviceUrl = "";
-    try { serviceUrl = assertLocalServiceUrl(settings.serviceUrl); }
-    catch { return; }
-    fetch(`${serviceUrl}/api/extension/stop/${encodeURIComponent(currentSessionId)}`, {
-      method: "POST",
-      headers: { "X-Claude-Web-Extension-Token": settings.token },
-    }).catch(() => {});
+  const controller = currentController;
+  if (controller) controller.abort();
+  const sessionId = unresolvedServerSessionId || currentSessionId;
+  let stopped = false;
+  try {
+    const settings = await loadSettings();
+    if (sessionId && settings.token) {
+      const serviceUrl = assertLocalServiceUrl(settings.serviceUrl);
+      const response = await fetch(`${serviceUrl}/api/extension/stop/${encodeURIComponent(sessionId)}`, {
+        method: "POST",
+        headers: { "X-Claude-Web-Extension-Token": settings.token },
+      });
+      if (!response.ok && response.status !== 404) throw new Error(`HTTP ${response.status}`);
+    }
+    stopped = true;
+    if (unresolvedServerSessionId === sessionId) unresolvedServerSessionId = "";
+    setStatus("已停止");
+    return true;
+  } catch (error) {
+    setStatus(`停止失败：${error.message || error}`);
+    return false;
+  } finally {
+    if (stopped && currentController === controller) currentController = null;
+    $("stopBtn").disabled = !unresolvedServerSessionId;
+    $("askBtn").disabled = Boolean(unresolvedServerSessionId);
+    $("copyBtn").disabled = !answerText.trim();
+    $("continueBtn").disabled = !currentOpenUrl;
+    saveCurrentTabState().catch(() => {});
   }
 }
 
@@ -612,8 +723,14 @@ $("emptyOptionsBtn").addEventListener("click", () => {
 });
 $("emptyCapturePageBtn").addEventListener("click", captureCurrentPage);
 $("newAskBtn").addEventListener("click", startNewAsk);
-document.querySelectorAll("[data-quick-question]").forEach((button) => {
-  button.addEventListener("click", () => startQuickPageAsk(button.dataset.quickQuestion || ""));
+document.querySelectorAll("[data-chat-question]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const question = activeAssistantMode === "code" ? button.dataset.codeQuestion : button.dataset.chatQuestion;
+    startQuickPageAsk(question || "");
+  });
+});
+document.querySelectorAll("[data-assistant-mode]").forEach((button) => {
+  button.addEventListener("click", () => setAssistantMode(button.dataset.assistantMode));
 });
 $("toggleContextBtn").addEventListener("click", toggleContext);
 $("toggleContextTextBtn").addEventListener("click", toggleContext);
@@ -627,10 +744,19 @@ $("customQuestion").addEventListener("input", resizeQuestionBox);
 $("modelSelect").addEventListener("change", () => {
   chrome.storage.sync.set({ model: $("modelSelect").value }).catch(() => {});
 });
-renderModelSelect(await loadSettings());
+const initialSettings = await loadSettings();
+activeAssistantMode = initialSettings.assistantMode === "code" ? "code" : "chat";
+renderAssistantMode();
+renderModelSelect(initialSettings);
 resizeQuestionBox();
 
 chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.assistantMode?.newValue) {
+    const nextMode = changes.assistantMode.newValue === "code" ? "code" : "chat";
+    if (nextMode !== activeAssistantMode) {
+      setAssistantMode(nextMode, { persist: false }).catch(() => {});
+    }
+  }
   if (area === "local" && changes.activeTabContext?.newValue) {
     const nextContext = changes.activeTabContext.newValue;
     const previousContext = activeTabContext;

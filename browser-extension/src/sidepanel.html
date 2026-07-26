@@ -25,17 +25,23 @@
       </div>
     </header>
 
+    <nav id="assistantModeSwitch" class="mode-switch panel-width" aria-label="扩展模式">
+      <button type="button" data-assistant-mode="chat" aria-pressed="true">网页问答</button>
+      <button type="button" data-assistant-mode="code" aria-pressed="false">Code</button>
+    </nav>
+
     <section id="emptyState" class="empty panel-width">
-      <h2>把当前网页交给本地 Claude</h2>
-      <p>选中代码或文字后右键提问，或者直接读取当前页。结果会留在这个标签页的侧边栏里。</p>
+      <div id="modeEyebrow" class="mode-eyebrow">普通聊天</div>
+      <h2 id="emptyTitle">把当前网页交给本地 Claude</h2>
+      <p id="emptyDescription">选中代码或文字后右键提问，或者直接读取当前页。结果会留在这个标签页的侧边栏里。</p>
       <div class="empty-actions">
         <button id="emptyCapturePageBtn" type="button">读取当前页</button>
         <button id="emptyOptionsBtn" type="button">配置本地连接</button>
       </div>
       <div class="quick-actions" aria-label="快捷提问">
-        <button type="button" data-quick-question="总结当前页面，提炼核心结论和关键数据。">总结页面</button>
-        <button type="button" data-quick-question="解释当前页面的主要内容，并指出最需要注意的部分。">解释重点</button>
-        <button type="button" data-quick-question="把当前页面整理成一份结构清晰、可执行的清单。">整理清单</button>
+        <button type="button" data-chat-question="总结当前页面，提炼核心结论和关键数据。" data-code-question="审查当前页面表现，定位最可能需要修改的前端问题，并结合项目代码给出处理计划。">总结页面</button>
+        <button type="button" data-chat-question="解释当前页面的主要内容，并指出最需要注意的部分。" data-code-question="分析当前页面可能存在的交互、布局和可访问性问题，定位相关项目文件。">解释重点</button>
+        <button type="button" data-chat-question="把当前页面整理成一份结构清晰、可执行的清单。" data-code-question="基于当前页面和项目，生成一份可验证的修改步骤，暂时不要改代码。">整理清单</button>
       </div>
       <p id="lastError" class="error hidden"></p>
     </section>

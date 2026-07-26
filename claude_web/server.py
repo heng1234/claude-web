@@ -1911,6 +1911,7 @@ class ExtensionAskRequest(BaseModel):
     cwd: Optional[str] = None
     model: Optional[str] = None
     permission_mode: Optional[str] = "default"
+    workspace_mode: Optional[str] = None
     session_id: Optional[str] = None
     auto_run: Optional[bool] = True
 
@@ -1925,6 +1926,7 @@ class ExtensionDraftRequest(BaseModel):
     cwd: Optional[str] = None
     model: Optional[str] = None
     permission_mode: Optional[str] = "default"
+    workspace_mode: Optional[str] = None
     message: Optional[str] = None
     session_id: Optional[str] = None
     auto_run: Optional[bool] = True
@@ -5007,6 +5009,78 @@ def _sanitize_extension_permission(permission_mode: Optional[str]) -> str:
     return "default"
 
 
+def _sanitize_extension_workspace_mode(workspace_mode: Optional[str]) -> str:
+    return "code" if (workspace_mode or "").strip().lower() == "code" else "chat"
+
+
+def _resolve_extension_workspace_mode(
+    workspace_mode: Optional[str],
+    *,
+    session_id: Optional[str] = None,
+    cwd: Optional[str] = None,
+) -> str:
+    """Resolve explicit and legacy extension requests without changing session ownership."""
+    normalized = (workspace_mode or "").strip().lower()
+    requested_mode = _sanitize_extension_workspace_mode(normalized) if normalized else ""
+    normalized_session_id = (session_id or "").strip()
+    row = None
+    if normalized_session_id:
+        with db_connect() as conn:
+            row = conn.execute(
+                "SELECT workspace_mode FROM sessions WHERE id = ?",
+                (normalized_session_id,),
+            ).fetchone()
+    if row is not None:
+        stored_mode = _sanitize_extension_workspace_mode(row["workspace_mode"])
+        if requested_mode and requested_mode != stored_mode:
+            raise HTTPException(
+                status_code=409,
+                detail="浏览器扩展不能切换已有会话的聊天/Code 模式，请在目标模式中新建会话",
+            )
+        return requested_mode or stored_mode
+    if requested_mode:
+        return requested_mode
+    # Compatibility with pre-mode extension builds: a configured project
+    # directory meant the request was a Code task; otherwise it was page chat.
+    return "code" if (cwd or "").strip() else "chat"
+
+
+def _extension_execution_settings(
+    *,
+    workspace_mode: Optional[str],
+    session_id: Optional[str],
+    cwd: Optional[str],
+    permission_mode: Optional[str],
+) -> tuple[str, str, str, Optional[str], Optional[List[str]]]:
+    resolved_mode = _resolve_extension_workspace_mode(
+        workspace_mode,
+        session_id=session_id,
+        cwd=cwd,
+    )
+    resolved_permission = (
+        _sanitize_extension_permission(permission_mode)
+        if resolved_mode == "code"
+        else "readonly"
+    )
+    requested_cwd = (cwd or "").strip()
+    if resolved_mode == "code" and not requested_cwd and (session_id or "").strip():
+        with db_connect() as conn:
+            row = conn.execute(
+                "SELECT cwd FROM sessions WHERE id = ?",
+                ((session_id or "").strip(),),
+            ).fetchone()
+        requested_cwd = ((row["cwd"] or "").strip() if row else "")
+    resolved_cwd = _resolve_extension_cwd(requested_cwd if resolved_mode == "code" else None)
+    chat_permission_mode, disallowed_tools = _extension_tools_for_permission(resolved_permission)
+    return (
+        resolved_mode,
+        resolved_permission,
+        resolved_cwd,
+        chat_permission_mode,
+        disallowed_tools,
+    )
+
+
 def _extension_tools_for_permission(permission_mode: str) -> tuple[Optional[str], Optional[List[str]]]:
     if permission_mode == "plan":
         return "plan", None
@@ -5078,17 +5152,24 @@ def _draft_payload_from_request(req: ExtensionDraftRequest) -> dict:
             cwd=req.cwd,
             model=req.model,
             permission_mode=req.permission_mode,
+            workspace_mode=req.workspace_mode,
             session_id=req.session_id,
             auto_run=req.auto_run,
         )
         message, display_message = _extension_prompt(ask_req)
-    permission_mode = _sanitize_extension_permission(req.permission_mode)
+    workspace_mode, permission_mode, cwd, _, _ = _extension_execution_settings(
+        workspace_mode=req.workspace_mode,
+        session_id=req.session_id,
+        cwd=req.cwd,
+        permission_mode=req.permission_mode,
+    )
     return {
         "message": message,
         "display_message": display_message,
-        "cwd": _resolve_extension_cwd(req.cwd),
+        "cwd": cwd,
         "model": (req.model or "").strip() or None,
         "permission_mode": permission_mode,
+        "workspace_mode": workspace_mode,
         "session_id": (req.session_id or "").strip() or None,
         "auto_run": req.auto_run is not False,
         "source": "browser_extension",
@@ -9193,16 +9274,21 @@ async def extension_ask(
     _require_extension_token(x_claude_web_extension_token)
     session_id = (req.session_id or "").strip() or str(uuid.uuid4())
     message, display_message = _extension_prompt(req)
-    permission_mode = _sanitize_extension_permission(req.permission_mode)
-    chat_permission_mode, disallowed_tools = _extension_tools_for_permission(permission_mode)
+    workspace_mode, _, cwd, chat_permission_mode, disallowed_tools = _extension_execution_settings(
+        workspace_mode=req.workspace_mode,
+        session_id=req.session_id,
+        cwd=req.cwd,
+        permission_mode=req.permission_mode,
+    )
     chat_req = ChatRequest(
         message=message,
         session_id=session_id,
-        cwd=_resolve_extension_cwd(req.cwd),
+        cwd=cwd,
         model=(req.model or "").strip() or None,
         display_message=display_message,
         permission_mode=chat_permission_mode,
         disallowed_tools=disallowed_tools,
+        workspace_mode=workspace_mode,
         force_new=not bool((req.session_id or "").strip()),
     )
     response = await _chat_response(chat_req)

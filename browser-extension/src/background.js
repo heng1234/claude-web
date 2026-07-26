@@ -1,4 +1,4 @@
-import { ACTIONS } from "./templates.js";
+import { ACTIONS, loadSettings } from "./templates.js";
 
 const MENU_ROOT = "claude-web-root";
 const MENU_PREFIX = "claude-web-action-";
@@ -32,13 +32,19 @@ function rememberError(error) {
 
 async function createMenus() {
   try {
+    const settings = await loadSettings();
+    const mode = settings.assistantMode === "code" ? "code" : "chat";
+    const visibleActions = mode === "code"
+      ? ["review", "test", "explain", "custom"]
+      : ["explain", "rewrite", "custom"];
     await chrome.contextMenus.removeAll();
     chrome.contextMenus.create({
       id: MENU_ROOT,
-      title: "Claude Code Web",
+      title: mode === "code" ? "Claude Code" : "Claude 网页问答",
       contexts: ["selection"],
     });
-    for (const [action, item] of Object.entries(ACTIONS)) {
+    for (const action of visibleActions) {
+      const item = ACTIONS[action];
       chrome.contextMenus.create({
         id: MENU_PREFIX + action,
         parentId: MENU_ROOT,
@@ -74,6 +80,10 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onStartup.addListener(() => {
   createMenus();
   configureSidePanel();
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.assistantMode) createMenus();
 });
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {

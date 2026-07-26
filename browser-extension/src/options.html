@@ -59,8 +59,18 @@
       </div>
 
       <label>
-        <span>默认工作目录</span>
-        <input id="cwd" autocomplete="off" placeholder="/Users/you/project，留空为 ~" />
+        <span>扩展默认模式</span>
+        <select id="assistantMode">
+          <option value="chat">网页问答</option>
+          <option value="code">Code 模式</option>
+        </select>
+        <small>网页问答只分析当前页面；Code 模式会把页面上下文交给所选项目处理。</small>
+      </label>
+
+      <label id="cwdField">
+        <span>Code 项目目录</span>
+        <input id="cwd" autocomplete="off" placeholder="/Users/you/project" />
+        <small>仅 Code 模式使用。必须填写一个明确的本地项目目录。</small>
       </label>
 
       <div class="row">

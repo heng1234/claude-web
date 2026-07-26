@@ -188,9 +188,17 @@ button:disabled {
   opacity: .46;
 }
 
+button:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline-offset: 2px;
+}
+
 .icon-button {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   display: grid;
   place-items: center;
@@ -213,8 +221,47 @@ button:disabled {
   display: none !important;
 }
 
+.mode-switch {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:3px;
+  margin-top:12px;
+  padding:3px;
+  border:1px solid color-mix(in srgb,var(--border) 75%,transparent);
+  border-radius:12px;
+  background:var(--surface-2);
+}
+
+.mode-switch button {
+  height:38px;
+  margin:0;
+  border:0;
+  border-radius:9px;
+  color:var(--muted);
+  background:transparent;
+  box-shadow:none;
+}
+
+.mode-switch button[aria-pressed="true"] {
+  color:var(--text);
+  background:var(--surface);
+  box-shadow:var(--shadow-sm);
+}
+
+.mode-eyebrow {
+  margin-bottom:7px;
+  color:var(--accent);
+  font-size:11px;
+  font-weight:750;
+  letter-spacing:.04em;
+}
+
+body[data-assistant-mode="code"] .mode-eyebrow {
+  color:var(--green);
+}
+
 .empty {
-  margin-top: 60px;
+  margin-top: 42px;
   padding: 10px 2px;
   border: 0;
   border-radius: 0;
@@ -550,7 +597,9 @@ pre.expanded {
   :root { --panel-width: 100%; }
   .panel-width { width: calc(100vw - 22px); }
   .topbar { min-height: 52px; padding: 8px 11px; }
-  .empty { margin-top: 38px; padding: 8px 4px; }
+  .mode-switch { margin-top:9px; }
+  .mode-switch button { min-height:40px; }
+  .empty { margin-top: 28px; padding: 8px 4px; }
   .context { margin-top: 10px; padding: 11px 12px; }
   .answer { padding-top: 13px; padding-bottom: 126px; }
   #answer { font-size: 14px; line-height: 1.64; }

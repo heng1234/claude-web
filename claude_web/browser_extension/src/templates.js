@@ -34,6 +34,7 @@ export const ACTIONS = {
 export const DEFAULT_SETTINGS = {
   serviceUrl: "http://127.0.0.1:8765",
   token: "",
+  assistantMode: "chat",
   cwd: "",
   model: "",
   permissionMode: "default",

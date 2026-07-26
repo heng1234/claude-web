@@ -4,12 +4,14 @@ const $ = (id) => document.getElementById(id);
 const fields = {
   serviceUrl: $("serviceUrl"),
   token: $("token"),
+  assistantMode: $("assistantMode"),
   cwd: $("cwd"),
   model: $("model"),
   permissionMode: $("permissionMode"),
 };
 const status = $("status");
 const connectionBadge = $("connectionBadge");
+const cwdField = $("cwdField");
 
 function setStatus(text) {
   status.textContent = text;
@@ -21,11 +23,19 @@ function setConnectionBadge(text, state = "") {
   connectionBadge.classList.toggle("bad", state === "bad");
 }
 
+function updateModeFields() {
+  const codeMode = fields.assistantMode.value === "code";
+  cwdField.classList.toggle("mode-field-hidden", !codeMode);
+  fields.cwd.required = codeMode;
+  fields.cwd.setAttribute("aria-required", codeMode ? "true" : "false");
+}
+
 async function load() {
   const settings = await loadSettings();
   for (const key of Object.keys(DEFAULT_SETTINGS)) {
     fields[key].value = settings[key] || "";
   }
+  updateModeFields();
   setStatus("已加载");
   testConnection({ silent: true });
 }
@@ -39,6 +49,11 @@ async function save() {
     next.serviceUrl = assertLocalServiceUrl(next.serviceUrl);
   } catch (error) {
     setStatus(error.message || String(error));
+    return;
+  }
+  if (next.assistantMode === "code" && !next.cwd) {
+    setStatus("Code 模式需要填写项目目录");
+    fields.cwd.focus();
     return;
   }
   await chrome.storage.sync.set(next);
@@ -76,6 +91,7 @@ async function testConnection(options = {}) {
 
 $("saveBtn").addEventListener("click", save);
 $("testBtn").addEventListener("click", () => testConnection());
+fields.assistantMode.addEventListener("change", updateModeFields);
 for (const input of Object.values(fields)) {
   input.addEventListener("input", () => {
     setStatus("有未保存修改");

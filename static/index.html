@@ -7024,18 +7024,71 @@
     box-shadow:0 12px 32px rgba(28,25,23,.12);
   }
   .cw-workspace-activity.hidden { display:none; }
+  body:not(.code-mode) .cw-workspace-activity { display:none !important; }
+  .cw-activity-summary {
+    display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 14px; padding:12px 14px;
+    border-bottom:1px solid var(--border); background:var(--surface);
+  }
+  .cw-activity-summary-copy { min-width:0; }
+  .cw-activity-summary-kicker { color:var(--text-subtle); font-size:10.5px; font-weight:650; letter-spacing:.02em; }
+  .cw-activity-summary-title { margin-top:2px; overflow:hidden; color:var(--text); font-size:12.5px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+  .cw-activity-summary-meta { align-self:center; color:var(--text-muted); font-size:11px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .cw-activity-progress {
+    grid-column:1 / -1; height:4px; overflow:hidden; border-radius:999px;
+    background:color-mix(in srgb,var(--border) 74%,transparent);
+  }
+  .cw-activity-progress > span {
+    display:block; width:0; height:100%; border-radius:inherit; background:var(--accent);
+    transition:width .2s ease;
+  }
   .cw-activity-head { display:flex; align-items:center; gap:4px; padding:5px; border-bottom:1px solid var(--border); background:var(--surface-2); }
-  .cw-activity-tab { min-height:36px; padding:0 12px; border:0; border-radius:8px; background:transparent; color:var(--text-muted); font:600 12px/1 inherit; cursor:pointer; }
+  .cw-activity-tab { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:0 12px; border:0; border-radius:8px; background:transparent; color:var(--text-muted); font:600 12px/1 inherit; cursor:pointer; }
   .cw-activity-tab.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(28,25,23,.08); }
+  .cw-activity-tab:focus-visible,
+  .cw-activity-close:focus-visible,
+  .cw-activity-row:focus-visible { outline:2px solid color-mix(in srgb,var(--accent) 55%,transparent); outline-offset:-2px; }
+  .cw-activity-tab-count {
+    min-width:17px; height:17px; padding:0 5px; border-radius:999px;
+    background:color-mix(in srgb,var(--border) 60%,transparent); color:var(--text-subtle);
+    font-size:10px; font-variant-numeric:tabular-nums;
+  }
+  .cw-activity-tab.active .cw-activity-tab-count { background:color-mix(in srgb,var(--accent) 12%,transparent); color:var(--accent); }
   .cw-activity-close { width:36px; height:36px; margin-left:auto; border:0; border-radius:8px; background:transparent; color:var(--text-muted); cursor:pointer; }
   .cw-activity-body { max-height:280px; overflow:auto; padding:8px; }
-  .cw-activity-row { display:flex; width:100%; align-items:flex-start; gap:9px; min-height:44px; padding:9px 10px; border:0; border-radius:9px; background:transparent; color:var(--text); font:12px/1.4 inherit; text-align:left; cursor:pointer; }
-  .cw-activity-row:hover { background:var(--surface-2); }
+  .cw-activity-row { display:flex; width:100%; align-items:flex-start; gap:9px; min-height:44px; padding:9px 10px; border:0; border-radius:9px; background:transparent; color:var(--text); font:12px/1.4 inherit; text-align:left; cursor:default; }
+  .cw-activity-row.is-interactive { cursor:pointer; }
+  .cw-activity-row.is-interactive:hover { background:var(--surface-2); }
+  .cw-activity-row-status {
+    position:relative; flex:0 0 auto; width:18px; height:18px; margin-top:1px; border-radius:50%;
+    border:1.5px solid var(--border-strong); color:var(--text-subtle);
+  }
+  .cw-activity-row-status::after { content:''; position:absolute; inset:4px; border-radius:50%; background:currentColor; opacity:0; }
+  .cw-activity-row-status.in-progress { border-color:color-mix(in srgb,var(--accent) 65%,var(--border)); color:var(--accent); }
+  .cw-activity-row-status.in-progress::after { opacity:1; }
+  .cw-activity-row-status.completed { border-color:#16834a; color:#16834a; }
+  .cw-activity-row-status.completed::before { content:'✓'; position:absolute; inset:-2px 0 0; font-size:12px; font-weight:800; text-align:center; }
+  .cw-activity-row-status.error,
+  .cw-activity-row-status.cancelled { border-color:#c4423d; color:#c4423d; }
+  .cw-activity-row-status.error::before,
+  .cw-activity-row-status.cancelled::before { content:'!'; position:absolute; inset:-2px 0 0; font-size:12px; font-weight:800; text-align:center; }
+  .cw-activity-row-status.changed { border-color:#3b6fb5; color:#3b6fb5; }
+  .cw-activity-row-status.changed::after { opacity:1; border-radius:2px; }
   .cw-activity-row strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:620; }
   .cw-activity-row small { display:block; margin-top:2px; overflow:hidden; color:var(--text-muted); text-overflow:ellipsis; white-space:nowrap; font-size:10.5px; }
   .cw-activity-row + .cw-activity-row { border-top:1px solid color-mix(in srgb,var(--border) 55%,transparent); }
   .cw-activity-row-meta { margin-left:auto; color:var(--text-subtle); white-space:nowrap; }
   .cw-activity-empty { padding:24px 12px; color:var(--text-muted); text-align:center; font-size:12px; }
+  .cw-activity-empty strong { display:block; margin-bottom:4px; color:var(--text); font-size:12.5px; }
+  @media (max-width:640px) {
+    .cw-workspace-activity { margin-inline:-2px; border-radius:12px; }
+    .cw-activity-summary { padding:11px 12px; }
+    .cw-activity-tab { flex:1; min-width:0; min-height:40px; padding-inline:7px; }
+    .cw-activity-close { width:40px; height:40px; }
+    .cw-activity-body { max-height:min(42dvh,340px); padding:6px; }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    .cw-activity-progress > span { transition:none; }
+  }
   .cw-history-loader { display:flex; justify-content:center; padding:0 0 18px; }
   .cw-history-loader button { min-height:40px; padding:0 16px; border:1px solid var(--border); border-radius:999px; background:var(--surface); color:var(--text-muted); font:600 12px/1 inherit; cursor:pointer; }
   .cw-history-loader button:hover { color:var(--text); border-color:var(--border-strong); }
@@ -7929,13 +7982,14 @@
         </button>
       </div>
       <section id="cwWorkspaceActivity" class="cw-workspace-activity hidden" aria-label="Code 工作区活动">
-        <div class="cw-activity-head">
-          <button type="button" class="cw-activity-tab active" data-cw-activity-tab="tasks">任务</button>
-          <button type="button" class="cw-activity-tab" data-cw-activity-tab="agents">子代理</button>
-          <button type="button" class="cw-activity-tab" data-cw-activity-tab="edits">变更</button>
+        <div id="cwWorkspaceActivitySummary" class="cw-activity-summary"></div>
+        <div class="cw-activity-head" role="tablist" aria-label="Code 工作区活动分类">
+          <button type="button" class="cw-activity-tab active" data-cw-activity-tab="tasks" role="tab" aria-selected="true">任务 <span class="cw-activity-tab-count" data-cw-activity-count="tasks">0</span></button>
+          <button type="button" class="cw-activity-tab" data-cw-activity-tab="agents" role="tab" aria-selected="false">子代理 <span class="cw-activity-tab-count" data-cw-activity-count="agents">0</span></button>
+          <button type="button" class="cw-activity-tab" data-cw-activity-tab="edits" role="tab" aria-selected="false">变更 <span class="cw-activity-tab-count" data-cw-activity-count="edits">0</span></button>
           <button type="button" id="cwWorkspaceActivityClose" class="cw-activity-close" aria-label="关闭工作区活动">×</button>
         </div>
-        <div id="cwWorkspaceActivityBody" class="cw-activity-body"></div>
+        <div id="cwWorkspaceActivityBody" class="cw-activity-body" role="tabpanel" aria-live="polite"></div>
       </section>
       <div class="composer relative" id="composer">
         <div id="cwCodeMessageQueue" class="cw-code-message-queue hidden" aria-live="polite" aria-label="Code 待发送队列">
@@ -14851,6 +14905,7 @@ async function applyExtensionDraftFromUrl() {
     const r = await fetch('/api/extension/drafts/' + encodeURIComponent(draftId));
     const draft = await r.json();
     if (!r.ok) throw new Error(draft.detail || `HTTP ${r.status}`);
+    setCodeMode(draft.workspace_mode === 'code');
     if (draft.cwd) {
       cwdInput.value = draft.cwd;
       refreshGitStatus();
@@ -17907,16 +17962,16 @@ function workspaceActivityRows(tab = currentWorkspaceActivityTab) {
     return latestTodoItems.map(item => ({
       key: '',
       title: item.status === 'in_progress' ? (item.activeForm || item.content || '处理中') : (item.content || item.activeForm || '任务'),
-      meta: item.status === 'completed' ? '已完成' : item.status === 'in_progress' ? '进行中' : '待处理',
-      icon: item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '●' : '○',
+      meta: item.status === 'completed' ? '已完成' : item.status === 'in_progress' ? '进行中' : item.status === 'error' ? '失败' : item.status === 'cancelled' ? '已取消' : '待处理',
+      status: item.status === 'in_progress' ? 'in-progress' : item.status === 'completed' ? 'completed' : item.status === 'error' ? 'error' : item.status === 'cancelled' ? 'cancelled' : 'pending',
     }));
   }
   if (tab === 'agents') {
     return [...subagentCards.values()].sort((a, b) => a.startedAt - b.startedAt).map(card => ({
       key: card.id,
       title: card.description || card.subagentType || '子代理',
-      meta: card.status === 'running' ? fmtElapsed(Date.now() - card.startedAt) : card.status,
-      icon: card.status === 'running' ? '●' : card.status === 'success' ? '✓' : '!',
+      meta: card.status === 'running' ? fmtElapsed(Date.now() - card.startedAt) : card.status === 'success' ? '已完成' : card.status === 'cancelled' ? '已取消' : '失败',
+      status: card.status === 'running' ? 'in-progress' : card.status === 'success' ? 'completed' : card.status === 'cancelled' ? 'cancelled' : 'error',
       detail: card.latestActivity || '',
     }));
   }
@@ -17928,24 +17983,78 @@ function workspaceActivityRows(tab = currentWorkspaceActivityTab) {
         key: `${set.id}:${file.path}`,
         title: file.path,
         meta: `+${file.additions || 0} / -${file.deletions || 0}`,
-        icon: state === 'kept' ? '✓' : state === 'reverted' || state === 'rewound' ? '↶' : '±',
+        status: state === 'kept' ? 'completed' : state === 'reverted' || state === 'rewound' ? 'cancelled' : 'changed',
         detail: `${codeReviewTurnLabel(set.userIndex)} · ${state === 'pending' ? '待审查' : state === 'partial' ? '部分已审查' : state === 'kept' ? '已保留' : state === 'rewound' ? '已整体回退' : '已撤销'}`,
       };
     }));
 }
 
+function workspaceActivityCounts() {
+  return {
+    tasks: latestTodoItems.length,
+    agents: subagentCards.size,
+    edits: codeReviewState.changeSets.filter(set => !set.rewound).reduce((total, set) => total + set.files.length, 0),
+  };
+}
+
+function renderWorkspaceActivitySummary() {
+  const summary = $('cwWorkspaceActivitySummary');
+  if (!summary) return;
+  const total = sessionStatsState.tasksTotal;
+  const done = sessionStatsState.tasksDone;
+  const active = latestTodoItems.find(item => item.status === 'in_progress');
+  const failed = latestTodoItems.find(item => item.status === 'error');
+  const title = failed
+    ? `需要处理：${failed.content || failed.activeForm || '任务执行失败'}`
+    : active
+      ? `正在进行：${active.activeForm || active.content || '处理任务'}`
+      : total && done === total
+        ? '本轮计划已全部完成'
+        : total
+          ? '等待执行下一项计划'
+          : '等待 Claude 生成任务计划';
+  const percent = total ? Math.round(done / total * 100) : 0;
+  const agentsRunning = [...subagentCards.values()].filter(card => card.status === 'running').length;
+  const metaParts = [total ? `${done}/${total} 项` : '暂无计划'];
+  if (agentsRunning) metaParts.push(`${agentsRunning} 个子代理运行中`);
+  summary.innerHTML = `
+    <div class="cw-activity-summary-copy">
+      <div class="cw-activity-summary-kicker">执行概览</div>
+      <div class="cw-activity-summary-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+    </div>
+    <div class="cw-activity-summary-meta">${escapeHtml(metaParts.join(' · '))}</div>
+    <div class="cw-activity-progress" role="progressbar" aria-label="任务完成进度" aria-valuemin="0" aria-valuemax="${total || 1}" aria-valuenow="${done}"><span style="width:${percent}%"></span></div>`;
+}
+
+function workspaceActivityEmpty(tab) {
+  if (tab === 'tasks') return '<div class="cw-activity-empty"><strong>还没有任务计划</strong>Claude 创建计划后，会在这里显示当前步骤和完成进度。</div>';
+  if (tab === 'agents') return '<div class="cw-activity-empty"><strong>没有子代理活动</strong>只有任务调用子代理时才会出现在这里。</div>';
+  return '<div class="cw-activity-empty"><strong>还没有文件变更</strong>Claude 修改文件后，可从这里进入 Diff 审查。</div>';
+}
+
 function renderWorkspaceActivity() {
   if (!cwWorkspaceActivity || !cwWorkspaceActivityBody || !codeMode) return;
+  renderWorkspaceActivitySummary();
+  const counts = workspaceActivityCounts();
   cwWorkspaceActivity.querySelectorAll('[data-cw-activity-tab]').forEach(button => {
-    button.classList.toggle('active', button.dataset.cwActivityTab === currentWorkspaceActivityTab);
+    const active = button.dataset.cwActivityTab === currentWorkspaceActivityTab;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  cwWorkspaceActivity.querySelectorAll('[data-cw-activity-count]').forEach(badge => {
+    badge.textContent = String(counts[badge.dataset.cwActivityCount] || 0);
   });
   const rows = workspaceActivityRows();
-  cwWorkspaceActivityBody.innerHTML = rows.length ? rows.map(row => `
-    <button type="button" class="cw-activity-row" ${row.key ? `data-cw-activity-key="${escapeHtml(row.key)}"` : ''}>
-      <span aria-hidden="true">${escapeHtml(row.icon)}</span>
+  cwWorkspaceActivityBody.innerHTML = rows.length ? rows.map(row => {
+    const tag = row.key ? 'button' : 'div';
+    const attributes = row.key ? `type="button" data-cw-activity-key="${escapeHtml(row.key)}"` : '';
+    return `
+    <${tag} ${attributes} class="cw-activity-row${row.key ? ' is-interactive' : ''}">
+      <span class="cw-activity-row-status ${escapeHtml(row.status || 'pending')}" aria-hidden="true"></span>
       <span class="min-w-0"><strong>${escapeHtml(row.title)}</strong>${row.detail ? `<small>${escapeHtml(row.detail)}</small>` : ''}</span>
       <span class="cw-activity-row-meta">${escapeHtml(row.meta)}</span>
-    </button>`).join('') : '<div class="cw-activity-empty">这里暂时没有活动。</div>';
+    </${tag}>`;
+  }).join('') : workspaceActivityEmpty(currentWorkspaceActivityTab);
 }
 
 function openWorkspaceActivity(tab) {

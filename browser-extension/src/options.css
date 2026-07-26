@@ -202,6 +202,16 @@ label span {
   font-weight: 700;
 }
 
+label small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mode-field-hidden {
+  display: none;
+}
+
 input,
 select {
   width: 100%;
