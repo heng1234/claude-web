@@ -35,6 +35,54 @@ class AgentSdkManagerTest(unittest.TestCase):
                 agent_sdk_manager.rollback_activation(backup)
             self.assertFalse(root.exists())
 
+    def test_pending_activation_is_confirmed_only_after_validation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "sdk"
+            root.mkdir()
+            (root / "marker").write_text("old", encoding="utf-8")
+            staging = Path(temp) / "staging"
+            staging.mkdir()
+            (staging / "marker").write_text("new", encoding="utf-8")
+            with patch.object(agent_sdk_manager, "install_root", return_value=root):
+                backup = agent_sdk_manager.activate_staging(staging)
+                record = agent_sdk_manager.mark_activation_pending(backup, "0.3.0")
+                self.assertEqual("0.3.0", record["version"])
+                self.assertTrue(agent_sdk_manager.pending_activation_path().exists())
+                self.assertTrue(backup.exists())
+                agent_sdk_manager.confirm_pending_activation()
+                self.assertFalse(agent_sdk_manager.pending_activation_path().exists())
+                self.assertFalse(backup.exists())
+                self.assertEqual("new", (root / "marker").read_text(encoding="utf-8"))
+
+    def test_pending_activation_can_restore_previous_install(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "sdk"
+            root.mkdir()
+            (root / "marker").write_text("old", encoding="utf-8")
+            staging = Path(temp) / "staging"
+            staging.mkdir()
+            (staging / "marker").write_text("new", encoding="utf-8")
+            with patch.object(agent_sdk_manager, "install_root", return_value=root):
+                backup = agent_sdk_manager.activate_staging(staging)
+                agent_sdk_manager.mark_activation_pending(backup, "0.3.0")
+                record = agent_sdk_manager.rollback_pending_activation()
+                self.assertEqual("0.3.0", record["version"])
+                self.assertFalse(agent_sdk_manager.pending_activation_path().exists())
+                self.assertEqual("old", (root / "marker").read_text(encoding="utf-8"))
+
+    def test_missing_pending_backup_does_not_delete_live_install(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "sdk"
+            root.mkdir()
+            (root / "marker").write_text("live", encoding="utf-8")
+            missing_backup = Path(temp) / ".sdk.backup-missing"
+            with patch.object(agent_sdk_manager, "install_root", return_value=root):
+                agent_sdk_manager.mark_activation_pending(missing_backup, "0.3.0")
+                with self.assertRaises(agent_sdk_manager.AgentSdkInstallError):
+                    agent_sdk_manager.rollback_pending_activation()
+                self.assertEqual("live", (root / "marker").read_text(encoding="utf-8"))
+                self.assertTrue(agent_sdk_manager.pending_activation_path().exists())
+
     def test_node_version_compatibility_requires_node_18_or_newer(self):
         self.assertTrue(agent_sdk_manager.node_version_compatible("18.0.0"))
         self.assertTrue(agent_sdk_manager.node_version_compatible("22.14.0"))
@@ -64,6 +112,7 @@ class AgentSdkManagerTest(unittest.TestCase):
         self.assertTrue(status["active_compatible"])
         self.assertEqual("managed", status["active_source"])
         self.assertFalse(status["auto_upgrade"])
+        self.assertEqual("latest_stable_prompt", status["upgrade_policy"])
 
     def test_requested_version_validation_and_stable_sorting(self):
         self.assertEqual("0.2.112", agent_sdk_manager.normalize_requested_version("v0.2.112"))
@@ -186,6 +235,34 @@ class AgentSdkManagerAsyncTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(selected, metadata["version"])
                 self.assertEqual("custom", metadata["selectionMode"])
                 self.assertFalse(result["recommended"])
+            finally:
+                shutil.rmtree(staging, ignore_errors=True)
+
+    async def test_install_without_version_targets_registry_latest_stable(self):
+        selected = "0.3.0"
+        process = self.FakeProcess()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "sdk"
+            with patch.object(agent_sdk_manager, "install_root", return_value=root), \
+                    patch.object(
+                        agent_sdk_manager,
+                        "version_catalog",
+                        AsyncMock(return_value={"latest_version": selected, "source": "registry"}),
+                    ) as catalog, \
+                    patch.object(agent_sdk_manager, "node_version", return_value="22.14.0"), \
+                    patch.object(agent_sdk_manager.shutil, "which", return_value="/usr/bin/npm"), \
+                    patch.object(agent_sdk_manager, "package_version", return_value=selected), \
+                    patch.object(
+                        agent_sdk_manager.asyncio,
+                        "create_subprocess_exec",
+                        AsyncMock(return_value=process),
+                    ) as spawn:
+                result = await agent_sdk_manager.install_version()
+            staging = Path(result["staging"])
+            try:
+                self.assertIn(f"{agent_sdk_manager.PACKAGE_NAME}@{selected}", spawn.await_args.args)
+                self.assertTrue(result["latest_stable_target"])
+                catalog.assert_awaited_once_with(force=True)
             finally:
                 shutil.rmtree(staging, ignore_errors=True)
 

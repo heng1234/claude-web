@@ -1,4 +1,4 @@
-"""Pinned, app-owned Claude Agent SDK installation metadata and installer."""
+"""App-owned Claude Agent SDK metadata and stable-version installer."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ BRIDGE_PACKAGE_JSON = BRIDGE_DIR / "package.json"
 BRIDGE_PACKAGE_LOCK = BRIDGE_DIR / "package-lock.json"
 DEFAULT_INSTALL_ROOT = Path.home() / ".claude-web" / "dependencies" / "claude-sdk"
 SDK_SELECTION_FILE = ".claude-web-sdk.json"
+PENDING_ACTIVATION_FILE = ".claude-web-pending-activation.json"
 VERSION_CACHE_TTL_SECONDS = 10 * 60
 SEMVER_PATTERN = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
@@ -232,7 +233,7 @@ def status_payload(active_sdk: Optional[dict] = None, *, running: bool = False, 
         "npm_path": npm,
         "error": error or None,
         "migration_compatibility": active_source == "ccgui_migration",
-        "upgrade_policy": "selectable_pinned",
+        "upgrade_policy": "latest_stable_prompt",
         "auto_upgrade": False,
     }
 
@@ -338,7 +339,13 @@ async def install_version(requested_version: object = None, timeout: float = 300
     """
 
     recommended = required_version()
-    version = normalize_requested_version(requested_version or recommended)
+    latest_stable_target = False
+    if requested_version is None:
+        catalog = await version_catalog(force=True)
+        version = normalize_requested_version(catalog.get("latest_version") or recommended)
+        latest_stable_target = bool(catalog.get("latest_version"))
+    else:
+        version = normalize_requested_version(requested_version)
     detected_node_version = node_version()
     if not node_version_compatible(detected_node_version):
         raise AgentSdkInstallError(
@@ -424,6 +431,7 @@ async def install_version(requested_version: object = None, timeout: float = 300
             "staging": staging,
             "version": actual,
             "recommended": version == recommended,
+            "latest_stable_target": latest_stable_target,
             "output": output[-4000:],
         }
     except BaseException:
@@ -465,3 +473,84 @@ def rollback_activation(backup: Optional[Path]) -> None:
 def discard_backup(backup: Optional[Path]) -> None:
     if backup is not None:
         shutil.rmtree(backup, ignore_errors=True)
+
+
+def pending_activation_path() -> Path:
+    root = install_root()
+    return root.parent / f".{root.name}{PENDING_ACTIVATION_FILE}"
+
+
+def pending_activation() -> Optional[dict]:
+    marker = pending_activation_path()
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    version = str(payload.get("version") or "").strip()
+    backup_value = str(payload.get("backup") or "").strip()
+    backup = Path(backup_value) if backup_value else None
+    if backup is not None:
+        root = install_root().resolve()
+        try:
+            resolved = backup.resolve()
+        except OSError:
+            return None
+        if (
+            resolved.parent != root.parent
+            or not resolved.name.startswith(f".{root.name}.backup-")
+        ):
+            return None
+        backup = resolved
+    return {
+        "version": version,
+        "backup": backup,
+        "created_at": float(payload.get("created_at") or 0),
+    }
+
+
+def mark_activation_pending(backup: Optional[Path], version: str) -> dict:
+    marker = pending_activation_path()
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": str(version or "").strip(),
+        "backup": str(backup.resolve()) if backup is not None else "",
+        "created_at": time.time(),
+    }
+    temporary = marker.with_name(f"{marker.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        os.replace(temporary, marker)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return pending_activation() or {
+        "version": payload["version"],
+        "backup": backup,
+        "created_at": payload["created_at"],
+    }
+
+
+def confirm_pending_activation() -> Optional[dict]:
+    record = pending_activation()
+    marker = pending_activation_path()
+    # Removing the marker first is crash-safe: the worst case is an orphaned
+    # backup, never a future rollback that deletes a validated live install.
+    marker.unlink(missing_ok=True)
+    if record is not None:
+        discard_backup(record.get("backup"))
+    return record
+
+
+def rollback_pending_activation() -> Optional[dict]:
+    record = pending_activation()
+    if record is None:
+        return None
+    backup = record.get("backup")
+    if backup is not None and not backup.exists():
+        raise AgentSdkInstallError(
+            f"Claude Agent SDK rollback backup is missing: {backup}"
+        )
+    rollback_activation(backup)
+    pending_activation_path().unlink(missing_ok=True)
+    return record

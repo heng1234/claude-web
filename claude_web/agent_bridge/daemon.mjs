@@ -221,6 +221,12 @@ function stringList(value) {
   return result.length ? result : undefined;
 }
 
+function browserEnabled(params) {
+  // This daemon is Code-only. The server still sends an explicit value so a
+  // Chat request can never gain browser tools through this bridge.
+  return params.browserEnabled !== false;
+}
+
 function runtimeSignature(params) {
   const permissionMode = normalizePermissionMode(params.permissionMode);
   const modelContextVariant = String(params.model || '').match(/\[[0-9.]+\s*[kKmM]\]$/)?.[0]?.toLowerCase() || '';
@@ -231,6 +237,7 @@ function runtimeSignature(params) {
     bypassPermissions: permissionMode === 'bypassPermissions',
     allowedTools: stringList(params.allowedTools) || [],
     disallowedTools: stringList(params.disallowedTools) || [],
+    browserEnabled: browserEnabled(params),
     systemPromptAppend: params.systemPromptAppend || '',
     runtimeEpoch: params.runtimeEpoch || '',
     resumeSessionAt: params.resumeSessionAt || '',
@@ -321,6 +328,9 @@ function buildOptions(params, abortController, runtime) {
     maxTurns: 100,
     tools: { type: 'preset', preset: 'claude_code' },
     settingSources: ['user', 'project', 'local'],
+    extraArgs: {
+      [browserEnabled(params) ? 'chrome' : 'no-chrome']: null,
+    },
     systemPrompt: {
       type: 'preset',
       preset: 'claude_code',

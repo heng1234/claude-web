@@ -790,6 +790,13 @@
     background: #efd9cf !important;
     color: #c46136 !important;
   }
+  #codeBrowserBtn { display: none; }
+  body.code-mode #codeBrowserBtn { display: inline-flex; }
+  #codeBrowserBtn.toolbar-btn-active,
+  #codeBrowserBtn[aria-pressed="true"] {
+    background: #e1ddf8 !important;
+    color: #6554c0 !important;
+  }
   .cw-context-chip {
     min-height: 32px;
     padding: 0 13px;
@@ -8052,6 +8059,9 @@
             <button type="button" id="webSearchBtn" class="composer-btn" title="联网搜索">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
             </button>
+            <button type="button" id="codeBrowserBtn" class="composer-btn" title="官方 Claude in Chrome" aria-label="官方 Claude in Chrome" aria-pressed="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M7 6.5h.01M10 6.5h.01"/><path d="m10 14 2-2 2 2"/><path d="M12 12v5"/></svg>
+            </button>
             <div class="cw-more-tools">
               <button type="button" id="composerMoreToolsBtn" class="composer-btn" title="更多工具" aria-haspopup="menu" aria-expanded="false">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
@@ -8459,7 +8469,7 @@
                         <path d="m7 10 5 5 5-5" />
                       </svg>
                     </div>
-                    <div id="agentSdkVersionHelp" class="agent-sdk-version-help" role="status" aria-live="polite">应用锁定版经过完整验证；其他版本会在激活前进行启动检查。</div>
+                    <div id="agentSdkVersionHelp" class="agent-sdk-version-help" role="status" aria-live="polite">默认选择 npm 最新稳定版；切换前会启动校验，失败自动恢复。</div>
                   </div>
                   <div id="agentSdkPathText" class="agent-sdk-path"></div>
                 </div>
@@ -8472,7 +8482,7 @@
                   <span id="agentSdkInstallLabel">安装 SDK</span>
                 </button>
               </div>
-              <div class="settings-hint agent-sdk-description">应用默认使用锁定且验证过的版本，也可以显式选择其他稳定版本更新或降级。所有切换都使用临时安装、启动校验和失败回滚，不会自动升级。</div>
+              <div class="settings-hint agent-sdk-description">默认目标是 npm 最新稳定版；检测到新版本会提示，由你确认后再安装。所有切换都使用临时安装、启动校验和失败回滚，不会静默升级。</div>
             </div>
           </div>
         </section>
@@ -9337,6 +9347,7 @@ const settings = {
   urlAutoFetch: LS.get('urlAutoFetch', true),
   chatWebSearch: LS.get('chatWebSearch', LS.get('webSearch', false)),
   codeWebSearch: LS.get('codeWebSearch', false),
+  codeBrowser: LS.get('codeBrowserEnabledV1', true),
 };
 const LIGHT_CONTEXT_DEFAULT_POLICY = 'native-compact-default-on-v1';
 if (LS.get('lightContextDefaultPolicy', '') !== LIGHT_CONTEXT_DEFAULT_POLICY) {
@@ -9576,6 +9587,7 @@ const cwBranchProjectLabel = $('cwBranchProjectLabel');
 const cwBranchList = $('cwBranchList');
 const fileInput = $('fileInput'), attachBtn = $('attachBtn'), attachmentsEl = $('attachments');
 const webSearchBtn = $('webSearchBtn');
+const codeBrowserBtn = $('codeBrowserBtn');
 const docInput = $('docInput');
 const docAttachBtn = $('docAttachBtn');
 const docChipsEl = $('docChips');
@@ -12819,6 +12831,7 @@ function currentAgentSdkControlPayload() {
     permission_mode: perm.permission_mode || null,
     allowed_tools: perm.allowed_tools || [],
     disallowed_tools: perm.disallowed_tools || [],
+    browser_enabled: !!settings.codeBrowser,
   };
 }
 
@@ -16414,6 +16427,7 @@ async function runAgentLoop() {
         token_budget: tokenBudget,
         test_command: testCommand,
         notify_on_finish: notifyOnFinish,
+        browser_enabled: !!settings.codeBrowser,
         force_new: true,
       }),
     });
@@ -16713,6 +16727,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         images: imagePaths,
         docs: docMetadata.length ? docMetadata : null,
         workspace_mode: turnIsCode ? 'code' : 'chat',
+        browser_enabled: turnIsCode ? !!settings.codeBrowser : false,
         model: modelSelect.value || null,
         effort: effectiveEffortForSend() || null,
         system_prompt: turnIsCode ? null : (settings.systemPrompt || null),
@@ -17682,6 +17697,11 @@ async function loadSession(id, options = {}) {
     loadPersistedCodeQueue(data.id);
     currentCodeRuntime = data.runtime_origin || 'unknown';
     currentCodeAutoApprove = !!data.auto_approve;
+    if (codeMode && typeof data.browser_enabled === 'boolean') {
+      settings.codeBrowser = data.browser_enabled;
+      LS.set('codeBrowserEnabledV1', settings.codeBrowser);
+      applyCodeBrowserBtnState();
+    }
     sessionFeedback = data.feedback || {};
     if (milestoneView) renderMilestones();
     titleLabel.textContent = data.title;
@@ -18975,6 +18995,7 @@ let agentSdkStatusSnapshot = null;
 let agentSdkVersionCatalog = null;
 let agentSdkVersionLoading = false;
 let agentSdkInstallBusy = false;
+let agentSdkVersionUserSelected = false;
 
 function normalizeAgentSdkVersion(value) {
   const normalized = String(value || '').trim().replace(/^v/i, '');
@@ -19013,7 +19034,7 @@ function agentSdkVersionOptions(status, catalog) {
       const badges = [];
       if (version === recommended) badges.push('应用锁定');
       if (version === installed) badges.push('当前');
-      if (catalog?.source === 'registry' && version === latest && version !== recommended) badges.push('最新');
+      if (catalog?.source === 'registry' && version === latest) badges.push('最新稳定');
       return { version, label: badges.length ? `${version}（${badges.join(' · ')}）` : version };
     });
 }
@@ -19036,9 +19057,11 @@ function renderAgentSdkVersionControls() {
 
   const previous = normalizeAgentSdkVersion(agentSdkVersionSelect.value);
   const options = agentSdkVersionOptions(status, agentSdkVersionCatalog);
-  const preferred = previous && options.some(item => item.version === previous)
+  const latest = normalizeAgentSdkVersion(agentSdkVersionCatalog?.latest_version);
+  const preferred = agentSdkVersionUserSelected && previous && options.some(item => item.version === previous)
     ? previous
-    : (normalizeAgentSdkVersion(status.installed_version)
+    : (latest
+      || normalizeAgentSdkVersion(status.installed_version)
       || normalizeAgentSdkVersion(status.required_version)
       || options[0]?.version
       || '');
@@ -19054,6 +19077,8 @@ function renderAgentSdkVersionControls() {
   agentSdkVersionSelect.disabled = agentSdkInstallBusy || agentSdkVersionLoading || !localReady || options.length === 0;
   const target = normalizeAgentSdkVersion(agentSdkVersionSelect.value || preferred);
   const recommended = normalizeAgentSdkVersion(status.required_version);
+  const current = normalizeAgentSdkVersion(status.active_version || status.installed_version);
+  const updateAvailable = !!latest && !!current && compareAgentSdkVersions(latest, current) > 0;
   const action = agentSdkTargetAction(status, target);
 
   if (agentSdkVersionSource) {
@@ -19076,13 +19101,19 @@ function renderAgentSdkVersionControls() {
     } else if (agentSdkVersionCatalog?.source === 'fallback' && agentSdkVersionCatalog?.error) {
       agentSdkVersionHelp.textContent = 'npm 版本列表暂不可用，仅显示应用锁定版和当前安装版。';
       agentSdkVersionHelp.classList.add('is-warning');
+    } else if (updateAvailable) {
+      agentSdkVersionHelp.textContent = `检测到最新稳定版 ${latest}，当前 ${current}。已默认选中更新目标，确认后才会安装。`;
+      agentSdkVersionHelp.classList.add('is-warning');
+    } else if (latest && target === latest) {
+      agentSdkVersionHelp.textContent = `当前目标是 npm 最新稳定版 ${latest}；激活前会启动校验，失败自动恢复。`;
     } else if (target && recommended && target !== recommended) {
-      agentSdkVersionHelp.textContent = `这是自选版本；应用锁定版 ${recommended} 已完成完整验证，切换失败会自动恢复。`;
+      agentSdkVersionHelp.textContent = `这是手动选择的稳定版本；应用锁定版 ${recommended} 可用于离线回退。`;
       agentSdkVersionHelp.classList.add('is-warning');
     } else {
-      agentSdkVersionHelp.textContent = '应用锁定版经过完整验证；其他稳定版本会在激活前进行启动检查。';
+      agentSdkVersionHelp.textContent = '默认选择 npm 最新稳定版；应用锁定版可用于离线回退。';
     }
   }
+  if (agentSdkCard && updateAvailable) agentSdkCard.dataset.status = 'attention';
 
   if (agentSdkInstallBusy) {
     agentSdkInstallBtn.disabled = true;
@@ -19102,6 +19133,30 @@ function renderAgentSdkVersionControls() {
     : (!status.node_compatible
       ? `需要 Node.js 18+（当前 ${status.node_version || '未检测到'}）`
       : (!status.npm_available ? '未找到 npm' : actionLabel));
+}
+
+function maybePromptAgentSdkUpdate() {
+  const latest = normalizeAgentSdkVersion(agentSdkVersionCatalog?.latest_version);
+  const current = normalizeAgentSdkVersion(
+    agentSdkStatusSnapshot?.active_version || agentSdkStatusSnapshot?.installed_version
+  );
+  if (!latest || !current || compareAgentSdkVersions(latest, current) <= 0) return;
+  const promptKey = `cwAgentSdkUpdatePrompted:${latest}`;
+  try {
+    if (sessionStorage.getItem(promptKey)) return;
+    sessionStorage.setItem(promptKey, '1');
+  } catch {}
+  const notice = toast(
+    `Claude Agent SDK 有最新稳定版 ${latest}（当前 ${current}）。点击这里到设置中确认更新`,
+    { timeout: 9000 }
+  );
+  notice.style.cursor = 'pointer';
+  notice.addEventListener('click', () => {
+    toast.dismiss();
+    activateSettingsTab('general');
+    openModal(settingsModal);
+    refreshAgentSdkStatus(false);
+  });
 }
 
 async function refreshAgentSdkVersions(force = false) {
@@ -19127,6 +19182,7 @@ async function refreshAgentSdkVersions(force = false) {
   } finally {
     agentSdkVersionLoading = false;
     renderAgentSdkVersionControls();
+    maybePromptAgentSdkUpdate();
   }
 }
 
@@ -19140,16 +19196,12 @@ async function refreshAgentSdkStatus(forceVersions = false) {
     const active = data.active_version || '未加载';
     const source = agentSdkSourceLabel(data.active_source);
     agentSdkStatusText.textContent = data.running
-      ? (data.active_recommended
-        ? `运行中 ${active} · ${source} · 应用锁定版`
-        : `运行中 ${active} · ${source} · 当前版本（应用锁定版 ${required}）`)
-      : `未运行 · 应用锁定版 ${required}${data.error ? ` · ${data.error}` : ''}`;
+      ? `运行中 ${active} · ${source}${data.active_recommended ? ' · 离线回退锁定版' : ''}`
+      : `未运行 · 离线回退锁定版 ${required}${data.error ? ` · ${data.error}` : ''}`;
     if (agentSdkCard) {
-      agentSdkCard.dataset.status = data.running && data.active_compatible && data.active_recommended
+      agentSdkCard.dataset.status = data.running && data.active_compatible
         ? 'ready'
-        : (data.running && data.active_compatible
-          ? 'attention'
-          : (data.error ? 'error' : 'attention'));
+        : (data.error ? 'error' : 'attention');
     }
     if (agentSdkPathText) {
       agentSdkPathText.textContent = data.active_path
@@ -19181,7 +19233,10 @@ async function refreshAgentSdkStatus(forceVersions = false) {
   }
 }
 
-if (agentSdkVersionSelect) agentSdkVersionSelect.addEventListener('change', renderAgentSdkVersionControls);
+if (agentSdkVersionSelect) agentSdkVersionSelect.addEventListener('change', () => {
+  agentSdkVersionUserSelected = true;
+  renderAgentSdkVersionControls();
+});
 
 if (agentSdkInstallBtn) agentSdkInstallBtn.addEventListener('click', async () => {
   const target = normalizeAgentSdkVersion(agentSdkVersionSelect?.value);
@@ -19190,8 +19245,9 @@ if (agentSdkInstallBtn) agentSdkInstallBtn.addEventListener('click', async () =>
   const action = agentSdkTargetAction(status, target);
   const verb = ({ install: '安装', update: '更新', rollback: '降级', reinstall: '重新安装' })[action] || '安装';
   const recommended = normalizeAgentSdkVersion(status.required_version);
-  const warning = target !== recommended
-    ? `\n\n${target} 不是当前应用锁定版 ${recommended}，将先启动验证，失败时自动恢复原版本。`
+  const latest = normalizeAgentSdkVersion(agentSdkVersionCatalog?.latest_version);
+  const warning = target !== recommended && target !== latest
+    ? `\n\n${target} 不是最新稳定版 ${latest || '未知'}，将先启动验证，失败时自动恢复原版本。`
     : '';
   if (!confirm(`将${verb} Claude Agent SDK ${target}。安装期间不能有正在运行的 Code 任务。${warning}\n\n继续吗？`)) return;
   agentSdkInstallBusy = true;
@@ -21994,6 +22050,29 @@ webSearchBtn.addEventListener('click', () => {
 });
 applyWebSearchBtnState();
 
+function applyCodeBrowserBtnState() {
+  if (!codeBrowserBtn) return;
+  const enabled = codeMode && !!settings.codeBrowser;
+  codeBrowserBtn.classList.toggle('toolbar-btn-active', enabled);
+  codeBrowserBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  codeBrowserBtn.title = settings.codeBrowser
+    ? '官方 Claude in Chrome 已开启（仅 Code）：可读写网页、点击、截图和检查控制台。点击关闭'
+    : '官方 Claude in Chrome 已关闭。点击后从下一个 Code 回合启用';
+}
+
+codeBrowserBtn?.addEventListener('click', () => {
+  settings.codeBrowser = !settings.codeBrowser;
+  LS.set('codeBrowserEnabledV1', settings.codeBrowser);
+  applyCodeBrowserBtnState();
+  const suffix = currentController
+    ? '；当前回合不重启，从下一个 Code 回合生效'
+    : '；从下一个 Code 回合生效';
+  toast(settings.codeBrowser
+    ? `已开启官方 Claude in Chrome${suffix}。首次使用请按 Claude 提示安装并连接官方 Chrome 扩展`
+    : `已关闭官方 Claude in Chrome${suffix}`);
+});
+applyCodeBrowserBtnState();
+
 function webSearchPrefix() {
   if (!isWebSearchEnabled()) return '';
   return '【启用联网搜索】请优先使用 WebSearch 工具进行联网查询，必要时用 WebFetch 抓取页面详情，确保信息是最新的。\n\n';
@@ -22529,6 +22608,7 @@ function setCodeMode(enabled, options = {}) {
   renderCodeFileReferences();
   renderSessionStatsBar();
   applyWebSearchBtnState();
+  applyCodeBrowserBtnState();
   renderPinnedDocs();
   if (!sessionId) {
     setText(titleLabel, codeMode ? 'Code 模式' : '新会话');
@@ -24120,6 +24200,11 @@ $('helpReplayTour').addEventListener('click', () => {
   }
   checkForAvailableUpdate();
 })();
+
+// Check independently from the settings dialog. This only reads the npm
+// stable-version catalog and prompts; installation always requires a click
+// and a second confirmation.
+setTimeout(() => refreshAgentSdkStatus(false), 1600);
 </script>
 </body>
 </html>

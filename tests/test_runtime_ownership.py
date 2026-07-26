@@ -235,6 +235,8 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
                     patch.object(server._claude_agent_bridge, "ensure_started", AsyncMock(return_value=True)), \
                     patch.object(server._claude_agent_bridge, "sdk_info", {"version": selected}), \
                     patch.object(server, "activate_staging", return_value=None), \
+                    patch.object(server, "confirm_pending_activation"), \
+                    patch.object(server, "mark_activation_pending") as mark_pending, \
                     patch.object(server, "discard_backup"), \
                     patch.object(
                         server,
@@ -249,6 +251,7 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(selected, result["installed_version"])
         self.assertFalse(result["recommended"])
+        mark_pending.assert_called_once_with(None, selected)
 
     async def test_agent_sdk_install_endpoint_rejects_non_semver_target(self):
         request = Request({
@@ -297,6 +300,7 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
                     ), \
                     patch.object(server._claude_agent_bridge, "sdk_info", {"version": "0.2.112"}), \
                     patch.object(server, "activate_staging", return_value=backup), \
+                    patch.object(server, "confirm_pending_activation"), \
                     patch.object(server, "rollback_activation") as rollback, \
                     patch.object(server, "discard_backup"):
                 with self.assertRaises(HTTPException) as raised:
@@ -307,6 +311,42 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(502, raised.exception.status_code)
         self.assertIn("failed activation verification", str(raised.exception.detail))
         rollback.assert_called_once_with(backup)
+
+    async def test_successful_code_turn_confirms_pending_sdk_activation(self):
+        with patch.object(server, "pending_activation", return_value={"version": "0.3.0"}), \
+                patch.object(server, "confirm_pending_activation") as confirm:
+            state = await server._settle_pending_agent_sdk_activation(
+                success=True,
+                session_id="session-a",
+            )
+        self.assertEqual("validated", state)
+        confirm.assert_called_once_with()
+
+    async def test_sdk_compatibility_failure_restores_pending_activation(self):
+        server._agent_sdk_running_sessions.clear()
+        with patch.object(server, "pending_activation", return_value={"version": "0.3.0"}), \
+                patch.object(server._claude_agent_bridge, "shutdown", AsyncMock()) as shutdown, \
+                patch.object(server, "rollback_pending_activation", return_value={"version": "0.3.0"}) as rollback, \
+                patch.object(server._claude_agent_bridge, "ensure_started", AsyncMock(return_value=True)):
+            state = await server._settle_pending_agent_sdk_activation(
+                success=False,
+                error="TypeError: query is not a function",
+                session_id="session-a",
+            )
+        self.assertEqual("rolled_back", state)
+        shutdown.assert_awaited_once_with()
+        rollback.assert_called_once_with()
+
+    async def test_ordinary_sdk_failure_keeps_pending_backup(self):
+        with patch.object(server, "pending_activation", return_value={"version": "0.3.0"}), \
+                patch.object(server, "rollback_pending_activation") as rollback:
+            state = await server._settle_pending_agent_sdk_activation(
+                success=False,
+                error="authentication expired",
+                session_id="session-a",
+            )
+        self.assertEqual("pending", state)
+        rollback.assert_not_called()
 
     async def test_running_agent_loop_owns_session_between_turns(self):
         session_id = "loop-owner-" + uuid.uuid4().hex

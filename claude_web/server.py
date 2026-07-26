@@ -16,6 +16,7 @@ import signal
 import socket
 import sqlite3
 import struct
+import subprocess
 import sys
 import threading
 from dataclasses import dataclass, field
@@ -47,11 +48,15 @@ from claude_web.agent_sdk_bridge import AgentSdkBridge, AgentSdkBridgeError, Age
 from claude_web.agent_sdk_manager import (
     AgentSdkInstallError,
     activate_staging,
+    confirm_pending_activation,
     discard_backup,
     install_version,
     install_root as agent_sdk_install_root,
+    mark_activation_pending,
     normalize_requested_version,
+    pending_activation,
     rollback_activation,
+    rollback_pending_activation,
     status_payload as agent_sdk_status_payload,
     version_catalog,
 )
@@ -151,6 +156,7 @@ _agent_sdk_running_sessions: Set[str] = set()
 _agent_sdk_detached_turn_tasks: Dict[str, asyncio.Task] = {}
 _agent_sdk_context_usage_cache: Dict[str, dict] = {}
 _agent_sdk_install_lock = asyncio.Lock()
+_claude_cli_chrome_flag_support: Dict[Tuple[str, ...], bool] = {}
 _stopped_sessions: Set[str] = set()
 # Processes we terminated on purpose (duplicate-request replacement or stop).
 # Keyed by the process object itself, not session_id, so that a session whose
@@ -330,6 +336,48 @@ def claude_cli_argv(*args: str, allow_batch_shim: bool = False) -> List[str]:
                 "claude CLI batch shim found, but the Node.js entrypoint could not be resolved"
             )
     return [command, *args]
+
+
+def _claude_cli_supports_chrome_flags() -> bool:
+    """Probe once per resolved command so older Chat-only CLIs remain usable."""
+
+    try:
+        help_argv = claude_cli_argv("--help", allow_batch_shim=True)
+    except ClaudeCliResolutionError:
+        return False
+    command_key = tuple(help_argv[:-1])
+    cached = _claude_cli_chrome_flag_support.get(command_key)
+    if cached is not None:
+        return cached
+    supported = False
+    try:
+        result = subprocess.run(
+            help_argv,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        output = f"{result.stdout}\n{result.stderr}"
+        supported = (
+            result.returncode == 0
+            and "--chrome" in output
+            and "--no-chrome" in output
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        supported = False
+    _claude_cli_chrome_flag_support[command_key] = supported
+    return supported
+
+
+def _append_browser_cli_arg(args: List[str], browser_enabled: bool) -> None:
+    if _claude_cli_supports_chrome_flags():
+        args.append("--chrome" if browser_enabled else "--no-chrome")
+        return
+    if browser_enabled:
+        raise ClaudeCliResolutionError(
+            "当前 Claude CLI 不支持官方 Claude in Chrome；请升级 Claude Code 后重试，"
+            "或关闭 Code 浏览器开关。"
+        )
 
 
 async def _terminate_process(process: asyncio.subprocess.Process, grace: float = 3.0) -> None:
@@ -959,6 +1007,9 @@ def init_db() -> None:
         ensure_column(conn, "sessions", "workspace_mode", "TEXT NOT NULL DEFAULT 'chat'")
         ensure_column(conn, "sessions", "runtime_origin", "TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "sessions", "auto_approve", "INTEGER NOT NULL DEFAULT 0")
+        # Official Claude in Chrome is a Code-only capability. Existing Code
+        # sessions inherit the product default (enabled); Chat ignores it.
+        ensure_column(conn, "sessions", "browser_enabled", "INTEGER NOT NULL DEFAULT 1")
         # Number of native plain-user messages that precede the first local
         # user_input event. Native forks intentionally keep Claude's earlier
         # transcript without copying those bubbles into the new Web session.
@@ -1223,6 +1274,14 @@ def upsert_session(session_id: str, title: str, cwd: str, workspace_mode: Option
                 "UPDATE sessions SET title = ?, cwd = ?, workspace_mode = ?, updated_at = ? WHERE id = ?",
                 (new_title, cwd, resolved_mode, now, session_id),
             )
+
+
+def set_session_browser_enabled(session_id: str, enabled: bool) -> None:
+    with db_connect() as conn:
+        conn.execute(
+            "UPDATE sessions SET browser_enabled = ? WHERE id = ?",
+            (1 if enabled else 0, session_id),
+        )
 
 
 _SUMMARY_CACHE_LIMIT = 20000
@@ -1664,6 +1723,7 @@ class ChatRequest(BaseModel):
     disallowed_tools: Optional[List[str]] = None
     force_new: Optional[bool] = None
     workspace_mode: Optional[str] = None
+    browser_enabled: Optional[bool] = None
     effort: Optional[str] = None
     # UI-only metadata for attached docs (name/size/length/path); rendered as
     # badges on the user message. Chat mode embeds extracted text in `message`;
@@ -1678,6 +1738,7 @@ class NativeCompactRequest(BaseModel):
     permission_mode: Optional[str] = None
     allowed_tools: Optional[List[str]] = None
     disallowed_tools: Optional[List[str]] = None
+    browser_enabled: Optional[bool] = None
 
 
 class AgentSdkInstallRequest(BaseModel):
@@ -1809,6 +1870,7 @@ class AgentLoopStartRequest(BaseModel):
     permission_mode: Optional[str] = None
     allowed_tools: Optional[List[str]] = None
     disallowed_tools: Optional[List[str]] = None
+    browser_enabled: Optional[bool] = None
     max_turns: Optional[int] = 5
     token_budget: Optional[int] = 30000
     test_command: Optional[str] = ""
@@ -1984,6 +2046,7 @@ def _proc_sig(
     cwd: str,
     allowed_tools: Optional[List[str]],
     disallowed_tools: Optional[List[str]],
+    browser_enabled: bool,
 ) -> tuple:
     """Return a hashable signature that identifies process reusability.
 
@@ -2001,12 +2064,29 @@ def _proc_sig(
         str(Path(cwd).resolve()),
         ",".join(sorted(allowed_tools or [])),
         ",".join(sorted(disallowed_tools or [])),
+        bool(browser_enabled),
     )
 
 
 def _normalize_effort(effort: Optional[str]) -> Optional[str]:
     value = (effort or "").strip().lower()
     return value if value in {"low", "medium", "high", "xhigh", "max"} else None
+
+
+def _effective_browser_enabled(
+    workspace_mode: Optional[str],
+    requested: Optional[bool],
+    stored: Optional[bool] = None,
+) -> bool:
+    """Keep official Claude in Chrome strictly inside Code workspaces."""
+
+    if (workspace_mode or "").strip().lower() != "code":
+        return False
+    if requested is not None:
+        return bool(requested)
+    if stored is not None:
+        return bool(stored)
+    return True
 
 
 _ROOT_UNSAFE_PERMISSION_MODES = {"auto", "bypassPermissions"}
@@ -2078,6 +2158,7 @@ def build_persistent_args(
     allowed_tools: Optional[List[str]] = None,
     disallowed_tools: Optional[List[str]] = None,
     effort: Optional[str] = None,
+    browser_enabled: bool = False,
 ) -> List[str]:
     """Build args for a long-lived persistent process (stdin stays open)."""
     args = claude_cli_argv() + [
@@ -2100,6 +2181,7 @@ def build_persistent_args(
     normalized_effort = _normalize_effort(effort)
     if normalized_effort:
         args += ["--effort", normalized_effort]
+    _append_browser_cli_arg(args, browser_enabled)
     return args
 
 
@@ -2114,6 +2196,7 @@ def build_args(
     disallowed_tools: Optional[List[str]] = None,
     use_stdin: bool = False,
     effort: Optional[str] = None,
+    browser_enabled: bool = False,
 ) -> List[str]:
     args = claude_cli_argv()
     if use_stdin:
@@ -2143,6 +2226,7 @@ def build_args(
         args += ["--allowed-tools", ",".join(allowed_tools)]
     if disallowed_tools:
         args += ["--disallowed-tools", ",".join(disallowed_tools)]
+    _append_browser_cli_arg(args, browser_enabled)
     return args
 
 
@@ -5913,6 +5997,77 @@ def _agent_sdk_result_error_text(result: dict) -> str:
     return "\n".join(part for part in parts if part)
 
 
+def _agent_sdk_activation_compatibility_error(message: str) -> bool:
+    """Limit update rollback to clear SDK/bridge contract failures."""
+
+    return bool(re.search(
+        r"query export missing|query is not a function|"
+        r"(?:unknown|unsupported|unexpected|invalid)\s+(?:sdk\s+)?(?:argument|option|parameter)|"
+        r"unsupported claude agent sdk|agent sdk.{0,80}(?:incompatible|compatibility)|"
+        r"bridge protocol|ERR_MODULE_NOT_FOUND|ERR_PACKAGE_PATH_NOT_EXPORTED|"
+        r"cannot read propert(?:y|ies).{0,120}(?:query|session|stream)|"
+        r"(?:TypeError|ReferenceError).{0,160}(?:query|claude-agent-sdk|claude_agent_sdk)",
+        str(message or ""),
+        re.IGNORECASE | re.DOTALL,
+    ))
+
+
+async def _settle_pending_agent_sdk_activation(
+    *,
+    success: bool,
+    error: str = "",
+    session_id: str = "",
+) -> str:
+    """Confirm an updated SDK after a real turn, or restore it on incompatibility."""
+
+    if pending_activation() is None:
+        return ""
+    if not success and not _agent_sdk_activation_compatibility_error(error):
+        return "pending"
+    async with _agent_sdk_install_lock:
+        if pending_activation() is None:
+            return ""
+        if success:
+            confirm_pending_activation()
+            return "validated"
+        active_others = {
+            item for item in _agent_sdk_running_sessions
+            if item and item != session_id
+        }
+        if active_others:
+            # Do not terminate other live turns. Their terminal result will
+            # settle the same persistent marker when the bridge becomes idle.
+            return "pending"
+        await _claude_agent_bridge.shutdown()
+        restored = rollback_pending_activation()
+        if restored is None:
+            return ""
+        if not _claude_agent_bridge.enabled:
+            return "rolled_back"
+        if await _claude_agent_bridge.ensure_started():
+            return "rolled_back"
+        return "rollback_failed"
+
+
+def _agent_sdk_activation_status_event(state: str) -> Optional[dict]:
+    if state == "rolled_back":
+        return {
+            "type": "system",
+            "subtype": "status",
+            "status": "sdk_rolled_back",
+            "message": "新版 Claude Agent SDK 首轮兼容校验失败，已自动恢复上一版本；未重放本轮任务。",
+        }
+    if state == "rollback_failed":
+        return {
+            "type": "error",
+            "message": (
+                "新版 Claude Agent SDK 首轮兼容校验失败；旧版本已恢复，"
+                "但 SDK bridge 未能重新启动。请检查设置中的 SDK 状态。"
+            ),
+        }
+    return None
+
+
 def _recoverable_agent_sdk_transport_error(message: str) -> bool:
     return bool(re.search(
         r"stream idle timeout|no chunks received|runtime ended unexpectedly|connection (?:ended|closed|lost)",
@@ -6001,8 +6156,7 @@ async def _drain_detached_agent_sdk_turn(
                     continue
                 saw_terminal_error = True
                 bridge_error = str(envelope.get("message") or "Claude Agent SDK failed")
-                if _recoverable_agent_sdk_transport_error(bridge_error):
-                    reported_api_error = bridge_error
+                reported_api_error = bridge_error
                 err_event = classify_claude_error(bridge_error)
                 append_event(session_id, err_event)
                 _notification_send_chat_error(session_id, work_dir, err_event)
@@ -6089,14 +6243,32 @@ async def _drain_detached_agent_sdk_turn(
                 native_remote_id,
                 reconnect_params or {},
             )
+        activation_state = await _settle_pending_agent_sdk_activation(
+            success=saw_top_level_result and not saw_terminal_error,
+            error=reported_api_error,
+            session_id=session_id,
+        )
+        activation_event = _agent_sdk_activation_status_event(activation_state)
+        if activation_event is not None:
+            append_event(session_id, activation_event)
     except asyncio.CancelledError:
         await _claude_agent_bridge.abandon_turn(turn)
         raise
     except Exception as exc:
+        saw_terminal_error = True
+        reported_api_error = str(exc)
         if session_id not in _stopped_sessions:
             err_event = classify_claude_error(str(exc))
             append_event(session_id, err_event)
             _notification_send_chat_error(session_id, work_dir, err_event)
+        activation_state = await _settle_pending_agent_sdk_activation(
+            success=False,
+            error=reported_api_error,
+            session_id=session_id,
+        )
+        activation_event = _agent_sdk_activation_status_event(activation_state)
+        if activation_event is not None:
+            append_event(session_id, activation_event)
     finally:
         _agent_sdk_running_sessions.discard(session_id)
         _stopped_sessions.discard(session_id)
@@ -6159,8 +6331,7 @@ def _agent_sdk_streaming_response(
                         continue
                     saw_terminal_error = True
                     bridge_error = str(envelope.get("message") or "Claude Agent SDK failed")
-                    if _recoverable_agent_sdk_transport_error(bridge_error):
-                        reported_api_error = bridge_error
+                    reported_api_error = bridge_error
                     err_event = classify_claude_error(bridge_error)
                     append_event(session_id, err_event)
                     _notification_send_chat_error(session_id, work_dir, err_event)
@@ -6292,6 +6463,8 @@ def _agent_sdk_streaming_response(
             _agent_sdk_detached_turn_tasks[session_id] = task
             raise
         except Exception as exc:
+            saw_terminal_error = True
+            reported_api_error = str(exc)
             if session_id not in _stopped_sessions:
                 err_event = classify_claude_error(str(exc))
                 append_event(session_id, err_event)
@@ -6350,6 +6523,16 @@ def _agent_sdk_streaming_response(
                     pass
             reconnected, _ = await reconnect_task
             auto_reconnect_failed = not reconnected
+
+        activation_state = await _settle_pending_agent_sdk_activation(
+            success=saw_top_level_result and not saw_terminal_error,
+            error=reported_api_error,
+            session_id=session_id,
+        )
+        activation_event = _agent_sdk_activation_status_event(activation_state)
+        if activation_event is not None:
+            append_event(session_id, activation_event)
+            yield f"data: {json.dumps(activation_event, ensure_ascii=False)}\n\n"
 
         terminal_state = (
             "completed" if saw_top_level_result and not saw_terminal_error
@@ -6435,7 +6618,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
         row = conn.execute(
             """
             SELECT cwd, remote_session_id, remote_ready, runtime_origin, workspace_mode,
-                   native_user_offset
+                   native_user_offset, browser_enabled
             FROM sessions WHERE id = ?
             """,
             (session_id,),
@@ -6465,6 +6648,11 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     # turn an existing SDK-owned Code session into a legacy CLI request.
     req.workspace_mode = workspace_mode
     code_workspace = workspace_mode == "code"
+    effective_browser_enabled = _effective_browser_enabled(
+        workspace_mode,
+        req.browser_enabled,
+        bool(row["browser_enabled"]) if row is not None else None,
+    )
     reserved_turn_id = ""
     legacy_locally_compacted_code = code_workspace and any(
         event.get("type") == "user_input"
@@ -6513,6 +6701,8 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     if stored_full_message != display_text:
         user_event["full_text"] = stored_full_message
     upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode)
+    if code_workspace:
+        set_session_browser_enabled(session_id, effective_browser_enabled)
     set_session_remote_state(session_id, remote_session_id, remote_ready and not is_new)
     if req.force_new is True:
         set_session_runtime_origin(session_id, "")
@@ -6541,6 +6731,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 "permissionMode": effective_permission_mode,
                 "allowedTools": req.allowed_tools,
                 "disallowedTools": req.disallowed_tools,
+                "browserEnabled": effective_browser_enabled,
                 "runtimeEpoch": remote_session_id,
             }
             if remote_ready and not is_new:
@@ -6568,6 +6759,16 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 ) from exc
             except AgentSdkBridgeError as exc:
                 message = str(exc)
+                activation_state = await _settle_pending_agent_sdk_activation(
+                    success=False,
+                    error=message,
+                    session_id=session_id,
+                )
+                if activation_state in {"rolled_back", "rollback_failed"}:
+                    message = (
+                        f"{message}\n"
+                        "新版 Claude Agent SDK 兼容校验失败，已恢复上一版本；本轮任务未自动重放。"
+                    )
                 status_code = (
                     429 if "runtime limit reached" in message
                     else (409 if "already running" in message or "active turn" in message else 502)
@@ -6634,7 +6835,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
         current_sig = _proc_sig(
             remote_session_id,
             req.model, req.effort, effective_permission_mode, effective_system_prompt,
-            work_dir, req.allowed_tools, req.disallowed_tools,
+            work_dir, req.allowed_tools, req.disallowed_tools, effective_browser_enabled,
         )
 
         # ── Reclaim or discard a warm process for this session ──────────────
@@ -6674,6 +6875,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                     allowed_tools=req.allowed_tools,
                     disallowed_tools=req.disallowed_tools,
                     effort=req.effort or "high",
+                    browser_enabled=effective_browser_enabled,
                 )
             except ClaudeCliResolutionError as e:
                 err_event = {"type": "error", "message": str(e)}
@@ -7288,6 +7490,7 @@ async def _agent_loop_runner(job: AgentLoopJob, req: AgentLoopStartRequest) -> N
                 permission_mode=req.permission_mode,
                 allowed_tools=req.allowed_tools,
                 disallowed_tools=req.disallowed_tools,
+                browser_enabled=req.browser_enabled,
                 force_new=(req.force_new is not False and turn == 1),
                 workspace_mode="code",
             )
@@ -7528,7 +7731,7 @@ def _agent_sdk_session_row(session_id: str) -> sqlite3.Row:
         row = conn.execute(
             """
             SELECT id, cwd, remote_session_id, remote_ready, workspace_mode, runtime_origin,
-                   native_user_offset, auto_approve
+                   native_user_offset, auto_approve, browser_enabled
             FROM sessions WHERE id = ?
             """,
             (session_id,),
@@ -7579,6 +7782,11 @@ def _agent_sdk_control_params(row: sqlite3.Row, req: NativeCompactRequest) -> di
         "permissionMode": _effective_permission_mode_for_workspace("code", req.permission_mode),
         "allowedTools": req.allowed_tools,
         "disallowedTools": req.disallowed_tools,
+        "browserEnabled": _effective_browser_enabled(
+            "code",
+            req.browser_enabled,
+            bool(row["browser_enabled"]),
+        ),
         "runtimeEpoch": remote_session_id,
     }
     if bool(row["remote_ready"]):
@@ -10043,6 +10251,7 @@ def _row_to_session(r: sqlite3.Row) -> dict:
         "runtime_origin": normalize_runtime_origin(r["runtime_origin"]) if "runtime_origin" in r.keys() else "",
         "native_user_offset": int(r["native_user_offset"] or 0) if "native_user_offset" in r.keys() else 0,
         "auto_approve": bool(r["auto_approve"]) if "auto_approve" in r.keys() else False,
+        "browser_enabled": bool(r["browser_enabled"]) if "browser_enabled" in r.keys() else True,
     }
 
 
@@ -10178,7 +10387,7 @@ async def list_sessions(q: Optional[str] = None, archived: bool = False, tag: Op
     with db_connect() as conn:
         where = "archived = 1" if archived else "archived = 0"
         rows = conn.execute(
-            f"SELECT id, title, cwd, created_at, updated_at, pinned, archived, tags, summary_cache, workspace_mode FROM sessions "
+            f"SELECT id, title, cwd, created_at, updated_at, pinned, archived, tags, summary_cache, workspace_mode, browser_enabled FROM sessions "
             f"WHERE {where} ORDER BY pinned DESC, updated_at DESC LIMIT 500"
         ).fetchall()
 
@@ -10652,7 +10861,7 @@ async def get_session(session_id: str, history_turns: int = Query(default=0, ge=
         row = conn.execute(
             """
             SELECT id, title, cwd, created_at, updated_at, pinned, archived, tags,
-                   workspace_mode, runtime_origin, native_user_offset, auto_approve
+                   workspace_mode, runtime_origin, native_user_offset, auto_approve, browser_enabled
             FROM sessions WHERE id = ?
             """,
             (session_id,),
@@ -13045,11 +13254,15 @@ async def runtime_status():
 
 
 def _agent_sdk_management_status() -> dict:
-    return agent_sdk_status_payload(
+    status = agent_sdk_status_payload(
         _claude_agent_bridge.sdk_info,
         running=_claude_agent_bridge.running,
         error=_claude_agent_bridge.last_error,
     )
+    pending = pending_activation()
+    status["activation_pending"] = pending is not None
+    status["pending_activation_version"] = str((pending or {}).get("version") or "")
+    return status
 
 
 @app.get("/api/agent-sdk/status")
@@ -13092,6 +13305,11 @@ async def install_agent_sdk(request: Request, req: Optional[AgentSdkInstallReque
         try:
             installed = await install_version(requested_version)
             staging = Path(installed["staging"])
+            # A second explicit install supersedes an unvalidated selection.
+            # Wait until the replacement is fully downloaded before retiring
+            # the older backup; its current live files become the new rollback
+            # source during activate_staging().
+            confirm_pending_activation()
             await _claude_agent_bridge.shutdown()
             bridge_stopped = True
             backup = activate_staging(staging)
@@ -13111,16 +13329,25 @@ async def install_agent_sdk(request: Request, req: Optional[AgentSdkInstallReque
                     activated = False
                     backup = None
                     raise AgentSdkInstallError(error)
+                mark_activation_pending(backup, expected_version)
+                backup = None
+                activated = False
             response = {
                 "ok": True,
-                "message": "Claude Agent SDK installed and activated",
+                "message": (
+                    "Claude Agent SDK installed; rollback backup is retained "
+                    "until the first successful Code turn"
+                    if _claude_agent_bridge.enabled
+                    else "Claude Agent SDK installed and activated"
+                ),
                 "installed_version": installed.get("version"),
                 "recommended": bool(installed.get("recommended")),
                 **_agent_sdk_management_status(),
             }
-            discard_backup(backup)
-            backup = None
-            activated = False
+            if not _claude_agent_bridge.enabled:
+                discard_backup(backup)
+                backup = None
+                activated = False
             return response
         except asyncio.CancelledError:
             if activated:
