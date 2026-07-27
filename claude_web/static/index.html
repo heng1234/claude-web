@@ -13265,7 +13265,7 @@ function addNativePermissionRequest(container, info) {
       });
       if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
       const data = await response.json().catch(() => ({}));
-      if (data.alreadyResolved) {
+      if (data.alreadyResolved || data.response?.alreadyResolved) {
         setSettled('该权限请求已处理（可能已被自动批准或取消）。');
       } else {
         setSettled(allow ? (alwaysAllow ? '已允许，并应用 SDK 建议的本会话权限规则。' : '已允许，Claude 正在继续运行。') : '已拒绝，Claude 正在处理该决定。');

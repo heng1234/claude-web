@@ -2,6 +2,28 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.1.0",
+      "date": "2026-07-27",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "Code 规划模式批准方案后恢复进入规划前的运行权限，不再固定切换到代理模式；批准卡片显示实际恢复的模式"
+        },
+        {
+          "type": "fix",
+          "text": "自动审批、停止、超时或 runtime 释放已处理请求后，迟到的权限操作改为幂等成功，不再显示误导性 bridge 错误"
+        },
+        {
+          "type": "fix",
+          "text": "bridge、后端 API 与前端显式传递 alreadyResolved 状态，已处理请求不会被误记为新的始终允许规则"
+        },
+        {
+          "type": "test",
+          "text": "新增规划模式恢复与迟到权限响应的后端和双前端镜像回归测试"
+        }
+      ]
+    },
+    {
       "version": "2.0.9",
       "date": "2026-07-26",
       "highlights": [

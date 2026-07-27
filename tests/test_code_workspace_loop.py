@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 
@@ -74,6 +75,25 @@ class CodeWorkspaceLoopTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("auto", saved["validation_mode"])
         self.assertEqual("python -m unittest", loaded["validation_command"])
         self.assertEqual(45, loaded["validation_timeout"])
+
+    async def test_late_permission_response_is_reported_as_already_resolved(self):
+        approval_id = uuid.uuid4().hex
+        server._agent_sdk_running_sessions.add(self.session_id)
+        try:
+            with patch.object(
+                server._claude_agent_bridge,
+                "respond_permission",
+                AsyncMock(return_value={"ok": True, "alreadyResolved": True}),
+            ):
+                result = await server.resolve_agent_sdk_permission(
+                    self.session_id,
+                    approval_id,
+                    server.PermissionDecisionRequest(allow=True),
+                )
+        finally:
+            server._agent_sdk_running_sessions.discard(self.session_id)
+        self.assertTrue(result["alreadyResolved"])
+        self.assertTrue(result["response"]["alreadyResolved"])
 
     def test_history_page_starts_on_user_turn_and_preserves_absolute_offsets(self):
         events = []
@@ -253,6 +273,17 @@ class CodeWorkspaceLoopTest(unittest.IsolatedAsyncioTestCase):
 
 
 class CodeWorkspaceStaticContractTest(unittest.TestCase):
+    def test_plan_approval_restores_prior_mode_and_late_permission_is_idempotent(self):
+        root = Path(__file__).parents[1]
+        for relative in ("static/index.html", "claude_web/static/index.html"):
+            source = (root / relative).read_text(encoding="utf-8")
+            self.assertIn("let prePlanPermissionMode = null", source)
+            self.assertIn("const targetMode = prePlanPermissionMode || 'acceptEdits'", source)
+            self.assertIn("data.response?.alreadyResolved", source)
+            self.assertIn("已切换到「${modeLabel}」", source)
+        daemon = (root / "claude_web" / "agent_bridge" / "daemon.mjs").read_text(encoding="utf-8")
+        self.assertIn("alreadyResolved: true", daemon)
+
     def test_code_turn_controls_are_owned_by_session_not_shared_globally(self):
         source = (
             Path(__file__).parents[1] / "claude_web" / "static" / "index.html"

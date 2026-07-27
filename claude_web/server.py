@@ -7832,7 +7832,8 @@ async def resolve_agent_sdk_permission(
         )
     except (AgentSdkBridgeError, asyncio.TimeoutError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    if remembered_rule and remembered_rule.get("suggestions"):
+    already_resolved = bool(result.get("alreadyResolved"))
+    if not already_resolved and remembered_rule and remembered_rule.get("suggestions"):
         with db_connect() as conn:
             conn.execute(
                 """
@@ -7847,7 +7848,13 @@ async def resolve_agent_sdk_permission(
                     time.time(),
                 ),
             )
-    return {"ok": True, "runtime": _RUNTIME_ORIGIN_AGENT_SDK, "response": result, "session_id": row["id"]}
+    return {
+        "ok": True,
+        "runtime": _RUNTIME_ORIGIN_AGENT_SDK,
+        "response": result,
+        "alreadyResolved": already_resolved,
+        "session_id": row["id"],
+    }
 
 
 @app.get("/api/sessions/{session_id}/permissions/rules")
