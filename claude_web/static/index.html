@@ -9657,6 +9657,7 @@ const PERMISSION_MODE_LABELS = Object.freeze({
 const PERMISSION_MODE_VALUES = Object.freeze(Object.keys(PERMISSION_MODE_LABELS));
 const CODE_WORKSPACE_DEFAULT_PERMISSION_MODE = 'bypassPermissions';
 const ROOT_UNSAFE_PERMISSION_MODES = Object.freeze(['bypassPermissions']);
+let prePlanPermissionMode = null;
 const mobileModeBanner = $('mobileModeBanner');
 const dismissMobileBannerBtn = $('dismissMobileBanner');
 const toolsModal = $('toolsModal');
@@ -12421,7 +12422,8 @@ function renderPlanActions(entry) {
     const note = document.createElement('div');
     note.className = 'plan-card-decided-note';
     const label = entry.decision === 'execute_with_edits' ? '已批准（含修改）' : '已批准';
-    note.textContent = `✅ ${label} · 已切换到「代理模式」`;
+    const modeLabel = PERMISSION_MODE_LABELS[permSelect.value] || permSelect.value;
+    note.textContent = `✅ ${label} · 已切换到「${modeLabel}」`;
     entry.cardEl.replaceChild(note, actions);
     entry.actionsEl = note;
     return;
@@ -12508,8 +12510,11 @@ function applyPlanDecision(toolId, decision, editedPlan) {
   if (entry.status === 'approved') return;
 
   try {
-    permSelect.value = 'acceptEdits';
+    // Restore pre-plan permission mode if saved, otherwise default to acceptEdits
+    const targetMode = prePlanPermissionMode || 'acceptEdits';
+    permSelect.value = targetMode;
     permSelect.dispatchEvent(new Event('change'));
+    prePlanPermissionMode = null; // Clear after use
   } catch {}
 
   entry.status = 'approved';
@@ -13259,7 +13264,12 @@ function addNativePermissionRequest(container, info) {
         }),
       });
       if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
-      setSettled(allow ? (alwaysAllow ? '已允许，并应用 SDK 建议的本会话权限规则。' : '已允许，Claude 正在继续运行。') : '已拒绝，Claude 正在处理该决定。');
+      const data = await response.json().catch(() => ({}));
+      if (data.alreadyResolved) {
+        setSettled('该权限请求已处理（可能已被自动批准或取消）。');
+      } else {
+        setSettled(allow ? (alwaysAllow ? '已允许，并应用 SDK 建议的本会话权限规则。' : '已允许，Claude 正在继续运行。') : '已拒绝，Claude 正在处理该决定。');
+      }
       if (allow) showThinking(container, '继续执行中');
     } catch (error) {
       actions.querySelectorAll('button').forEach(button => { button.disabled = false; });
@@ -20559,6 +20569,11 @@ function setPermissionMode(value) {
     toast(rootUnsafePermissionMessage(), { timeout: 5200 });
     renderPermissionModeMenu();
     return false;
+  }
+  // Save pre-plan mode when entering plan mode
+  const currentMode = permSelect ? permSelect.value : LS.get('permMode', 'free');
+  if (mode === 'plan' && currentMode !== 'plan') {
+    prePlanPermissionMode = currentMode;
   }
   if (permSelect) permSelect.value = mode;
   LS.set('permMode', mode);

@@ -736,7 +736,12 @@ async function handlePermissionResponse(command) {
   const approvalId = String(params.approvalId || '').trim();
   const sessionKey = String(params.sessionKey || '').trim();
   const waiter = permissionWaiters.get(approvalId);
-  if (!waiter) throw new Error('Permission request is no longer pending');
+  if (!waiter) {
+    // Permission was already resolved or cancelled (e.g., by stopCurrentRunForPlan, runtime disposal, or timeout).
+    // Return success instead of throwing to avoid confusing UI errors.
+    await write({ id: command.id, type: 'response', ok: true, approvalId, alreadyResolved: true });
+    return;
+  }
   if (!sessionKey || waiter.sessionKey !== sessionKey) throw new Error('Permission request ownership mismatch');
   if (params.allow === true) {
     const result = {
