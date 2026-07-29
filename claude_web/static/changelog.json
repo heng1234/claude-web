@@ -2,6 +2,32 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.1.1",
+      "date": "2026-07-30",
+      "highlights": [
+        {
+          "type": "feature",
+          "text": "Code 模式新增 Project Map 知识图谱，可扫描文件、符号、导入、继承和调用关系，并通过搜索、筛选和节点展开浏览项目结构"
+        },
+        {
+          "type": "feature",
+          "text": "Project Map 支持版本化快照、过期提示、按变更范围重新生成、源码跳转，以及从 Git 变更进入上下游影响分析"
+        },
+        {
+          "type": "ui",
+          "text": "任务、子代理和变更统计升级为 Code 活动工作区：桌面端使用右侧抽屉，移动端使用底部面板，并接通文件 Diff 与完整审查"
+        },
+        {
+          "type": "fix",
+          "text": "Project Map 独立分析仅继承用户级 Claude 设置，并关闭工具与 MCP；流式事件会刷新心跳，避免长时间生成在 60 秒时被误判为空闲"
+        },
+        {
+          "type": "test",
+          "text": "新增 Project Map API、扫描与语义合并、快照新鲜度、影响分析、前端资源和 Code 活动工作区回归测试"
+        }
+      ]
+    },
+    {
       "version": "2.1.0",
       "date": "2026-07-27",
       "highlights": [
