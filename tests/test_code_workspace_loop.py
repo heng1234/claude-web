@@ -273,6 +273,27 @@ class CodeWorkspaceLoopTest(unittest.IsolatedAsyncioTestCase):
 
 
 class CodeWorkspaceStaticContractTest(unittest.TestCase):
+    def test_code_activity_uses_a_useful_sheet_and_hides_empty_stats(self):
+        root = Path(__file__).parents[1]
+        for relative in ("static/index.html", "claude_web/static/index.html"):
+            source = (root / relative).read_text(encoding="utf-8")
+            self.assertIn('id="cwWorkspaceActivityBackdrop"', source)
+            self.assertIn('role="dialog" aria-modal="true"', source)
+            self.assertIn("const hasActivity = sessionStatsState.tasksTotal > 0 || agents > 0 || files > 0", source)
+            self.assertIn("if (!codeMode || isEmpty || !hasActivity)", source)
+            self.assertIn("function renderWorkspaceAgentDetail(card)", source)
+            self.assertIn("name === 'Task' || name === 'Agent'", source)
+            self.assertIn("function handleSubagentLifecycleEvent(obj)", source)
+            self.assertIn("['task_started', 'task_progress', 'task_notification']", source)
+            self.assertIn("function trackNativeTaskTool(name, inputData, toolUseId = '')", source)
+            self.assertIn("['TaskCreate', 'TaskUpdate']", source)
+            self.assertIn("data-cw-open-review", source)
+            self.assertIn("const selected = workspaceActivityRows('edits').find", source)
+            self.assertIn("openGitFileDiff(selected.path, selected.diff", source)
+            self.assertIn("body.code-mode #codeReviewModal .cw-code-review-box", source)
+            self.assertIn("openWorkspaceActivity('tasks', cwWorkspaceTaskBtn)", source)
+            self.assertNotIn("if (todoPanel) todoPanel.classList.toggle('hidden')", source)
+
     def test_plan_approval_restores_prior_mode_and_late_permission_is_idempotent(self):
         root = Path(__file__).parents[1]
         for relative in ("static/index.html", "claude_web/static/index.html"):

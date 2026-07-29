@@ -798,12 +798,14 @@ def _prune_old_uploads(retention_seconds: int = _UPLOAD_RETENTION_SECONDS) -> in
 async def _lifespan(app: FastAPI):
     # Prune stale uploads in a background thread so startup isn't blocked on disk IO.
     asyncio.get_event_loop().run_in_executor(None, _prune_old_uploads)
+    await _project_map_service.startup()
     reaper_task = asyncio.create_task(_warm_reaper())
     terminal_reaper_task = asyncio.create_task(_code_terminal_reaper())
     bridge_start_task = asyncio.create_task(_claude_agent_bridge.ensure_started())
     try:
         yield
     finally:
+        await _project_map_service.shutdown()
         if not bridge_start_task.done():
             bridge_start_task.cancel()
             try:
@@ -1248,6 +1250,14 @@ def init_db() -> None:
 
 
 init_db()
+
+from claude_web.project_map import ProjectMapService, create_project_map_router
+
+_project_map_service = ProjectMapService(
+    DB_PATH,
+    maintenance_lock=_agent_sdk_install_lock,
+)
+app.include_router(create_project_map_router(_project_map_service))
 
 
 def upsert_session(session_id: str, title: str, cwd: str, workspace_mode: Optional[str] = None) -> None:
@@ -6038,6 +6048,9 @@ async def _settle_pending_agent_sdk_activation(
             # Do not terminate other live turns. Their terminal result will
             # settle the same persistent marker when the bridge becomes idle.
             return "pending"
+        if _project_map_service.has_active_runs():
+            return "pending"
+        await _project_map_service.shutdown_analysis_bridge()
         await _claude_agent_bridge.shutdown()
         restored = rollback_pending_activation()
         if restored is None:
@@ -12989,6 +13002,7 @@ async def git_checkout(request: Request, payload: GitCheckoutRequest):
 
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+app.mount("/assets", StaticFiles(directory=str(STATIC_DIR)), name="assets")
 
 
 class _TextExtractor(HTMLParser):
@@ -13301,10 +13315,16 @@ async def install_agent_sdk(request: Request, req: Optional[AgentSdkInstallReque
         or _agent_sdk_running_sessions
         or _compacting_sessions
         or any(job.status == "running" for job in _agent_loop_jobs.values())
+        or _project_map_service.has_active_runs()
     ):
         raise HTTPException(status_code=409, detail="stop all active Code turns before installing the Agent SDK")
 
     async with _agent_sdk_install_lock:
+        if _project_map_service.has_active_runs():
+            raise HTTPException(
+                status_code=409,
+                detail="wait for the active Project Map generation before installing the Agent SDK",
+            )
         staging: Optional[Path] = None
         backup: Optional[Path] = None
         bridge_stopped = False
@@ -13317,6 +13337,7 @@ async def install_agent_sdk(request: Request, req: Optional[AgentSdkInstallReque
             # the older backup; its current live files become the new rollback
             # source during activate_staging().
             confirm_pending_activation()
+            await _project_map_service.shutdown_analysis_bridge()
             await _claude_agent_bridge.shutdown()
             bridge_stopped = True
             backup = activate_staging(staging)
