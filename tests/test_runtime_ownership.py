@@ -19,6 +19,7 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
         server._agent_sdk_detached_turn_tasks.pop(session_id, None)
         server._agent_sdk_context_usage_cache.pop(session_id, None)
         server._stopped_sessions.discard(session_id)
+        server._plan_waiting_sessions.discard(session_id)
         server._code_validation_processes.pop(session_id, None)
         server._code_validation_stop_requests.discard(session_id)
         server.save_events(session_id, [])
@@ -36,6 +37,24 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
                     await server._chat_response(server.ChatRequest(message="continue", session_id=session_id))
             self.assertEqual(409, raised.exception.status_code)
             self.assertIn("owned by Claude Agent SDK", str(raised.exception.detail))
+            self.assertEqual([], server.load_events(session_id))
+        finally:
+            self._cleanup_session(session_id)
+
+    async def test_existing_session_rejects_cross_mode_takeover_before_appending_events(self):
+        session_id = "runtime-mode-boundary-" + uuid.uuid4().hex
+        server.upsert_session(session_id, "mode boundary", tempfile.gettempdir(), "code")
+        try:
+            with self.assertRaises(HTTPException) as raised:
+                await server._chat_response(
+                    server.ChatRequest(
+                        message="ordinary chat must not take over this Code session",
+                        session_id=session_id,
+                        workspace_mode="chat",
+                    )
+                )
+            self.assertEqual(409, raised.exception.status_code)
+            self.assertIn("session mode mismatch", str(raised.exception.detail))
             self.assertEqual([], server.load_events(session_id))
         finally:
             self._cleanup_session(session_id)
@@ -120,12 +139,39 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
         }
         try:
             with patch.object(server._claude_agent_bridge, "context_usage", AsyncMock()) as context_usage:
-                result = await server.agent_sdk_context_usage(session_id)
+                result = await server.agent_sdk_context_usage(
+                    session_id, None, None, None, None, None
+                )
             self.assertTrue(result["stale"])
             self.assertTrue(result["available"])
             self.assertEqual(1200, result["totalTokens"])
             self.assertEqual(200000, result["maxTokens"])
             context_usage.assert_not_awaited()
+        finally:
+            self._cleanup_session(session_id)
+
+    async def test_context_usage_runtime_race_falls_back_to_cached_stale_value(self):
+        session_id = "runtime-context-race-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/sdk-context-race-project"
+        server.upsert_session(session_id, "context", cwd, "code")
+        server.set_session_runtime_origin(session_id, server._RUNTIME_ORIGIN_AGENT_SDK)
+        server._agent_sdk_context_usage_cache[session_id] = {
+            "totalTokens": 2400,
+            "maxTokens": 200000,
+        }
+        try:
+            with patch.object(
+                server._claude_agent_bridge,
+                "context_usage",
+                AsyncMock(side_effect=server.AgentSdkBridgeError("runtime is active")),
+            ):
+                result = await server.agent_sdk_context_usage(
+                    session_id, None, None, None, None, None
+                )
+            self.assertTrue(result["stale"])
+            self.assertTrue(result["available"])
+            self.assertEqual(2400, result["totalTokens"])
+            self.assertEqual(200000, result["maxTokens"])
         finally:
             self._cleanup_session(session_id)
 
@@ -151,6 +197,41 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
                 if event.get("type") == "error" and event.get("message") == "用户中止"
             ]
             self.assertEqual(1, len(stops))
+        finally:
+            self._cleanup_session(session_id)
+
+    async def test_plan_ready_stop_records_waiting_state_without_user_error(self):
+        session_id = "runtime-plan-ready-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/sdk-plan-ready-project"
+        turn_id = "turn-" + uuid.uuid4().hex
+        server.upsert_session(session_id, "plan", cwd, "code")
+        server.set_session_runtime_origin(session_id, server._RUNTIME_ORIGIN_AGENT_SDK)
+        server.append_event(
+            session_id,
+            {"type": "user_input", "text": "make a plan", "turn_id": turn_id},
+        )
+        server._agent_sdk_running_sessions.add(session_id)
+        try:
+            with patch.object(
+                server._claude_agent_bridge,
+                "interrupt",
+                AsyncMock(return_value={"ok": True}),
+            ) as interrupt:
+                result = await server.stop_chat(session_id, reason="plan_ready")
+            self.assertEqual("plan_ready", result["reason"])
+            interrupt.assert_awaited_once_with(session_id)
+            events = server.load_events(session_id)
+            self.assertFalse(any(event.get("message") == "用户中止" for event in events))
+            plan_events = [
+                event for event in events
+                if event.get("type") == "system" and event.get("subtype") == "plan_ready"
+            ]
+            self.assertEqual(1, len(plan_events))
+            self.assertEqual(turn_id, plan_events[0]["turn_id"])
+
+            server._agent_sdk_running_sessions.discard(session_id)
+            server._stopped_sessions.discard(session_id)
+            self.assertEqual("waiting_plan", server._agent_sdk_turn_state(session_id)["state"])
         finally:
             self._cleanup_session(session_id)
 
@@ -646,6 +727,63 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
             state = server._agent_sdk_turn_state(session_id)
             self.assertEqual("completed", state["state"])
             self.assertEqual("result", state["terminal_event_type"])
+        finally:
+            self._cleanup_session(session_id)
+
+    async def test_plan_wait_suppresses_interrupt_result_and_finishes_as_waiting(self):
+        session_id = "native-plan-wait-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/native-plan-wait-project"
+        turn_id = "turn-" + uuid.uuid4().hex
+        server.upsert_session(session_id, "plan wait", cwd, "code")
+        server.save_events(
+            session_id,
+            [
+                {"type": "user_input", "text": "plan", "turn_id": turn_id},
+                {
+                    "type": "system",
+                    "subtype": "plan_ready",
+                    "message": "计划已就绪，等待审批",
+                    "turn_id": turn_id,
+                },
+            ],
+        )
+        queue = asyncio.Queue()
+        turn = AgentSdkTurn("turn-plan-wait", session_id, queue)
+        await queue.put({
+            "type": "event",
+            "event": {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "error": "User interrupted",
+                "usage": {},
+            },
+        })
+        await queue.put({"type": "done", "success": False, "sessionId": "native-plan-wait"})
+        server._agent_sdk_running_sessions.add(session_id)
+        server._plan_waiting_sessions.add(session_id)
+        response = server._agent_sdk_streaming_response(
+            turn=turn,
+            session_id=session_id,
+            remote_session_id="native-plan-wait",
+            remote_ready=True,
+            work_dir=cwd,
+            display_text="plan",
+            checkpoint=None,
+            git_dirty_before={},
+            workspace_mode="code",
+            turn_id=turn_id,
+        )
+        try:
+            chunks = []
+            async for chunk in response.body_iterator:
+                chunks.append(chunk)
+            payload = "".join(chunks)
+            self.assertNotIn("User interrupted", payload)
+            self.assertIn('"turn_state": "waiting_plan"', payload)
+            events = server.load_events(session_id)
+            self.assertFalse(any(event.get("type") == "result" for event in events))
+            self.assertEqual("waiting_plan", server._agent_sdk_turn_state(session_id)["state"])
         finally:
             self._cleanup_session(session_id)
 

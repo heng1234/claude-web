@@ -569,7 +569,7 @@ function preflightSend(command) {
   const key = String(params.sessionKey || '').trim();
   if (!key) throw new Error('sessionKey is required');
   const runtime = runtimes.get(key);
-  if (runtime?.activeRequestId || runtime?.controlActive) {
+  if (runtime?.activeRequestId) {
     throw new Error('A Code turn is already running for this session');
   }
   if (!runtime && runtimes.size >= MAX_RUNTIMES) {
@@ -618,13 +618,27 @@ async function handleContext(command) {
   const params = command.params || {};
   const key = String(params.sessionKey || '').trim();
   if (!key) throw new Error('sessionKey is required');
-  // Re-run the same signature check as a turn. This matters for context-window
-  // changes (for example a local 200k/1M model selection), which are frozen
-  // when the Claude subprocess is created.
-  const runtime = await runtimeForSend(key, params);
-  await applyDynamicControls(runtime, params);
-  if (typeof runtime.query?.getContextUsage !== 'function') throw new Error('SDK context usage is unavailable');
-  const usage = await runtime.query.getContextUsage();
+  // Context inspection is read-only. Never rebuild or reconfigure an existing
+  // runtime from a stats request: permission/tool changes are owned by explicit
+  // controls and the next turn. Serialize the short SDK call so a queued send
+  // waits for it instead of racing runtime disposal.
+  const { runtime, usage } = await withRuntimeMutation(async () => {
+    let current = runtimes.get(key);
+    if (current?.activeRequestId) {
+      throw new Error('A Code turn is already running for this session');
+    }
+    if (!current) current = await createRuntime(key, params, runtimeSignature(params));
+    if (typeof current.query?.getContextUsage !== 'function') {
+      throw new Error('SDK context usage is unavailable');
+    }
+    current.controlActive = true;
+    try {
+      return { runtime: current, usage: await current.query.getContextUsage() };
+    } finally {
+      current.controlActive = false;
+      current.lastUsed = Date.now();
+    }
+  });
   await write({ id: command.id, type: 'response', ok: true, usage, sessionId: runtime.sessionId });
 }
 

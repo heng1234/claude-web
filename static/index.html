@@ -9411,6 +9411,8 @@ let archivedView = false;
 let cliView = false;
 let milestoneView = false;
 let codeMode = false;
+const LAST_CHAT_SESSION_KEY = 'cw_last_chat_session_v1';
+const LAST_CODE_SESSION_KEY = 'cw_last_code_session_v1';
 let currentCodeRuntime = 'unknown';
 let activeTagFilter = null;
 let sessionListRequestId = 0;
@@ -9448,6 +9450,7 @@ const DEFAULT_HISTORY_TURNS = 40;
 // Token-level streaming state
 const streamingMessages = {}; // msgId -> { container, blocks: { [index]: {type, el, text} } }
 const streamedIds = new Set();
+const renderedTerminalEvents = new Map();
 let lastStreamingMsgId = null;
 let mobileAccessStatus = { local: true, authorized: false, enabled: false };
 let runtimeStatus = { root_or_sudo: false };
@@ -11340,7 +11343,7 @@ function updateToolUseInput(id, inputData) {
     }
     if (!planEntry.runStopped && currentController && planEntry.status !== 'approved') {
       planEntry.runStopped = true;
-      stopCurrentRunForPlan();
+      planEntry.pausePromise = stopCurrentRunForPlan(planEntry);
     }
     return true;
   }
@@ -12528,18 +12531,39 @@ function enterPlanEditMode(toolId) {
   actions.appendChild(confirmBtn);
 }
 
-function applyPlanDecision(toolId, decision, editedPlan) {
+async function applyPlanDecision(toolId, decision, editedPlan) {
   const entry = planCards.get(toolId);
   if (!entry) return;
   if (entry.status === 'approved') return;
 
+  const targetSessionId = sessionId;
+  entry.actionsEl?.querySelectorAll?.('button').forEach(button => { button.disabled = true; });
   try {
-    // Restore the mode that was active before entering plan mode.
-    const targetMode = prePlanPermissionMode || 'acceptEdits';
-    permSelect.value = targetMode;
-    permSelect.dispatchEvent(new Event('change'));
+    if (entry.pausePromise) await entry.pausePromise;
+    if (!targetSessionId || sessionId !== targetSessionId) {
+      throw new Error('计划审批期间切换了会话');
+    }
+  } catch (error) {
+    entry.actionsEl?.querySelectorAll?.('button').forEach(button => { button.disabled = false; });
+    toast('计划暂停未完成：' + (error?.message || error), { timeout: 5200 });
+    return;
+  }
+
+  let targetMode = 'acceptEdits';
+  try {
+    targetMode = prePlanPermissionMode || 'acceptEdits';
+    if (!setPermissionMode(targetMode, { syncRuntime: false })) {
+      throw new Error('无法恢复计划前的运行模式');
+    }
+    if (!await syncNativeRuntimePermissionMode(targetMode)) {
+      throw new Error('SDK 未接受运行模式切换');
+    }
     prePlanPermissionMode = null;
-  } catch {}
+  } catch (error) {
+    entry.actionsEl?.querySelectorAll?.('button').forEach(button => { button.disabled = false; });
+    toast('切换运行模式失败：' + (error?.message || error), { timeout: 5200 });
+    return;
+  }
 
   entry.status = 'approved';
   entry.decision = decision;
@@ -12564,7 +12588,17 @@ function applyPlanDecision(toolId, decision, editedPlan) {
   const msg = decision === 'execute_with_edits'
     ? `已批准计划（含修改），请按以下修订后的方案执行：\n\n${entry.editedPlan || ''}\n`
     : '已批准计划，请按计划继续执行。';
-  setTimeout(() => { try { send(msg); } catch (e) { console.error('send approval failed', e); } }, 0);
+  try {
+    const result = await send(msg);
+    if (!result?.ok) {
+      throw result?.error || new Error(
+        result?.busy ? '上一回合尚未释放，批准消息未启动' : '批准后的执行回合未启动',
+      );
+    }
+  } catch (error) {
+    console.error('send approval failed', error);
+    toast('计划已批准，但执行回合启动失败：' + (error?.message || error), { timeout: 5200 });
+  }
 }
 
 function addToolUseBlock(container, name, inputData, options = {}) {
@@ -12678,6 +12712,7 @@ function addSystemInfo(text) {
   el.className = 'system-info text-center text-xs text-gray-400 py-1';
   el.textContent = text;
   chatInner.appendChild(el);
+  return el;
 }
 
 function addSystemAction(text, actionText, onClick) {
@@ -12695,6 +12730,7 @@ function addSystemAction(text, actionText, onClick) {
     el.appendChild(btn);
   }
   chatInner.appendChild(el);
+  return el;
 }
 
 // ===== token usage =====
@@ -14021,6 +14057,39 @@ function hideThinking(container) {
   }
 }
 
+function terminalEventRenderKey(obj, eventIndex = -1) {
+  const terminalId = String(obj?.turn_id || obj?.event_id || '').trim();
+  if (terminalId) return `${sessionId || 'draft'}:${terminalId}`;
+  if (eventIndex >= 0) return `${sessionId || 'draft'}:event:${eventIndex}`;
+  return '';
+}
+
+function prepareTerminalRender(obj, eventIndex, kind) {
+  const key = terminalEventRenderKey(obj, eventIndex);
+  if (!key) return { key:'', skip:false };
+  let existing = renderedTerminalEvents.get(key);
+  if (existing && (existing.elements || []).length && existing.elements.every(element => !element?.isConnected)) {
+    renderedTerminalEvents.delete(key);
+    existing = null;
+  }
+  if (existing?.kind === 'result' || (existing && kind === 'error')) {
+    return { key, skip:true };
+  }
+  if (existing && kind === 'result') {
+    (existing.elements || []).forEach(element => element?.remove?.());
+    renderedTerminalEvents.delete(key);
+  }
+  return { key, skip:false };
+}
+
+function rememberTerminalRender(key, kind, elements = []) {
+  if (!key) return;
+  renderedTerminalEvents.set(key, { kind, elements: elements.filter(Boolean) });
+  while (renderedTerminalEvents.size > 2000) {
+    renderedTerminalEvents.delete(renderedTerminalEvents.keys().next().value);
+  }
+}
+
 function handleEvent(obj, container, options = {}) {
   const replay = !!options.replay;
   const eventIndex = options.eventIndex ?? -1;
@@ -14033,6 +14102,7 @@ function handleEvent(obj, container, options = {}) {
   if (handleSubagentLifecycleEvent(obj)) return container;
   if (obj.type === 'meta') {
     sessionId = obj.session_id;
+    rememberWorkspaceSession(sessionId, codeMode);
     bindCodeQueueOwnerToSession(sessionId, options.queueOwner || activeCodeQueueOwner);
     if (obj.runtime) currentCodeRuntime = obj.runtime;
     syncNativeCodeControls();
@@ -14067,8 +14137,20 @@ function handleEvent(obj, container, options = {}) {
     if (!replay && maybeScheduleCodePermissionAutoRetry(container, obj)) return container;
     return addPermissionErrorBlock(container, obj);
   }
-  if (obj.type === 'error') { finishPendingToolUses('出错', 'error'); addErrorBlock(obj.message); return container; }
-  if (obj.type === 'done') { finishPendingToolUses('已结束', 'done'); return container; }
+  if (obj.type === 'error') {
+    const terminal = prepareTerminalRender(obj, eventIndex, 'error');
+    if (terminal.skip) return container;
+    hideThinking(container);
+    finishPendingToolUses('出错', 'error');
+    const errorEl = addErrorBlock(obj.message);
+    rememberTerminalRender(terminal.key, 'error', [errorEl]);
+    return container;
+  }
+  if (obj.type === 'done') {
+    hideThinking(container);
+    finishPendingToolUses(obj.turn_state === 'waiting_plan' ? '等待审批' : '已结束', 'done');
+    return container;
+  }
   if (obj.type === 'raw') { addSystemInfo(obj.text); return container; }
   if (obj.type === 'system' && obj.subtype === 'init') {
     return container;
@@ -14083,6 +14165,11 @@ function handleEvent(obj, container, options = {}) {
     if (!replay && (before > 0 || after > 0)) {
       addSystemInfo(`Claude Code 原生压缩 · ${_fmtTokens(before)} → ${_fmtTokens(after)}`);
     }
+    return container;
+  }
+  if (obj.type === 'system' && obj.subtype === 'plan_ready') {
+    hideThinking(container);
+    finishPendingToolUses('等待审批', 'done');
     return container;
   }
   if (obj.type === 'system' && (obj.subtype === 'hook_started' || obj.subtype === 'hook_response' || obj.subtype === 'status')) {
@@ -14152,11 +14239,14 @@ function handleEvent(obj, container, options = {}) {
     return container;
   }
   if (obj.type === 'result') {
+    const terminal = prepareTerminalRender(obj, eventIndex, 'result');
+    if (terminal.skip) return container;
+    hideThinking(container);
     const cost = obj.total_cost_usd !== undefined ? ` · $${obj.total_cost_usd.toFixed(4)}` : '';
     const dur = obj.duration_ms !== undefined ? ` · ${(obj.duration_ms/1000).toFixed(1)}s` : '';
     const tokens = formatTurnUsage(obj.usage);
     const tokensSuffix = tokens ? ` · ${tokens}` : '';
-    addSystemInfo(`完成${dur}${cost}${tokensSuffix}`);
+    const resultInfoEl = addSystemInfo(`完成${dur}${cost}${tokensSuffix}`);
     accumulateSessionTokens(obj.usage, obj.modelUsage);
     updateTokenCount();
     if (!replay) scheduleNativeContextUsageRefresh();
@@ -14183,9 +14273,11 @@ function handleEvent(obj, container, options = {}) {
       };
       hideThinking(container);
       finishPendingToolUses('权限被拒绝', 'error');
+      rememberTerminalRender(terminal.key, 'result', [resultInfoEl]);
       if (!replay && maybeScheduleCodePermissionAutoRetry(container, info)) return container;
       return addPermissionErrorBlock(container, info);
     }
+    rememberTerminalRender(terminal.key, 'result', [resultInfoEl]);
     finishPendingToolUses('已结束', 'done');
     return container;
   }
@@ -16584,15 +16676,47 @@ if (agentLoopBtn) agentLoopBtn.addEventListener('click', openAgentLoopModal);
 if (agentLoopStartBtn) agentLoopStartBtn.addEventListener('click', runAgentLoop);
 if (agentLoopStopBtn) agentLoopStopBtn.addEventListener('click', stopAgentLoop);
 
-// Auto-stop the running stream when a plan card is filled in.
-// In headless mode there's no CLI approval prompt — without this the agent
-// would receive an error tool_result and re-call ExitPlanMode in a loop.
-function stopCurrentRunForPlan() {
-  if (!currentController) return;
+async function waitForPlanRuntimeIdle(targetSessionId, timeoutMs = 12000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/permissions/pending`);
+    if (response.ok) {
+      const data = await response.json();
+      const state = String(data.turn_state || '');
+      if (!data.running && !['running', 'stopping'].includes(state)) return data;
+    }
+    await new Promise(resolve => setTimeout(resolve, 120));
+  }
+  throw new Error('等待计划回合释放超时');
+}
+
+async function waitForPlanClientIdle(targetSessionId, timeoutMs = 3000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!currentController) return;
+    if (sessionId !== targetSessionId) throw new Error('计划暂停期间切换了会话');
+    await new Promise(resolve => setTimeout(resolve, 40));
+  }
+  throw new Error('浏览器仍在收尾上一回合');
+}
+
+// ExitPlanMode is an intentional wait state, not a user cancellation. Keep the
+// browser stream attached, interrupt the headless SDK turn with an explicit
+// reason, and do not start the approval turn until runtime ownership is idle.
+async function stopCurrentRunForPlan(entry = null) {
   const sid = sessionId;
-  if (sid) { fetch('/api/chat/stop/' + sid, { method: 'POST' }).catch(() => {}); }
-  try { currentController.abort(); } catch {}
+  if (!currentController || !sid) return null;
   try { toast('计划已就绪 · 已暂停运行，等待你审批'); } catch {}
+  const response = await fetch(
+    `/api/chat/stop/${encodeURIComponent(sid)}?reason=plan_ready`,
+    { method: 'POST' },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+  const state = await waitForPlanRuntimeIdle(sid);
+  await waitForPlanClientIdle(sid);
+  if (entry) entry.planPauseState = state;
+  return state;
 }
 
 form.addEventListener('submit', async (e) => {
@@ -16682,6 +16806,34 @@ newSessionBtn.addEventListener('click', () => {
   startNewSession();
   closeMobileSidebar();
 });
+
+function workspaceSessionStorageKey(isCode = codeMode) {
+  return isCode ? LAST_CODE_SESSION_KEY : LAST_CHAT_SESSION_KEY;
+}
+
+function rememberWorkspaceSession(targetSessionId = sessionId, isCode = codeMode) {
+  const value = String(targetSessionId || '').trim();
+  if (value) LS.set(workspaceSessionStorageKey(isCode), value);
+}
+
+function switchConversationWorkspaceMode(nextCodeMode) {
+  const nextCode = !!nextCodeMode;
+  if (nextCode === codeMode) {
+    setCodeMode(nextCode);
+    return;
+  }
+  rememberWorkspaceSession(sessionId, codeMode);
+  setCodeMode(nextCode);
+  const targetSessionId = String(LS.get(workspaceSessionStorageKey(nextCode), '') || '').trim();
+  startNewSession();
+  if (targetSessionId) {
+    loadSession(targetSessionId, { expectedWorkspaceMode: nextCode ? 'code' : 'chat' })
+      .then(loaded => {
+        if (!loaded && sessionId === targetSessionId) startNewSession();
+      })
+      .catch(() => {});
+  }
+}
 
 function startNewSession() {
   stopNativeTurnRecovery();
@@ -17240,9 +17392,16 @@ async function loadSession(id, options = {}) {
     hidePicker();
     const historyQuery = historyTurns ? `?history_turns=${historyTurns}` : '';
     const r = await fetch('/api/sessions/' + id + historyQuery);
-    if (!r.ok) return;
+    if (!r.ok) return false;
     const data = await r.json();
+    const loadedWorkspaceMode = data.workspace_mode === 'code' ? 'code' : 'chat';
+    const expectedWorkspaceMode = options.expectedWorkspaceMode || (codeMode ? 'code' : 'chat');
+    if (loadedWorkspaceMode !== expectedWorkspaceMode) {
+      console.warn(`refusing cross-mode session load: expected ${expectedWorkspaceMode}, got ${loadedWorkspaceMode}`);
+      return false;
+    }
     sessionId = data.id;
+    rememberWorkspaceSession(data.id, loadedWorkspaceMode === 'code');
     if (codeMode && codeInspectorState.sessionId && codeInspectorState.sessionId !== data.id) resetCodeInspector();
     codeInspectorState.sessionId = data.id;
     activateCodeQueueForSession(data.id);
@@ -17319,7 +17478,11 @@ async function loadSession(id, options = {}) {
       scheduleNativeContextUsageRefresh(0);
       startNativeTurnRecovery(data.id, Number(data.total_event_count ?? data.events.length), asstContainer);
     }
-  } catch (e) { console.warn(e); }
+    return true;
+  } catch (e) {
+    console.warn(e);
+    return false;
+  }
 }
 
 // ===== inline rename (double-click title) =====
@@ -19936,16 +20099,19 @@ async function syncNativeRuntimeModel() {
 }
 
 async function syncNativeRuntimePermissionMode(mode) {
-  if (!codeMode || !sessionId) return;
+  if (!codeMode || !sessionId) return true;
   try {
     const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/runtime/permission-mode`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ permission_mode: mode }),
     });
-    if (!response.ok && response.status !== 409) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    return true;
   } catch (error) {
     console.warn('native setPermissionMode failed', error);
+    return false;
   }
 }
 
@@ -20183,7 +20349,7 @@ function renderPermissionModeMenu() {
   renderCodeAutoApproveControl();
 }
 
-function setPermissionMode(value) {
+function setPermissionMode(value, options = {}) {
   const mode = normalizePermissionMode(value);
   if (isRootUnsafePermissionMode(mode)) {
     toast(rootUnsafePermissionMessage(), { timeout: 5200 });
@@ -20200,7 +20366,7 @@ function setPermissionMode(value) {
   if (cwProjectPermSelect) cwProjectPermSelect.value = mode;
   renderPermissionModeMenu();
   updateWorkspaceLabels();
-  syncNativeRuntimePermissionMode(mode);
+  if (options.syncRuntime !== false) syncNativeRuntimePermissionMode(mode);
   return true;
 }
 
@@ -22308,14 +22474,13 @@ function activateShellView(view) {
       toast('手机问答模式不能导入 CLI 会话');
       return;
     }
-    codeMode = false;
+    switchConversationWorkspaceMode(false);
     archivedView = false;
     milestoneView = false;
     cliView = true;
     cliVisibleCount = 10;
     if (searchInput) searchInput.value = '';
     hideSearchFieldIfEmpty();
-    setCodeMode(false);
     updateShellNav('cli');
     updateViewTabs();
     renderCliSessionList();
@@ -22329,7 +22494,7 @@ function activateShellView(view) {
     milestoneView = false;
     if (searchInput) searchInput.value = '';
     hideSearchFieldIfEmpty();
-    setCodeMode(true);
+    switchConversationWorkspaceMode(true);
     updateViewTabs();
     refreshTags();
     refreshSessions();
@@ -22338,13 +22503,12 @@ function activateShellView(view) {
     return;
   }
   if (view === 'records') {
-    codeMode = false;
+    switchConversationWorkspaceMode(false);
     archivedView = true;
     cliView = false;
     milestoneView = false;
     if (searchInput) searchInput.value = '';
     hideSearchFieldIfEmpty();
-    setCodeMode(false);
     updateShellNav('records');
     updateViewTabs();
     refreshTags();
@@ -22362,13 +22526,12 @@ function activateShellView(view) {
     syncEmptyShellState();
     return;
   }
-  codeMode = false;
   archivedView = false;
   cliView = false;
   milestoneView = false;
   if (searchInput) searchInput.value = '';
   hideSearchFieldIfEmpty();
-  setCodeMode(false);
+  switchConversationWorkspaceMode(false);
   updateViewTabs();
   refreshTags();
   refreshSessions();
@@ -22391,7 +22554,7 @@ if (chatInner && window.MutationObserver) {
 }
 
 headerMoreBtn.addEventListener('click', () => {
-  setCodeMode(true);
+  switchConversationWorkspaceMode(true);
   setProjectManagerOpen(cwProjectManagerPanel?.classList.contains('hidden'));
 });
 
@@ -22435,19 +22598,7 @@ sessionItems?.addEventListener('click', (e) => {
   toggleSessionActionMenu(btn, sessionItems);
 }, true);
 
-cwChatNav?.addEventListener('click', () => {
-  codeMode = false;
-  archivedView = false;
-  cliView = false;
-  milestoneView = false;
-  searchInput.value = '';
-  hideSearchFieldIfEmpty();
-  setCodeMode(false);
-  updateViewTabs();
-  refreshTags();
-  refreshSessions();
-  closeMobileSidebar();
-});
+cwChatNav?.addEventListener('click', () => activateShellView('chat'));
 
 cwSearchNav?.addEventListener('click', () => {
   showSearchField();
@@ -22457,69 +22608,37 @@ cwSearchNav?.addEventListener('click', () => {
   closeMobileSidebar();
 });
 
-cwRecordsNav?.addEventListener('click', () => {
-  codeMode = false;
-  archivedView = true;
-  cliView = false;
-  milestoneView = false;
-  searchInput.value = '';
-  hideSearchFieldIfEmpty();
-  setCodeMode(false);
-  updateShellNav('records');
-  updateViewTabs();
-  refreshTags();
-  refreshSessions();
-  closeMobileSidebar();
-});
+cwRecordsNav?.addEventListener('click', () => activateShellView('records'));
 
-cwCodeNav?.addEventListener('click', () => {
-  archivedView = false;
-  cliView = false;
-  milestoneView = false;
-  searchInput.value = '';
-  hideSearchFieldIfEmpty();
-  setCodeMode(true);
-  updateViewTabs();
-  refreshTags();
-  refreshSessions();
-  closeMobileSidebar();
-});
+cwCodeNav?.addEventListener('click', () => activateShellView('code'));
 
 sessionMoreBtn?.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
-  archivedView = true;
-  cliView = false;
-  milestoneView = false;
-  codeMode = false;
-  setCodeMode(false);
-  updateShellNav('records');
-  updateViewTabs();
-  refreshTags();
-  refreshSessions();
+  activateShellView('records');
 });
 
 cwWorkspaceProjectBtn?.addEventListener('click', () => {
-  setCodeMode(true);
+  switchConversationWorkspaceMode(true);
   setProjectManagerOpen(true, 'project');
 });
 
 cwWorkspacePermBtn?.addEventListener('click', () => {
-  setCodeMode(true);
+  switchConversationWorkspaceMode(true);
   setProjectManagerOpen(true, 'permission');
 });
 
 cwComposerContextBtn?.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
-  setCodeMode(true);
+  switchConversationWorkspaceMode(true);
   setComposerContextMenuOpen(cwComposerContextMenu?.classList.contains('hidden'));
 });
 
 cwComposerContextBtn?.addEventListener('keydown', (e) => {
   if (!['ArrowDown', 'Enter', ' '].includes(e.key)) return;
   e.preventDefault();
-  setCodeMode(true);
+  switchConversationWorkspaceMode(true);
   setComposerContextMenuOpen(true, { focusFirst: true });
 });
 
@@ -22531,19 +22650,19 @@ cwComposerContextMenu?.addEventListener('keydown', (e) => {
 });
 
 cwComposerProjectBtn?.addEventListener('click', () => {
-  setCodeMode(true);
+  switchConversationWorkspaceMode(true);
   setProjectManagerOpen(true, 'project');
 });
 
 cwComposerBranchBtn?.addEventListener('click', () => {
-  setCodeMode(true);
+  switchConversationWorkspaceMode(true);
   setBranchPanelOpen(cwBranchPanel?.classList.contains('hidden'));
 });
 
 cwComposerPermBtn?.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
-  setCodeMode(true);
+  switchConversationWorkspaceMode(true);
   setPermissionModeMenuOpen(cwPermissionModeMenu?.classList.contains('hidden'));
 });
 
@@ -22655,7 +22774,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 cwWorkspaceTaskBtn?.addEventListener('click', () => {
-  setCodeMode(true);
+  switchConversationWorkspaceMode(true);
   openWorkspaceActivity('tasks', cwWorkspaceTaskBtn);
 });
 

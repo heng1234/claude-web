@@ -158,6 +158,7 @@ _agent_sdk_context_usage_cache: Dict[str, dict] = {}
 _agent_sdk_install_lock = asyncio.Lock()
 _claude_cli_chrome_flag_support: Dict[Tuple[str, ...], bool] = {}
 _stopped_sessions: Set[str] = set()
+_plan_waiting_sessions: Set[str] = set()
 # Processes we terminated on purpose (duplicate-request replacement or stop).
 # Keyed by the process object itself, not session_id, so that a session whose
 # old process is being replaced can't have its "intentionally killed" marker
@@ -467,6 +468,11 @@ def _agent_sdk_turn_state(session_id: str, events: Optional[List[dict]] = None) 
             terminal_type = "result"
             terminal_event = event
             break
+        if event_type == "system" and str(event.get("subtype") or "") == "plan_ready":
+            terminal_index = index
+            terminal_type = "plan_ready"
+            terminal_event = event
+            break
         if event_type in {"error", "permission_error"}:
             terminal_index = index
             terminal_type = event_type
@@ -478,6 +484,8 @@ def _agent_sdk_turn_state(session_id: str, events: Optional[List[dict]] = None) 
     elif terminal_type == "result":
         subtype = str((terminal_event or {}).get("subtype") or "").lower()
         state = "failed" if (terminal_event or {}).get("is_error") is True or subtype.startswith("error_") else "completed"
+    elif terminal_type == "plan_ready":
+        state = "waiting_plan"
     elif terminal_type:
         message = str((terminal_event or {}).get("message") or "").lower()
         state = "stopped" if "用户中止" in message or "user interrupt" in message else "failed"
@@ -492,6 +500,13 @@ def _agent_sdk_turn_state(session_id: str, events: Optional[List[dict]] = None) 
         "terminal_event_index": terminal_index,
         "terminal_event_type": terminal_type or None,
     }
+
+
+def _latest_session_turn_id(session_id: str) -> str:
+    for event in reversed(load_events(session_id)):
+        if event.get("type") == "user_input":
+            return str(event.get("turn_id") or "").strip()
+    return ""
 
 
 def _session_agent_loop_busy(session_id: str) -> bool:
@@ -512,6 +527,9 @@ def _session_control_busy(session_id: str) -> bool:
 
 async def _discard_session_runtime(session_id: str) -> None:
     """Detach both legacy CLI and native SDK runtimes for a local session."""
+    _agent_sdk_running_sessions.discard(session_id)
+    _stopped_sessions.discard(session_id)
+    _plan_waiting_sessions.discard(session_id)
     await _discard_warm_session(session_id)
     if not _claude_agent_bridge.running:
         return
@@ -1374,6 +1392,8 @@ def record_tool_calls(session_id: str, event: dict) -> None:
 
 
 def append_event(session_id: str, event: dict) -> None:
+    if not str(event.get("event_id") or "").strip():
+        event["event_id"] = uuid.uuid4().hex
     path = HISTORY_DIR / f"{session_id}.jsonl"
     with session_event_lock(session_id):
         with path.open("a", encoding="utf-8") as f:
@@ -6145,6 +6165,7 @@ async def _drain_detached_agent_sdk_turn(
     checkpoint: Optional[dict],
     git_dirty_before: Dict[str, str],
     workspace_mode: Optional[str],
+    turn_id: str,
     code_write_intent_seen: bool,
     code_write_targets: Set[str],
     saw_top_level_result: bool = False,
@@ -6171,6 +6192,7 @@ async def _drain_detached_agent_sdk_turn(
                 bridge_error = str(envelope.get("message") or "Claude Agent SDK failed")
                 reported_api_error = bridge_error
                 err_event = classify_claude_error(bridge_error)
+                err_event["turn_id"] = turn_id
                 append_event(session_id, err_event)
                 _notification_send_chat_error(session_id, work_dir, err_event)
                 continue
@@ -6191,6 +6213,14 @@ async def _drain_detached_agent_sdk_turn(
             discovered = str(obj.get("session_id") or obj.get("sessionId") or "").strip()
             if discovered:
                 native_remote_id = discovered
+            if (
+                event_type == "result"
+                and not obj.get("parent_tool_use_id")
+                and session_id in _plan_waiting_sessions
+            ):
+                continue
+            if event_type in {"result", "error", "permission_error"}:
+                obj.setdefault("turn_id", turn_id)
             content = (obj.get("message") or {}).get("content") or []
             is_tool_result_event = (
                 event_type == "user"
@@ -6240,30 +6270,34 @@ async def _drain_detached_agent_sdk_turn(
             and not saw_top_level_result
             and not saw_terminal_error
             and session_id not in _stopped_sessions
+            and session_id not in _plan_waiting_sessions
         ):
             err_event = classify_claude_error(
                 "Claude Agent SDK runtime ended before returning a final result"
             )
+            err_event["turn_id"] = turn_id
             append_event(session_id, err_event)
             _notification_send_chat_error(session_id, work_dir, err_event)
         if (
             saw_terminal_error
             and _recoverable_agent_sdk_transport_error(reported_api_error)
             and native_remote_id
+            and session_id not in _plan_waiting_sessions
         ):
             await _auto_reconnect_agent_sdk_session(
                 session_id,
                 native_remote_id,
                 reconnect_params or {},
             )
-        activation_state = await _settle_pending_agent_sdk_activation(
-            success=saw_top_level_result and not saw_terminal_error,
-            error=reported_api_error,
-            session_id=session_id,
-        )
-        activation_event = _agent_sdk_activation_status_event(activation_state)
-        if activation_event is not None:
-            append_event(session_id, activation_event)
+        if session_id not in _plan_waiting_sessions:
+            activation_state = await _settle_pending_agent_sdk_activation(
+                success=saw_top_level_result and not saw_terminal_error,
+                error=reported_api_error,
+                session_id=session_id,
+            )
+            activation_event = _agent_sdk_activation_status_event(activation_state)
+            if activation_event is not None:
+                append_event(session_id, activation_event)
     except asyncio.CancelledError:
         await _claude_agent_bridge.abandon_turn(turn)
         raise
@@ -6272,19 +6306,22 @@ async def _drain_detached_agent_sdk_turn(
         reported_api_error = str(exc)
         if session_id not in _stopped_sessions:
             err_event = classify_claude_error(str(exc))
+            err_event["turn_id"] = turn_id
             append_event(session_id, err_event)
             _notification_send_chat_error(session_id, work_dir, err_event)
-        activation_state = await _settle_pending_agent_sdk_activation(
-            success=False,
-            error=reported_api_error,
-            session_id=session_id,
-        )
-        activation_event = _agent_sdk_activation_status_event(activation_state)
-        if activation_event is not None:
-            append_event(session_id, activation_event)
+        if session_id not in _plan_waiting_sessions:
+            activation_state = await _settle_pending_agent_sdk_activation(
+                success=False,
+                error=reported_api_error,
+                session_id=session_id,
+            )
+            activation_event = _agent_sdk_activation_status_event(activation_state)
+            if activation_event is not None:
+                append_event(session_id, activation_event)
     finally:
         _agent_sdk_running_sessions.discard(session_id)
         _stopped_sessions.discard(session_id)
+        _plan_waiting_sessions.discard(session_id)
         _agent_sdk_detached_turn_tasks.pop(session_id, None)
         upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode)
         if remote_became_ready and native_remote_id:
@@ -6302,6 +6339,7 @@ def _agent_sdk_streaming_response(
     checkpoint: Optional[dict],
     git_dirty_before: Dict[str, str],
     workspace_mode: Optional[str],
+    turn_id: str = "",
     reconnect_params: Optional[dict] = None,
 ) -> StreamingResponse:
     """Forward native SDK messages through the existing SSE/history contract."""
@@ -6317,12 +6355,14 @@ def _agent_sdk_streaming_response(
         reported_api_error = ""
         daemon_done = False
         stopped_before_cleanup = False
+        plan_waiting_before_cleanup = False
         auto_reconnect_failed = False
         _stopped_sessions.discard(session_id)
         sdk_version = (_claude_agent_bridge.sdk_info or {}).get("version")
         meta = {
             "type": "meta",
             "session_id": session_id,
+            "turn_id": turn_id,
             "cwd": work_dir,
             "has_checkpoint": checkpoint is not None,
             "runtime": "claude_agent_sdk",
@@ -6346,6 +6386,7 @@ def _agent_sdk_streaming_response(
                     bridge_error = str(envelope.get("message") or "Claude Agent SDK failed")
                     reported_api_error = bridge_error
                     err_event = classify_claude_error(bridge_error)
+                    err_event["turn_id"] = turn_id
                     append_event(session_id, err_event)
                     _notification_send_chat_error(session_id, work_dir, err_event)
                     yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
@@ -6387,6 +6428,14 @@ def _agent_sdk_streaming_response(
                 discovered = str(obj.get("session_id") or obj.get("sessionId") or "").strip()
                 if discovered:
                     native_remote_id = discovered
+                if (
+                    event_type == "result"
+                    and not obj.get("parent_tool_use_id")
+                    and session_id in _plan_waiting_sessions
+                ):
+                    continue
+                if event_type in {"result", "error", "permission_error"}:
+                    obj.setdefault("turn_id", turn_id)
 
                 # Native resume can replay user messages. Keep tool results, but
                 # do not duplicate plain user bubbles already stored by FastAPI.
@@ -6444,11 +6493,13 @@ def _agent_sdk_streaming_response(
                 and not saw_top_level_result
                 and not saw_terminal_error
                 and session_id not in _stopped_sessions
+                and session_id not in _plan_waiting_sessions
             ):
                 saw_terminal_error = True
                 err_event = classify_claude_error(
                     "Claude Agent SDK runtime ended before returning a final result"
                 )
+                err_event["turn_id"] = turn_id
                 append_event(session_id, err_event)
                 _notification_send_chat_error(session_id, work_dir, err_event)
                 yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
@@ -6465,6 +6516,7 @@ def _agent_sdk_streaming_response(
                     checkpoint=checkpoint,
                     git_dirty_before=git_dirty_before,
                     workspace_mode=workspace_mode,
+                    turn_id=turn_id,
                     code_write_intent_seen=code_write_intent_seen,
                     code_write_targets=set(code_write_targets),
                     saw_top_level_result=saw_top_level_result,
@@ -6480,14 +6532,17 @@ def _agent_sdk_streaming_response(
             reported_api_error = str(exc)
             if session_id not in _stopped_sessions:
                 err_event = classify_claude_error(str(exc))
+                err_event["turn_id"] = turn_id
                 append_event(session_id, err_event)
                 _notification_send_chat_error(session_id, work_dir, err_event)
                 yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
         finally:
             if not detached:
                 stopped_before_cleanup = session_id in _stopped_sessions
+                plan_waiting_before_cleanup = session_id in _plan_waiting_sessions
                 _agent_sdk_running_sessions.discard(session_id)
                 _stopped_sessions.discard(session_id)
+                _plan_waiting_sessions.discard(session_id)
                 upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode)
                 if remote_became_ready and native_remote_id:
                     set_session_remote_state(session_id, native_remote_id, True)
@@ -6497,6 +6552,7 @@ def _agent_sdk_streaming_response(
             and saw_terminal_error
             and _recoverable_agent_sdk_transport_error(reported_api_error)
             and native_remote_id
+            and not plan_waiting_before_cleanup
         ):
             status_events: asyncio.Queue = asyncio.Queue()
 
@@ -6537,21 +6593,26 @@ def _agent_sdk_streaming_response(
             reconnected, _ = await reconnect_task
             auto_reconnect_failed = not reconnected
 
-        activation_state = await _settle_pending_agent_sdk_activation(
-            success=saw_top_level_result and not saw_terminal_error,
-            error=reported_api_error,
-            session_id=session_id,
-        )
-        activation_event = _agent_sdk_activation_status_event(activation_state)
-        if activation_event is not None:
-            append_event(session_id, activation_event)
-            yield f"data: {json.dumps(activation_event, ensure_ascii=False)}\n\n"
+        if not plan_waiting_before_cleanup:
+            activation_state = await _settle_pending_agent_sdk_activation(
+                success=saw_top_level_result and not saw_terminal_error,
+                error=reported_api_error,
+                session_id=session_id,
+            )
+            activation_event = _agent_sdk_activation_status_event(activation_state)
+            if activation_event is not None:
+                append_event(session_id, activation_event)
+                yield f"data: {json.dumps(activation_event, ensure_ascii=False)}\n\n"
 
-        terminal_state = (
-            "completed" if saw_top_level_result and not saw_terminal_error
-            else ("stopped" if stopped_before_cleanup else "failed")
-        )
-        yield f"data: {json.dumps({'type': 'done', 'success': terminal_state == 'completed', 'turn_state': terminal_state, 'auto_reconnect_failed': auto_reconnect_failed})}\n\n"
+        if plan_waiting_before_cleanup:
+            terminal_state = "waiting_plan"
+        elif saw_top_level_result and not saw_terminal_error:
+            terminal_state = "completed"
+        elif stopped_before_cleanup:
+            terminal_state = "stopped"
+        else:
+            terminal_state = "failed"
+        yield f"data: {json.dumps({'type': 'done', 'turn_id': turn_id, 'success': terminal_state == 'completed', 'turn_state': terminal_state, 'auto_reconnect_failed': auto_reconnect_failed})}\n\n"
 
     return StreamingResponse(
         generate(),
@@ -6608,6 +6669,29 @@ def _release_code_turn(session_id: str, turn_id: str) -> None:
 
 async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     session_id = req.session_id or str(uuid.uuid4())
+    with db_connect() as conn:
+        row = conn.execute(
+            """
+            SELECT cwd, remote_session_id, remote_ready, runtime_origin, workspace_mode,
+                   native_user_offset, browser_enabled
+            FROM sessions WHERE id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+    requested_workspace_mode = (req.workspace_mode or "").strip().lower()
+    stored_workspace_mode = ((row["workspace_mode"] or "chat").strip().lower() if row else "chat")
+    if (
+        row is not None
+        and requested_workspace_mode in {"chat", "code"}
+        and requested_workspace_mode != stored_workspace_mode
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"session mode mismatch: this is a {stored_workspace_mode} session; "
+                f"start or restore a {requested_workspace_mode} session instead"
+            ),
+        )
     if _session_runtime_busy(session_id) or session_id in _compacting_sessions:
         if session_id in _agent_sdk_running_sessions:
             task = _agent_sdk_detached_turn_tasks.get(session_id)
@@ -6620,22 +6704,14 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             if process.returncode is not None:
                 _running_processes.pop(session_id, None)
         if _session_runtime_busy(session_id) or session_id in _compacting_sessions:
+            busy_mode_label = "Code" if stored_workspace_mode == "code" else "普通聊天"
             raise HTTPException(
                 status_code=409,
-                detail="当前 Code 会话仍有回合在后台运行，请等待完成或先停止当前回合",
+                detail=f"当前{busy_mode_label}会话仍有回合在后台运行，请等待完成或先停止当前回合",
             )
     if not agent_loop_owner and _session_agent_loop_busy(session_id):
         raise HTTPException(status_code=409, detail="session is owned by a running Agent Loop")
     existing_events = load_events(session_id) if req.session_id else []
-    with db_connect() as conn:
-        row = conn.execute(
-            """
-            SELECT cwd, remote_session_id, remote_ready, runtime_origin, workspace_mode,
-                   native_user_offset, browser_enabled
-            FROM sessions WHERE id = ?
-            """,
-            (session_id,),
-        ).fetchone()
 
     runtime_origin = normalize_runtime_origin(row["runtime_origin"] if row else "")
     remote_session_id, remote_ready = resolve_remote_session_state(session_id, row, existing_events)
@@ -6651,8 +6727,6 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
 
     is_new = not remote_ready
     work_dir = req.cwd or (row["cwd"] if row and row["cwd"] else os.path.expanduser("~"))
-    requested_workspace_mode = (req.workspace_mode or "").strip().lower()
-    stored_workspace_mode = ((row["workspace_mode"] or "chat").strip().lower() if row else "chat")
     workspace_mode = requested_workspace_mode or stored_workspace_mode
     if workspace_mode not in {"chat", "code"}:
         workspace_mode = "chat"
@@ -6700,8 +6774,10 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     checkpoint = await create_git_checkpoint(work_dir)
     git_dirty_before = await git_dirty_signatures(work_dir) if code_workspace else {}
 
+    turn_id = uuid.uuid4().hex
     user_event = {
         "type": "user_input",
+        "turn_id": turn_id,
         "text": display_text,
         "images": req.images or [],
         "docs": req.docs or [],
@@ -6792,6 +6868,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             append_event(session_id, user_event)
             _mark_code_turn_accepted(session_id, reserved_turn_id)
             set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
+            _plan_waiting_sessions.discard(session_id)
             _agent_sdk_running_sessions.add(session_id)
             return _agent_sdk_streaming_response(
                 turn=turn,
@@ -6803,6 +6880,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 checkpoint=checkpoint,
                 git_dirty_before=git_dirty_before,
                 workspace_mode=workspace_mode,
+                turn_id=turn_id,
                 reconnect_params=agent_params,
             )
         # An explicit CLAUDE_WEB_CODE_RUNTIME=cli setting may select the legacy
@@ -6834,6 +6912,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
         meta = {
             "type": "meta",
             "session_id": session_id,
+            "turn_id": turn_id,
             "cwd": work_dir,
             "has_checkpoint": checkpoint is not None,
             "runtime": "claude_cli",
@@ -6892,6 +6971,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 )
             except ClaudeCliResolutionError as e:
                 err_event = {"type": "error", "message": str(e)}
+                err_event["turn_id"] = turn_id
                 append_event(session_id, err_event)
                 yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
                 return
@@ -6906,6 +6986,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 )
             except FileNotFoundError:
                 err_event = {"type": "error", "message": "claude CLI not found in PATH"}
+                err_event["turn_id"] = turn_id
                 append_event(session_id, err_event)
                 _notification_send_chat_error(session_id, work_dir, err_event)
                 yield f"data: {json.dumps(err_event)}\n\n"
@@ -6940,6 +7021,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                     raw = await process.stdout.readline()
                 except ValueError as e:
                     err_event = {"type": "error", "message": f"stdout line too large: {e}"}
+                    err_event["turn_id"] = turn_id
                     append_event(session_id, err_event)
                     _notification_send_chat_error(session_id, work_dir, err_event)
                     yield f"data: {json.dumps(err_event)}\n\n"
@@ -6955,6 +7037,15 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 except json.JSONDecodeError:
                     obj = {"type": "raw", "text": line}
                 t = obj.get("type")
+                if (
+                    t == "result"
+                    and not obj.get("parent_tool_use_id")
+                    and session_id in _plan_waiting_sessions
+                ):
+                    turn_ended = True
+                    break
+                if t in {"result", "error", "permission_error"}:
+                    obj.setdefault("turn_id", turn_id)
 
                 # --replay-user-messages echoes our stdin message back as a
                 # plain user event. Keep tool_result user events; the UI and
@@ -7011,10 +7102,12 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 if rc != 0 and not stopped_by_user:
                     err_text = bytes(stderr_buffer).decode("utf-8", errors="replace")
                     err_event = classify_claude_error(err_text or f"claude exited with code {rc}")
+                    err_event["turn_id"] = turn_id
                     append_event(session_id, err_event)
                     _notification_send_chat_error(session_id, work_dir, err_event)
                     yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
         finally:
+            plan_waiting_before_cleanup = session_id in _plan_waiting_sessions
             if stderr_task is not None and not stderr_task.done():
                 stderr_task.cancel()
                 try:
@@ -7050,6 +7143,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             # cleared it (discard is a no-op).  Keeping it inside the identity
             # guard would permanently poison the session on concurrent requests.
             _stopped_sessions.discard(session_id)
+            _plan_waiting_sessions.discard(session_id)
             if _running_write_locks.get(session_id) is write_lock:
                 _running_write_locks.pop(session_id, None)
             _terminated_processes.discard(process)
@@ -7057,7 +7151,8 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode)
             if remote_became_ready:
                 set_session_remote_state(session_id, remote_session_id, True)
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        terminal_state = "waiting_plan" if plan_waiting_before_cleanup else ("completed" if turn_ended else "failed")
+        yield f"data: {json.dumps({'type': 'done', 'turn_id': turn_id, 'success': terminal_state == 'completed', 'turn_state': terminal_state})}\n\n"
 
     return StreamingResponse(
         generate(),
@@ -7685,7 +7780,10 @@ async def stop_agent_loop(job_id: str):
 
 
 @app.post("/api/chat/stop/{session_id}")
-async def stop_chat(session_id: str):
+async def stop_chat(session_id: str, reason: Optional[str] = Query(default=None)):
+    stop_reason = str(reason or "").strip().lower()
+    plan_ready = stop_reason == "plan_ready"
+    turn_id = _latest_session_turn_id(session_id)
     if session_id in _code_validation_processes:
         _code_validation_stop_requests.add(session_id)
         process = _code_validation_processes.get(session_id)
@@ -7697,8 +7795,15 @@ async def stop_chat(session_id: str):
         return {"ok": True, "runtime": "code_validation"}
     if session_id in _agent_sdk_running_sessions:
         if session_id in _stopped_sessions:
-            return {"ok": True, "runtime": "claude_agent_sdk", "already_stopping": True}
+            return {
+                "ok": True,
+                "runtime": "claude_agent_sdk",
+                "already_stopping": True,
+                "reason": "plan_ready" if session_id in _plan_waiting_sessions else "user",
+            }
         _stopped_sessions.add(session_id)
+        if plan_ready:
+            _plan_waiting_sessions.add(session_id)
         try:
             await _claude_agent_bridge.interrupt(session_id)
         except Exception as exc:
@@ -7708,15 +7813,36 @@ async def stop_chat(session_id: str):
             except Exception:
                 _agent_sdk_running_sessions.discard(session_id)
                 _stopped_sessions.discard(session_id)
-        stop_event = {"type": "error", "message": "用户中止", "ts": time.time()}
+        stop_event = (
+            {
+                "type": "system",
+                "subtype": "plan_ready",
+                "message": "计划已就绪，等待审批",
+                "turn_id": turn_id,
+                "ts": time.time(),
+            }
+            if plan_ready
+            else {
+                "type": "error",
+                "message": "用户中止",
+                "turn_id": turn_id,
+                "ts": time.time(),
+            }
+        )
         append_event(session_id, stop_event)
-        return {"ok": True, "runtime": "claude_agent_sdk"}
+        return {
+            "ok": True,
+            "runtime": "claude_agent_sdk",
+            "reason": "plan_ready" if plan_ready else "user",
+        }
     process = _running_processes.get(session_id)
     if process is None:
         raise HTTPException(status_code=404, detail="no running process for this session")
     if session_id in _stopped_sessions:
         return {"ok": True, "runtime": "claude_cli", "already_stopping": True}
     _stopped_sessions.add(session_id)
+    if plan_ready:
+        _plan_waiting_sessions.add(session_id)
     # Prefer sending an interrupt so the process can finish cleanly and the
     # SSE generator's finally block can decide whether to park it.  Fall back to
     # SIGTERM when stdin is already closed (e.g. a process spawned without --replay).
@@ -7734,9 +7860,24 @@ async def stop_chat(session_id: str):
     else:
         _terminated_processes.add(process)
         await _terminate_process(process)
-    stop_event = {"type": "error", "message": "用户中止", "ts": time.time()}
+    stop_event = (
+        {
+            "type": "system",
+            "subtype": "plan_ready",
+            "message": "计划已就绪，等待审批",
+            "turn_id": turn_id,
+            "ts": time.time(),
+        }
+        if plan_ready
+        else {
+            "type": "error",
+            "message": "用户中止",
+            "turn_id": turn_id,
+            "ts": time.time(),
+        }
+    )
     append_event(session_id, stop_event)
-    return {"ok": True}
+    return {"ok": True, "reason": "plan_ready" if plan_ready else "user"}
 
 
 def _agent_sdk_session_row(session_id: str) -> sqlite3.Row:
@@ -7920,7 +8061,8 @@ async def agent_sdk_context_usage(
     disallowed_tools: Optional[List[str]] = Query(default=None),
 ):
     row = _agent_sdk_session_row(session_id)
-    if _session_runtime_busy(session_id):
+
+    def stale_context_usage() -> dict:
         cached = dict(_agent_sdk_context_usage_cache.get(session_id) or {})
         return {
             "ok": True,
@@ -7929,6 +8071,9 @@ async def agent_sdk_context_usage(
             "available": bool(cached),
             **cached,
         }
+
+    if _session_runtime_busy(session_id):
+        return stale_context_usage()
     if not _claude_agent_bridge.enabled or not await _claude_agent_bridge.ensure_started():
         raise HTTPException(status_code=503, detail=_claude_agent_bridge.last_error or "Claude Agent SDK is unavailable")
     params = _agent_sdk_control_params(
@@ -7946,6 +8091,8 @@ async def agent_sdk_context_usage(
     except asyncio.TimeoutError as exc:
         raise HTTPException(status_code=504, detail="Claude Agent SDK context usage timed out") from exc
     except AgentSdkBridgeError as exc:
+        if re.search(r"already running|runtime is active|control.*active", str(exc), re.IGNORECASE):
+            return stale_context_usage()
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     usage = response.get("usage") or {}
     if not isinstance(usage, dict):
@@ -9289,6 +9436,7 @@ async def compact_agent_sdk_session(session_id: str, req: NativeCompactRequest):
         _agent_sdk_running_sessions.discard(session_id)
         _compacting_sessions.discard(session_id)
         _stopped_sessions.discard(session_id)
+        _plan_waiting_sessions.discard(session_id)
 
 
 @app.get("/api/extension/status")
@@ -11029,6 +11177,7 @@ async def delete_session(request: Request, session_id: str, force: Optional[str]
         if force:
             _agent_sdk_running_sessions.discard(session_id)
             _stopped_sessions.discard(session_id)
+            _plan_waiting_sessions.discard(session_id)
             _compacting_sessions.discard(session_id)
             _code_validation_processes.pop(session_id, None)
             process = _running_processes.pop(session_id, None)

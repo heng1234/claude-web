@@ -299,11 +299,40 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         for relative in ("static/index.html", "claude_web/static/index.html"):
             source = (root / relative).read_text(encoding="utf-8")
             self.assertIn("let prePlanPermissionMode = null", source)
-            self.assertIn("const targetMode = prePlanPermissionMode || 'acceptEdits'", source)
+            self.assertIn("targetMode = prePlanPermissionMode || 'acceptEdits'", source)
+            self.assertIn("await entry.pausePromise", source)
+            self.assertIn("?reason=plan_ready", source)
+            self.assertNotIn("function stopCurrentRunForPlan() {", source)
+            self.assertNotIn("try { controller.abort(); } catch {}", source)
             self.assertIn("data.response?.alreadyResolved", source)
             self.assertIn("已切换到「${modeLabel}」", source)
         daemon = (root / "claude_web" / "agent_bridge" / "daemon.mjs").read_text(encoding="utf-8")
         self.assertIn("alreadyResolved: true", daemon)
+
+    def test_terminal_events_and_chat_code_sessions_are_isolated(self):
+        root = Path(__file__).parents[1]
+        for relative in ("static/index.html", "claude_web/static/index.html"):
+            source = (root / relative).read_text(encoding="utf-8")
+            self.assertIn("const renderedTerminalEvents = new Map()", source)
+            self.assertIn("function prepareTerminalRender(obj, eventIndex, kind)", source)
+            self.assertIn("const LAST_CHAT_SESSION_KEY", source)
+            self.assertIn("const LAST_CODE_SESSION_KEY", source)
+            self.assertIn("function switchConversationWorkspaceMode(nextCodeMode)", source)
+            self.assertIn("refusing cross-mode session load", source)
+        server_source = (root / "claude_web" / "server.py").read_text(encoding="utf-8")
+        self.assertIn("session mode mismatch", server_source)
+
+    def test_context_usage_is_read_only_for_an_existing_daemon_runtime(self):
+        daemon = (
+            Path(__file__).parents[1] / "claude_web" / "agent_bridge" / "daemon.mjs"
+        ).read_text(encoding="utf-8")
+        start = daemon.index("async function handleContext(command)")
+        end = daemon.index("\nasync function handleReconnect", start)
+        context_handler = daemon[start:end]
+        self.assertIn("let current = runtimes.get(key)", context_handler)
+        self.assertIn("await current.query.getContextUsage()", context_handler)
+        self.assertNotIn("runtimeForSend", context_handler)
+        self.assertNotIn("applyDynamicControls", context_handler)
 
     def test_code_turn_controls_are_owned_by_session_not_shared_globally(self):
         source = (
