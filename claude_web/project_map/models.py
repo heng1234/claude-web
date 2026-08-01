@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 ProjectMapRunStatus = Literal[
@@ -28,6 +28,18 @@ class ProjectMapGenerateRequest(BaseModel):
 
 class ProjectMapImpactRequest(BaseModel):
     paths: List[str] = Field(default_factory=list, min_length=1, max_length=50)
+    expected_revision: Optional[int] = Field(default=None, ge=1)
+    max_depth: int = Field(default=2, ge=1, le=4)
+    max_results: int = Field(default=120, ge=1, le=200)
+    include_low_confidence: bool = False
+
+
+class ProjectMapContextPackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    node_ids: List[str] = Field(min_length=1, max_length=30)
+    expected_revision: int = Field(ge=1)
+    ttl_seconds: int = Field(default=600, ge=60, le=3600)
 
 
 class ProjectMapEvidence(BaseModel):

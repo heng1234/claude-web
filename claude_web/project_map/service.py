@@ -24,6 +24,7 @@ from .scanner import ProjectScanner, ScanResult
 from .storage import (
     ACTIVE_STATUSES,
     TERMINAL_STATUSES,
+    ProjectMapPartialRefreshRejected,
     ProjectMapPublishCancelled,
     ProjectMapStorage,
 )
@@ -34,6 +35,10 @@ SCANNER_VERSION = "project-map-scanner-v1"
 PROMPT_VERSION = "project-map-prompt-v1"
 PROJECT_MAP_GENERATION_TIMEOUT_SECONDS = 10 * 60
 PROJECT_MAP_IDLE_TIMEOUT_SECONDS = 3 * 60
+CONTEXT_PACK_MAX_RELATIONS = 120
+CONTEXT_PACK_MAX_FILES = 20
+CONTEXT_PACK_MAX_SNIPPETS = 24
+CONTEXT_PACK_MAX_CHARS = 24_000
 SEMANTIC_RELATION_TYPES = {
     "IMPLEMENTS_CONCEPT",
     "CALLS",
@@ -230,7 +235,54 @@ class ProjectMapService:
             "project_name": root.name,
             "revision": snapshot["revision"],
             "dataset": snapshot["dataset"],
+            "snapshot": self._snapshot_metadata(snapshot),
             "active_run": self._public_run(active_run),
+        }
+
+    async def list_revisions(self, session_id: str, *, limit: int = 50, offset: int = 0) -> dict:
+        _, _, storage_key = self.resolve_code_project(session_id)
+        payload = await asyncio.to_thread(
+            self.storage.list_snapshots, storage_key, limit=limit, offset=offset
+        )
+        return {"ok": True, "storage_key": storage_key, **payload}
+
+    async def get_revision(self, session_id: str, revision: int) -> dict:
+        _, _, storage_key = self.resolve_code_project(session_id)
+        snapshot = await asyncio.to_thread(self.storage.snapshot, storage_key, revision)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Project Map 版本不存在")
+        return {
+            "ok": True,
+            "storage_key": storage_key,
+            "revision": snapshot["revision"],
+            "snapshot": self._snapshot_metadata(snapshot),
+            "dataset": snapshot["dataset"],
+        }
+
+    async def compare_revisions(self, session_id: str, from_revision: int, to_revision: int) -> dict:
+        _, _, storage_key = self.resolve_code_project(session_id)
+        before, after = await asyncio.gather(
+            asyncio.to_thread(self.storage.snapshot, storage_key, from_revision),
+            asyncio.to_thread(self.storage.snapshot, storage_key, to_revision),
+        )
+        if before is None or after is None:
+            raise HTTPException(status_code=404, detail="Project Map 对比版本不存在")
+        return {
+            "ok": True,
+            "storage_key": storage_key,
+            "from_revision": int(from_revision),
+            "to_revision": int(to_revision),
+            "from_snapshot": self._snapshot_metadata(before),
+            "to_snapshot": self._snapshot_metadata(after),
+            "files": self._compare_items(
+                before["dataset"].get("files") or [], after["dataset"].get("files") or [], "path"
+            ),
+            "nodes": self._compare_items(
+                before["dataset"].get("nodes") or [], after["dataset"].get("nodes") or [], "id"
+            ),
+            "relations": self._compare_items(
+                before["dataset"].get("relations") or [], after["dataset"].get("relations") or [], "id"
+            ),
         }
 
     async def freshness(self, session_id: str) -> dict:
@@ -244,18 +296,30 @@ class ProjectMapService:
                 "revision": 0,
                 "stale": True,
                 "reason": "not_generated",
+                "completeness": "unknown",
+                "changes": self._empty_changes(),
             }
         scan = await asyncio.to_thread(self.scanner.scan, root)
-        stale = scan.partial or scan.source_root_hash != snapshot["source_root_hash"]
+        previous_files = await asyncio.to_thread(
+            self.storage.files_for_revision, storage_key, snapshot["revision"]
+        )
+        changes = self._file_changes(previous_files, scan.files, partial=scan.partial)
+        stale = scan.source_root_hash != snapshot["source_root_hash"]
+        reason = "source_changed" if stale else ""
+        if scan.partial:
+            reason = scan.partial_reason or "partial_scan"
         return {
             "ok": True,
             "exists": True,
             "storage_key": storage_key,
             "revision": snapshot["revision"],
             "stale": stale,
-            "reason": scan.partial_reason if scan.partial else ("source_changed" if stale else ""),
+            "reason": reason,
             "partial": scan.partial,
             "partial_reason": scan.partial_reason,
+            "completeness": snapshot["completeness"],
+            "scan_completeness": "partial" if scan.partial else "complete",
+            "changes": changes,
         }
 
     async def start_run(
@@ -369,11 +433,23 @@ class ProjectMapService:
             "run": self._public_run(self.storage.run(run_id)),
         }
 
-    async def impact(self, session_id: str, paths: List[str]) -> dict:
+    async def impact(
+        self,
+        session_id: str,
+        paths: List[str],
+        *,
+        expected_revision: Optional[int] = None,
+        max_depth: int = 2,
+        max_results: int = 120,
+        include_low_confidence: bool = False,
+    ) -> dict:
         _, root, storage_key = self.resolve_code_project(session_id)
         snapshot = await asyncio.to_thread(self.storage.latest_snapshot, storage_key)
         if snapshot is None:
             raise HTTPException(status_code=404, detail="请先生成项目地图")
+        self._require_revision(snapshot, expected_revision)
+        depth_limit = max(1, min(4, int(max_depth)))
+        result_limit = max(1, min(200, int(max_results)))
         normalized: Set[str] = set()
         for raw in paths:
             value = str(raw or "").strip()
@@ -392,14 +468,18 @@ class ProjectMapService:
         nodes = dataset.get("nodes") or []
         relations = dataset.get("relations") or []
         current_scan = await asyncio.to_thread(self.scanner.scan, root)
-        stale = current_scan.partial or current_scan.source_root_hash != snapshot["source_root_hash"]
-        direct = {
+        stale = current_scan.source_root_hash != snapshot["source_root_hash"]
+        direct_all = {
             node["id"] for node in nodes
             if any(source.get("path") in normalized for source in node.get("sources") or [])
         }
+        truncated = len(direct_all) > result_limit
+        direct = set(sorted(direct_all)[:result_limit])
         reverse: Dict[str, List[Tuple[str, dict]]] = {}
         for relation in relations:
             if relation.get("type") == "CONTAINS":
+                continue
+            if relation.get("confidence") == "low" and not include_low_confidence:
                 continue
             reverse.setdefault(relation.get("target_id") or "", []).append(
                 (relation.get("source_id") or "", relation)
@@ -409,30 +489,28 @@ class ProjectMapService:
             for node_id in direct
         }
         frontier = list(direct)
-        for distance in (1, 2):
+        evidence_index = {item.get("id"): item for item in dataset.get("evidence") or []}
+        for distance in range(1, depth_limit + 1):
             next_frontier: List[str] = []
             for target_id in frontier:
                 for source_id, relation in reverse.get(target_id, []):
                     if not source_id or source_id in found:
                         continue
+                    if len(found) >= result_limit:
+                        truncated = True
+                        break
                     found[source_id] = {
                         "node_id": source_id,
                         "level": "indirect",
                         "distance": distance,
                         "path": [
-                            {
-                                "source_id": source_id,
-                                "target_id": target_id,
-                                "type": relation.get("type"),
-                            },
+                            self._impact_edge(relation, evidence_index),
                             *(found.get(target_id, {}).get("path") or []),
                         ],
                     }
                     next_frontier.append(source_id)
-                    if len(found) >= 120:
-                        break
             frontier = next_frontier
-            if not frontier or len(found) >= 120:
+            if not frontier or truncated:
                 break
         node_index = {node["id"]: node for node in nodes}
         impacts = [
@@ -444,14 +522,224 @@ class ProjectMapService:
             for node_id, item in found.items()
         ]
         impacts.sort(key=lambda item: (item["distance"], item["title"]))
+        resolved_paths = {
+            source.get("path")
+            for node_id in direct_all
+            for source in node_index.get(node_id, {}).get("sources") or []
+            if source.get("path")
+        }
+        test_suggestions = []
+        for item in impacts:
+            node = node_index.get(item["node_id"], {})
+            roles = set(node.get("roles") or [])
+            sources = node.get("sources") or []
+            test_paths = sorted({
+                source.get("path") for source in sources
+                if source.get("path") and self._looks_like_test_path(source["path"])
+            })
+            if node.get("kind") == "test" or "test" in roles or test_paths:
+                test_suggestions.append({
+                    "node_id": item["node_id"],
+                    "title": item["title"],
+                    "paths": test_paths,
+                    "reason": "impacted_test_node",
+                    "distance": item["distance"],
+                })
         return {
             "ok": True,
             "storage_key": storage_key,
             "revision": snapshot["revision"],
             "stale": stale,
+            "completeness": snapshot["completeness"],
+            "scan_completeness": "partial" if current_scan.partial else "complete",
             "paths": sorted(normalized),
+            "unresolved_paths": sorted(normalized - resolved_paths),
             "impacts": impacts,
-            "truncated": len(found) >= 120,
+            "test_suggestions": test_suggestions,
+            "max_depth": depth_limit,
+            "max_results": result_limit,
+            "truncated": truncated,
+        }
+
+    async def create_context_pack(
+        self,
+        session_id: str,
+        node_ids: List[str],
+        *,
+        expected_revision: int,
+        ttl_seconds: int = 600,
+    ) -> dict:
+        _, root, storage_key = self.resolve_code_project(session_id)
+        snapshot = await asyncio.to_thread(self.storage.latest_snapshot, storage_key)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="请先生成项目地图")
+        self._require_revision(snapshot, expected_revision)
+        if snapshot["completeness"] != "complete":
+            self._conflict("project_map_incomplete", "项目地图扫描不完整，无法创建上下文包")
+        current_scan = await asyncio.to_thread(self.scanner.scan, root)
+        if current_scan.partial:
+            self._conflict(
+                "project_map_freshness_unknown",
+                "当前项目扫描不完整，无法安全创建上下文包",
+                reason=current_scan.partial_reason,
+            )
+        if current_scan.source_root_hash != snapshot["source_root_hash"]:
+            self._conflict("project_map_source_changed", "项目源码已有变化，请先刷新项目地图")
+        requested = list(dict.fromkeys(str(value or "").strip() for value in node_ids if str(value or "").strip()))
+        if not requested or len(requested) > 30:
+            raise HTTPException(status_code=422, detail="上下文包节点数量必须为 1-30")
+        dataset = snapshot["dataset"]
+        node_index = {item.get("id"): item for item in dataset.get("nodes") or []}
+        missing = [value for value in requested if value not in node_index]
+        if missing:
+            raise HTTPException(status_code=400, detail={"code": "project_map_unknown_nodes", "node_ids": missing})
+        selected = [node_index[value] for value in requested]
+        selected_ids = set(requested)
+        relations = [
+            item for item in dataset.get("relations") or []
+            if item.get("source_id") in selected_ids or item.get("target_id") in selected_ids
+        ][:CONTEXT_PACK_MAX_RELATIONS]
+        neighbor_ids = {
+            endpoint
+            for relation in relations
+            for endpoint in (relation.get("source_id"), relation.get("target_id"))
+            if endpoint and endpoint not in selected_ids
+        }
+        neighbors = [
+            self._compact_node(node_index[value]) for value in sorted(neighbor_ids)
+            if value in node_index
+        ][:60]
+        evidence_index = {item.get("id"): item for item in dataset.get("evidence") or []}
+        evidence_ids = list(dict.fromkeys(
+            value
+            for item in [*selected, *relations]
+            for value in item.get("evidence_ids") or []
+            if value in evidence_index
+        ))
+        snippets: List[dict] = []
+        file_hashes: Dict[str, str] = {}
+        char_count = 0
+        for evidence_id in evidence_ids:
+            if len(snippets) >= CONTEXT_PACK_MAX_SNIPPETS or char_count >= CONTEXT_PACK_MAX_CHARS:
+                break
+            evidence = evidence_index[evidence_id]
+            path = str(evidence.get("path") or "")
+            expected_hash = str(evidence.get("file_hash") or "")
+            if not path or not expected_hash or path in file_hashes:
+                continue
+            if len(file_hashes) >= CONTEXT_PACK_MAX_FILES:
+                break
+            raw = self._read_verified_project_file(root, path, expected_hash)
+            lines = raw.decode("utf-8", errors="replace").splitlines()
+            start = max(1, int(evidence.get("start_line") or 1))
+            end = max(start, int(evidence.get("end_line") or start))
+            excerpt = "\n".join(lines[start - 1:end])
+            remaining = CONTEXT_PACK_MAX_CHARS - char_count
+            excerpt = excerpt[:remaining]
+            snippets.append({
+                "evidence_id": evidence_id,
+                "path": path,
+                "start_line": start,
+                "end_line": end,
+                "label": evidence.get("label") or "",
+                "excerpt": excerpt,
+            })
+            char_count += len(excerpt)
+            file_hashes[path] = expected_hash
+        source_candidates = [
+            source
+            for node in selected
+            for source in node.get("sources") or []
+            if source.get("path") and source.get("file_hash")
+        ]
+        for source in source_candidates:
+            if len(snippets) >= CONTEXT_PACK_MAX_SNIPPETS or char_count >= CONTEXT_PACK_MAX_CHARS:
+                break
+            path = str(source["path"])
+            if path in file_hashes or len(file_hashes) >= CONTEXT_PACK_MAX_FILES:
+                continue
+            expected_hash = str(source["file_hash"])
+            raw = self._read_verified_project_file(root, path, expected_hash)
+            lines = raw.decode("utf-8", errors="replace").splitlines()
+            start = max(1, int(source.get("line_start") or 1))
+            end = max(start, int(source.get("line_end") or start))
+            excerpt = "\n".join(lines[start - 1:end])
+            remaining = CONTEXT_PACK_MAX_CHARS - char_count
+            excerpt = excerpt[:remaining]
+            snippets.append({
+                "evidence_id": "",
+                "path": path,
+                "start_line": start,
+                "end_line": end,
+                "label": source.get("symbol_key") or path,
+                "excerpt": excerpt,
+            })
+            char_count += len(excerpt)
+            file_hashes[path] = expected_hash
+        pack_id = uuid.uuid4().hex
+        ttl = max(60, min(3600, int(ttl_seconds)))
+        payload = {
+            "revision": snapshot["revision"],
+            "selected_nodes": [self._compact_node(item) for item in selected],
+            "neighbor_nodes": neighbors,
+            "relations": [self._compact_relation(item) for item in relations],
+            "snippets": snippets,
+            "budgets": {
+                "node_count": len(selected),
+                "relation_count": len(relations),
+                "file_count": len(file_hashes),
+                "snippet_chars": char_count,
+            },
+        }
+        expires_at = time.time() + ttl
+        await asyncio.to_thread(
+            self.storage.create_context_pack,
+            pack_id=pack_id,
+            owner_session_id=session_id,
+            storage_key=storage_key,
+            canonical_cwd=str(root),
+            revision=snapshot["revision"],
+            payload=payload,
+            file_hashes=file_hashes,
+            expires_at=expires_at,
+        )
+        return {"ok": True, "pack_id": pack_id, "storage_key": storage_key, "revision": snapshot["revision"], "expires_at": expires_at, "context": payload}
+
+    async def resolve_context_pack(self, session_id: str, pack_id: str) -> dict:
+        _, root, storage_key = self.resolve_code_project(session_id)
+        pack = await asyncio.to_thread(self.storage.context_pack, str(pack_id or ""))
+        if pack is None:
+            raise HTTPException(status_code=404, detail="上下文包不存在")
+        if pack["owner_session_id"] != session_id:
+            raise HTTPException(status_code=403, detail="上下文包不属于当前 Code 会话")
+        if pack["storage_key"] != storage_key or pack["canonical_cwd"] != str(root):
+            raise HTTPException(status_code=403, detail="上下文包不属于当前 Code 项目")
+        if pack["expires_at"] <= time.time():
+            self._conflict("context_pack_expired", "上下文包已过期，请重新创建")
+        snapshot = await asyncio.to_thread(self.storage.latest_snapshot, storage_key)
+        if snapshot is None or snapshot["revision"] != pack["revision"]:
+            self._conflict(
+                "project_map_revision_mismatch", "项目地图已经更新，请重新创建上下文包",
+                current_revision=snapshot["revision"] if snapshot else 0,
+            )
+        current_scan = await asyncio.to_thread(self.scanner.scan, root)
+        if current_scan.partial:
+            self._conflict(
+                "project_map_freshness_unknown",
+                "当前项目扫描不完整，无法安全解析上下文包",
+                reason=current_scan.partial_reason,
+            )
+        if current_scan.source_root_hash != snapshot["source_root_hash"]:
+            self._conflict("project_map_source_changed", "项目源码已有变化，请重新创建上下文包")
+        for path, expected_hash in pack["file_hashes"].items():
+            self._read_verified_project_file(root, path, expected_hash)
+        return {
+            "ok": True,
+            "pack_id": pack["pack_id"],
+            "storage_key": storage_key,
+            "revision": pack["revision"],
+            "expires_at": pack["expires_at"],
+            "context": pack["payload"],
         }
 
     async def _execute_run(self, run_id: str, cancel_event: asyncio.Event) -> None:
@@ -510,6 +798,12 @@ class ProjectMapService:
                 await self._set_phase(run_id, "cancelled", 100, "项目地图生成已取消")
             except ProjectMapPublishCancelled:
                 await self._set_phase(run_id, "cancelled", 100, "项目地图生成已取消")
+            except ProjectMapPartialRefreshRejected:
+                await self._set_phase(
+                    run_id, "failed", 100,
+                    "本次扫描不完整，已保留上一版完整项目地图",
+                    error_category="partial_scan_preserved",
+                )
             except ProjectMapSuperseded:
                 await self._set_phase(
                     run_id, "superseded", 100,
@@ -1112,6 +1406,168 @@ class ProjectMapService:
                     if target in seen:
                         raise ValueError("Project Map containment graph contains a cycle")
                     stack.append((target, {*seen, target}))
+
+    @staticmethod
+    def _snapshot_metadata(snapshot: dict) -> dict:
+        return {
+            "revision": int(snapshot["revision"]),
+            "run_id": snapshot["run_id"],
+            "source_root_hash": snapshot["source_root_hash"],
+            "schema_version": int(snapshot.get("schema_version") or 1),
+            "scanner_version": snapshot.get("scanner_version") or "",
+            "prompt_version": snapshot.get("prompt_version") or "",
+            "completeness": snapshot.get("completeness") or "complete",
+            "created_at": float(snapshot["created_at"]),
+        }
+
+    @staticmethod
+    def _compare_items(before: List[dict], after: List[dict], key: str) -> dict:
+        before_index = {str(item.get(key) or ""): item for item in before if item.get(key)}
+        after_index = {str(item.get(key) or ""): item for item in after if item.get(key)}
+        before_keys = set(before_index)
+        after_keys = set(after_index)
+        added = [after_index[value] for value in sorted(after_keys - before_keys)]
+        removed = [before_index[value] for value in sorted(before_keys - after_keys)]
+        modified = [
+            {key: value, "before": before_index[value], "after": after_index[value]}
+            for value in sorted(before_keys & after_keys)
+            if json.dumps(before_index[value], sort_keys=True, ensure_ascii=False)
+            != json.dumps(after_index[value], sort_keys=True, ensure_ascii=False)
+        ]
+        return {
+            "added": added,
+            "removed": removed,
+            "modified": modified,
+            "counts": {"added": len(added), "removed": len(removed), "modified": len(modified)},
+        }
+
+    @staticmethod
+    def _empty_changes() -> dict:
+        return {
+            "added": [], "modified": [], "deleted": [], "renamed": [],
+            "unknown_missing": [],
+            "counts": {"added": 0, "modified": 0, "deleted": 0, "renamed": 0, "unknown_missing": 0},
+        }
+
+    @classmethod
+    def _file_changes(cls, previous: List[dict], current: List[dict], *, partial: bool) -> dict:
+        before = {item["path"]: item for item in previous}
+        after = {item["path"]: item for item in current}
+        added_paths = set(after) - set(before)
+        missing_paths = set(before) - set(after)
+        modified = [
+            {"path": path, "before_hash": before[path]["hash"], "after_hash": after[path]["hash"]}
+            for path in sorted(set(before) & set(after))
+            if before[path]["hash"] != after[path]["hash"]
+        ]
+        renamed: List[dict] = []
+        deleted_paths: Set[str] = set()
+        if not partial:
+            deleted_paths = set(missing_paths)
+            before_by_hash: Dict[str, List[str]] = {}
+            after_by_hash: Dict[str, List[str]] = {}
+            for path in missing_paths:
+                before_by_hash.setdefault(before[path]["hash"], []).append(path)
+            for path in added_paths:
+                after_by_hash.setdefault(after[path]["hash"], []).append(path)
+            for file_hash in sorted(set(before_by_hash) & set(after_by_hash)):
+                old_paths = before_by_hash[file_hash]
+                new_paths = after_by_hash[file_hash]
+                if len(old_paths) == 1 and len(new_paths) == 1:
+                    old_path, new_path = old_paths[0], new_paths[0]
+                    renamed.append({"from": old_path, "to": new_path, "hash": file_hash})
+                    deleted_paths.discard(old_path)
+                    added_paths.discard(new_path)
+        payload = {
+            "added": [after[path] for path in sorted(added_paths)],
+            "modified": modified,
+            "deleted": [before[path] for path in sorted(deleted_paths)],
+            "renamed": renamed,
+            "unknown_missing": [before[path] for path in sorted(missing_paths)] if partial else [],
+        }
+        payload["counts"] = {name: len(value) for name, value in payload.items()}
+        return payload
+
+    @staticmethod
+    def _impact_edge(relation: dict, evidence_index: Dict[str, dict]) -> dict:
+        evidence_ids = list(relation.get("evidence_ids") or [])
+        return {
+            "relation_id": relation.get("id") or "",
+            "source_id": relation.get("source_id") or "",
+            "target_id": relation.get("target_id") or "",
+            "type": relation.get("type") or "RELATED",
+            "label": relation.get("label") or "",
+            "provenance": relation.get("provenance") or "parser",
+            "confidence": relation.get("confidence") or "unknown",
+            "stale": bool(relation.get("stale")),
+            "evidence_ids": evidence_ids,
+            "evidence": [evidence_index[value] for value in evidence_ids if value in evidence_index],
+        }
+
+    @staticmethod
+    def _looks_like_test_path(path: str) -> bool:
+        lowered = str(path).casefold()
+        name = Path(lowered).name
+        parts = set(Path(lowered).parts)
+        return (
+            "test" in parts or "tests" in parts or name.startswith("test_")
+            or ".test." in name or ".spec." in name
+        )
+
+    @staticmethod
+    def _compact_node(node: dict) -> dict:
+        return {
+            "id": node.get("id") or "",
+            "kind": node.get("kind") or "",
+            "title": node.get("title") or "",
+            "summary": node.get("summary") or "",
+            "roles": list(node.get("roles") or []),
+            "confidence": node.get("confidence") or "unknown",
+            "stale": bool(node.get("stale")),
+        }
+
+    @staticmethod
+    def _compact_relation(relation: dict) -> dict:
+        return {
+            "id": relation.get("id") or "",
+            "source_id": relation.get("source_id") or "",
+            "target_id": relation.get("target_id") or "",
+            "type": relation.get("type") or "RELATED",
+            "label": relation.get("label") or "",
+            "provenance": relation.get("provenance") or "parser",
+            "confidence": relation.get("confidence") or "unknown",
+            "stale": bool(relation.get("stale")),
+        }
+
+    @classmethod
+    def _require_revision(cls, snapshot: dict, expected_revision: Optional[int]) -> None:
+        if expected_revision is None or int(expected_revision) == int(snapshot["revision"]):
+            return
+        cls._conflict(
+            "project_map_revision_mismatch",
+            "项目地图已经更新，请重新加载",
+            current_revision=int(snapshot["revision"]),
+        )
+
+    @staticmethod
+    def _conflict(code: str, message: str, **extra: Any) -> None:
+        raise HTTPException(status_code=409, detail={"code": code, "message": message, **extra})
+
+    @classmethod
+    def _read_verified_project_file(cls, root: Path, relative_path: str, expected_hash: str) -> bytes:
+        try:
+            target = (root / relative_path).resolve()
+            target.relative_to(root)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="上下文文件必须位于当前 Code 项目内") from exc
+        try:
+            raw = target.read_bytes()
+        except OSError:
+            cls._conflict("context_pack_source_changed", "上下文文件已删除或不可访问", path=relative_path)
+        actual_hash = hashlib.sha256(raw).hexdigest()
+        if actual_hash != expected_hash:
+            cls._conflict("context_pack_source_changed", "上下文文件已经变化", path=relative_path)
+        return raw
 
     @staticmethod
     def _error_category(exc: Exception) -> str:

@@ -7,9 +7,13 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from claude_web.project_map.scanner import ProjectScanner, ScanLimits
+from claude_web.project_map.scanner import ProjectScanner, ScanLimits, ScanResult
 from claude_web.project_map.service import ProjectMapService
-from claude_web.project_map.storage import ProjectMapPublishCancelled, ProjectMapStorage
+from claude_web.project_map.storage import (
+    ProjectMapPartialRefreshRejected,
+    ProjectMapPublishCancelled,
+    ProjectMapStorage,
+)
 
 
 def _create_sessions_table(db_path: Path) -> None:
@@ -289,6 +293,63 @@ class ProjectMapStorageTest(unittest.TestCase):
         )
         self.assertIsNone(revision)
         self.assertIsNone(self.storage.latest_snapshot(key))
+
+    def test_partial_refresh_does_not_replace_complete_snapshot(self):
+        key = "workspace-key"
+        self.storage.create_run(
+            run_id="complete-run", owner_session_id="session-a", storage_key=key,
+            canonical_cwd=str(self.root), base_revision=0, model="", effort="",
+            preferred_language="zh",
+        )
+        complete = _empty_dataset(key, self.root)
+        complete["manifest"]["partial"] = False
+        self.assertEqual(1, self.storage.publish_snapshot(
+            run_id="complete-run", storage_key=key, canonical_cwd=str(self.root),
+            base_revision=0, dataset=complete, files=[], source_root_hash="complete",
+            scanner_version="scanner-v1", prompt_version="prompt-v1",
+        ))
+        self.storage.create_run(
+            run_id="partial-run", owner_session_id="session-a", storage_key=key,
+            canonical_cwd=str(self.root), base_revision=1, model="", effort="",
+            preferred_language="zh",
+        )
+        partial = _empty_dataset(key, self.root)
+        partial["manifest"].update({"partial": True, "partial_reason": "time_limit"})
+        with self.assertRaises(ProjectMapPartialRefreshRejected):
+            self.storage.publish_snapshot(
+                run_id="partial-run", storage_key=key, canonical_cwd=str(self.root),
+                base_revision=1, dataset=partial, files=[], source_root_hash="partial",
+                scanner_version="scanner-v1", prompt_version="prompt-v1",
+            )
+        snapshot = self.storage.latest_snapshot(key)
+        self.assertEqual(1, snapshot["revision"])
+        self.assertEqual("complete", snapshot["completeness"])
+
+    def test_snapshot_metadata_history_and_context_pack_storage_are_additive(self):
+        key = "workspace-key"
+        self.storage.create_run(
+            run_id="history-run", owner_session_id="session-a", storage_key=key,
+            canonical_cwd=str(self.root), base_revision=0, model="", effort="",
+            preferred_language="zh",
+        )
+        self.storage.publish_snapshot(
+            run_id="history-run", storage_key=key, canonical_cwd=str(self.root),
+            base_revision=0, dataset=_empty_dataset(key, self.root), files=[],
+            source_root_hash="root-hash", scanner_version="scanner-v2",
+            prompt_version="prompt-v3",
+        )
+        listed = self.storage.list_snapshots(key, limit=10, offset=0)
+        self.assertEqual(1, listed["total"])
+        self.assertEqual("scanner-v2", listed["items"][0]["scanner_version"])
+        self.assertEqual("prompt-v3", self.storage.snapshot(key, 1)["prompt_version"])
+        self.storage.create_context_pack(
+            pack_id="opaque-pack", owner_session_id="session-a", storage_key=key,
+            canonical_cwd=str(self.root), revision=1, payload={"nodes": []},
+            file_hashes={}, expires_at=10**12,
+        )
+        pack = self.storage.context_pack("opaque-pack")
+        self.assertEqual("session-a", pack["owner_session_id"])
+        self.assertEqual({"nodes": []}, pack["payload"])
 
 
 class ProjectMapServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -611,7 +672,10 @@ class ProjectMapServiceTest(unittest.IsolatedAsyncioTestCase):
         dataset = _empty_dataset(key, self.root)
         dataset["nodes"] = [
             {"id": "a", "kind": "service", "title": "A", "sources": []},
-            {"id": "b", "kind": "service", "title": "B", "sources": []},
+            {
+                "id": "b", "kind": "test", "title": "B", "roles": ["test"],
+                "sources": [{"path": "tests/test_target.py"}],
+            },
             {
                 "id": "c",
                 "kind": "file",
@@ -620,8 +684,14 @@ class ProjectMapServiceTest(unittest.IsolatedAsyncioTestCase):
             },
         ]
         dataset["relations"] = [
-            {"id": "ab", "source_id": "a", "target_id": "b", "type": "IMPORTS"},
-            {"id": "bc", "source_id": "b", "target_id": "c", "type": "CALLS"},
+            {
+                "id": "ab", "source_id": "a", "target_id": "b", "type": "IMPORTS",
+                "provenance": "parser", "confidence": "high", "evidence_ids": [],
+            },
+            {
+                "id": "bc", "source_id": "b", "target_id": "c", "type": "CALLS",
+                "provenance": "parser", "confidence": "high", "evidence_ids": [],
+            },
         ]
         self.service.storage.create_run(
             run_id="impact-run",
@@ -651,6 +721,154 @@ class ProjectMapServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["stale"])
         self.assertEqual(2, by_id["a"]["distance"])
         self.assertEqual(2, len(by_id["a"]["path"]))
+        self.assertEqual("ab", by_id["a"]["path"][0]["relation_id"])
+        self.assertEqual("parser", by_id["a"]["path"][0]["provenance"])
+        self.assertEqual("b", result["test_suggestions"][0]["node_id"])
+        shallow = await self.service.impact(
+            "impact-session", ["target.py"], max_depth=1
+        )
+        self.assertNotIn("a", {item["node_id"] for item in shallow["impacts"]})
+        limited = await self.service.impact(
+            "impact-session", ["target.py"], max_results=1
+        )
+        self.assertEqual(1, len(limited["impacts"]))
+        self.assertTrue(limited["truncated"])
+        with self.assertRaises(HTTPException) as mismatch:
+            await self.service.impact(
+                "impact-session", ["target.py"], expected_revision=2
+            )
+        self.assertEqual(409, mismatch.exception.status_code)
+
+    async def test_freshness_partial_scan_does_not_report_deleted_files(self):
+        target = self.root / "kept.py"
+        target.write_text("VALUE = 1\n", encoding="utf-8")
+        _insert_session(self.db_path, "fresh-session", self.root, "code")
+        _, _, key = self.service.resolve_code_project("fresh-session")
+        scan = ProjectScanner().scan(self.root)
+        self.service.storage.create_run(
+            run_id="fresh-run", owner_session_id="fresh-session", storage_key=key,
+            canonical_cwd=str(self.root), base_revision=0, model="", effort="",
+            preferred_language="zh",
+        )
+        self.service.storage.publish_snapshot(
+            run_id="fresh-run", storage_key=key, canonical_cwd=str(self.root),
+            base_revision=0, dataset=_empty_dataset(key, self.root), files=scan.files,
+            source_root_hash=scan.source_root_hash, scanner_version="scanner-v1",
+            prompt_version="prompt-v1",
+        )
+        self.service.scanner.scan = lambda root: ScanResult(
+            root=root, files=[], partial=True, partial_reason="time_limit",
+            source_root_hash="partial-hash",
+        )
+        freshness = await self.service.freshness("fresh-session")
+        self.assertEqual([], freshness["changes"]["deleted"])
+        self.assertEqual("kept.py", freshness["changes"]["unknown_missing"][0]["path"])
+        self.assertEqual("partial", freshness["scan_completeness"])
+
+    async def test_file_change_rename_is_only_inferred_for_unique_hashes(self):
+        unique = self.service._file_changes(
+            [{"path": "old.py", "hash": "same"}],
+            [{"path": "new.py", "hash": "same"}],
+            partial=False,
+        )
+        self.assertEqual(
+            [{"from": "old.py", "to": "new.py", "hash": "same"}],
+            unique["renamed"],
+        )
+        ambiguous = self.service._file_changes(
+            [
+                {"path": "old-a.py", "hash": "duplicate"},
+                {"path": "old-b.py", "hash": "duplicate"},
+            ],
+            [
+                {"path": "new-a.py", "hash": "duplicate"},
+                {"path": "new-b.py", "hash": "duplicate"},
+            ],
+            partial=False,
+        )
+        self.assertEqual([], ambiguous["renamed"])
+        self.assertEqual(2, ambiguous["counts"]["added"])
+        self.assertEqual(2, ambiguous["counts"]["deleted"])
+
+    async def test_revision_list_get_and_compare_are_project_scoped(self):
+        _insert_session(self.db_path, "revision-session", self.root, "code")
+        _, _, key = self.service.resolve_code_project("revision-session")
+        first = _empty_dataset(key, self.root)
+        first["nodes"] = [{"id": "file:a.py", "kind": "file", "title": "a.py"}]
+        second = _empty_dataset(key, self.root)
+        second["nodes"] = [
+            {"id": "file:a.py", "kind": "file", "title": "A.py"},
+            {"id": "file:b.py", "kind": "file", "title": "b.py"},
+        ]
+        for revision, dataset in ((0, first), (1, second)):
+            run_id = f"revision-run-{revision}"
+            self.service.storage.create_run(
+                run_id=run_id, owner_session_id="revision-session", storage_key=key,
+                canonical_cwd=str(self.root), base_revision=revision, model="", effort="",
+                preferred_language="zh",
+            )
+            self.service.storage.publish_snapshot(
+                run_id=run_id, storage_key=key, canonical_cwd=str(self.root),
+                base_revision=revision, dataset=dataset, files=[],
+                source_root_hash=f"hash-{revision}", scanner_version="scanner-v1",
+                prompt_version="prompt-v1",
+            )
+        revisions = await self.service.list_revisions("revision-session")
+        self.assertEqual([2, 1], [item["revision"] for item in revisions["items"]])
+        loaded = await self.service.get_revision("revision-session", 1)
+        self.assertEqual("a.py", loaded["dataset"]["nodes"][0]["title"])
+        compared = await self.service.compare_revisions("revision-session", 1, 2)
+        self.assertEqual(1, compared["nodes"]["counts"]["added"])
+        self.assertEqual(1, compared["nodes"]["counts"]["modified"])
+
+    async def test_context_pack_is_opaque_session_bound_and_revalidated(self):
+        target = self.root / "context.py"
+        target.write_text("def answer():\n    return 42\n", encoding="utf-8")
+        _insert_session(self.db_path, "pack-owner", self.root, "code")
+        _insert_session(self.db_path, "same-project-other-session", self.root, "code")
+        _, _, key = self.service.resolve_code_project("pack-owner")
+        scan = ProjectScanner().scan(self.root)
+        file_item = next(item for item in scan.files if item["path"] == "context.py")
+        evidence = next(item for item in scan.evidence if item.path == "context.py")
+        dataset = _empty_dataset(key, self.root)
+        dataset["files"] = scan.files
+        dataset["evidence"] = [evidence.model_dump()]
+        dataset["nodes"] = [{
+            "id": "file:context.py", "kind": "file", "title": "context.py",
+            "summary": "source", "roles": ["source"], "confidence": "high",
+            "evidence_ids": [evidence.id],
+            "sources": [{
+                "path": "context.py", "line_start": 1, "line_end": 2,
+                "symbol_key": "function:answer", "file_hash": file_item["hash"],
+            }],
+        }]
+        self.service.storage.create_run(
+            run_id="pack-run", owner_session_id="pack-owner", storage_key=key,
+            canonical_cwd=str(self.root), base_revision=0, model="", effort="",
+            preferred_language="zh",
+        )
+        self.service.storage.publish_snapshot(
+            run_id="pack-run", storage_key=key, canonical_cwd=str(self.root),
+            base_revision=0, dataset=dataset, files=scan.files,
+            source_root_hash=scan.source_root_hash, scanner_version="scanner-v1",
+            prompt_version="prompt-v1",
+        )
+        created = await self.service.create_context_pack(
+            "pack-owner", ["file:context.py"], expected_revision=1
+        )
+        self.assertNotIn("context.py", created["pack_id"])
+        self.assertTrue(created["context"]["snippets"])
+        resolved = await self.service.resolve_context_pack("pack-owner", created["pack_id"])
+        self.assertEqual(1, resolved["revision"])
+        with self.assertRaises(HTTPException) as cross_session:
+            await self.service.resolve_context_pack(
+                "same-project-other-session", created["pack_id"]
+            )
+        self.assertEqual(403, cross_session.exception.status_code)
+        target.write_text("def answer():\n    return 43\n", encoding="utf-8")
+        with self.assertRaises(HTTPException) as stale:
+            await self.service.resolve_context_pack("pack-owner", created["pack_id"])
+        self.assertEqual(409, stale.exception.status_code)
 
 
 class ProjectMapFrontendBoundaryTest(unittest.TestCase):

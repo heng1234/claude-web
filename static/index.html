@@ -6563,6 +6563,15 @@
   .cw-review-state.reverted,
   .cw-review-state.rewound { color:#b56a20; background:color-mix(in srgb,#b56a20 10%,transparent); }
   .cw-review-state.partial { color:#8b5cf6; background:color-mix(in srgb,#8b5cf6 10%,transparent); }
+  .cw-index-state { font-weight:600; font-size:11px; padding:2px 7px; border:1px solid transparent; border-radius:4px; }
+  .cw-index-state.loading,
+  .cw-index-state.clean { color:var(--text-muted); background:color-mix(in srgb,var(--text-muted) 7%,transparent); }
+  .cw-index-state.staged { color:#16834a; border-color:color-mix(in srgb,#16834a 20%,transparent); background:color-mix(in srgb,#16834a 8%,transparent); }
+  .cw-index-state.unstaged { color:#2563a8; border-color:color-mix(in srgb,#2563a8 18%,transparent); background:color-mix(in srgb,#2563a8 8%,transparent); }
+  .cw-index-state.partial { color:#7c3aed; border-color:color-mix(in srgb,#7c3aed 18%,transparent); background:color-mix(in srgb,#7c3aed 8%,transparent); }
+  .cw-index-state.untracked { color:#087f8c; border-color:color-mix(in srgb,#087f8c 18%,transparent); background:color-mix(in srgb,#087f8c 8%,transparent); }
+  .cw-index-state.conflicted { color:#c0392b; border-color:color-mix(in srgb,#c0392b 22%,transparent); background:color-mix(in srgb,#c0392b 9%,transparent); }
+  .cw-review-btn.index-action { border-color:color-mix(in srgb,var(--accent) 24%,transparent); color:var(--accent); }
   .cw-diff-hunks { border-top:1px solid var(--border); padding:10px; background:var(--surface); }
   .cw-diff-hunk { margin-top:8px; overflow:hidden; border:1px solid var(--border); border-radius:10px; }
   .cw-diff-hunk:first-child { margin-top:0; }
@@ -6589,6 +6598,22 @@
   .cw-validation-status.fail { color:#b53d38; }
   .cw-validation-command { min-width:0; overflow:hidden; color:var(--text-muted); text-overflow:ellipsis; white-space:nowrap; font:11px/1.3 'JetBrains Mono',ui-monospace,monospace; }
   .cw-validation-duration { margin-left:auto; color:var(--text-subtle); font-size:10.5px; }
+  .cw-browser-validation { grid-column:1/-1; margin-top:12px; border-top:1px solid var(--border); padding-top:10px; }
+  .cw-browser-validation > summary { display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; color:var(--text); font-size:12px; font-weight:700; }
+  .cw-browser-validation > summary small { color:var(--text-muted); font-size:10px; font-weight:500; }
+  .cw-browser-validation-notice { margin:10px 0; padding:9px 10px; border:1px solid color-mix(in srgb,var(--accent) 25%,var(--border)); border-radius:9px; background:color-mix(in srgb,var(--accent) 5%,var(--surface)); color:var(--text-muted); font-size:11px; line-height:1.5; }
+  .cw-browser-validation-form { display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:7px; }
+  .cw-browser-validation-form input,.cw-browser-validation-form textarea { min-width:0; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font:11px/1.45 'JetBrains Mono',ui-monospace,monospace; }
+  .cw-browser-validation-form textarea { min-height:76px; resize:vertical; }
+  .cw-browser-validation-form .wide { grid-column:1/-1; }
+  .cw-browser-validation-actions { display:flex; justify-content:flex-end; gap:7px; margin-top:8px; }
+  .cw-browser-validation-columns { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .cw-browser-validation-panel { min-width:0; padding:9px; border:1px solid var(--border); border-radius:9px; background:var(--surface-2); }
+  .cw-browser-validation-panel > strong { display:block; margin-bottom:7px; font-size:11px; }
+  .cw-browser-validation-item { padding:7px 0; border-top:1px solid var(--border); font-size:10.5px; line-height:1.45; }
+  .cw-browser-validation-item:first-of-type { border-top:0; }
+  .cw-browser-validation-item code { display:block; margin-top:4px; white-space:pre-wrap; overflow-wrap:anywhere; color:var(--text-muted); }
+  .cw-browser-validation-item pre { max-height:180px; overflow:auto; margin-top:5px; padding:7px; border-radius:7px; background:#1d1f21; color:#dedbd7; white-space:pre-wrap; font:10px/1.45 'JetBrains Mono',ui-monospace,monospace; }
   .cw-validation-output { max-height:240px; margin:0; overflow:auto; padding:10px 12px; background:#1d1f21; color:#dedbd7; white-space:pre-wrap; word-break:break-word; font:11px/1.55 'JetBrains Mono',ui-monospace,monospace; }
   .cw-validation-actions { display:flex; justify-content:flex-end; gap:7px; padding:8px 10px; border-top:1px solid var(--border); }
   .cw-validation-timeline { width:min(100%,720px); margin-top:12px; }
@@ -6668,6 +6693,8 @@
   }
 
   @media (max-width: 640px) {
+    .cw-browser-validation-form,.cw-browser-validation-columns { grid-template-columns:1fr; }
+    .cw-browser-validation > summary,.cw-browser-validation-form input,.cw-browser-validation-form textarea { min-height:44px; }
     .cw-code-diff-row { grid-template-columns:34px 34px 20px minmax(max-content,1fr); }
     .cw-code-diff-ln { padding:0 4px; }
     .cw-code-review-box,
@@ -6684,7 +6711,7 @@
     .cw-review-set-copy { display:block; }
     .cw-review-set-meta { display:block; margin-top:2px; }
     .cw-review-file { grid-template-columns:1fr; gap:9px; padding:11px 10px 10px 12px; }
-    .cw-review-file-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .cw-review-file-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
     .cw-review-btn { width:auto; min-width:44px; height:44px; padding:0 10px; }
     .cw-inline-rewind { width:44px; height:44px; }
     .cw-inline-rewind { padding:0; }
@@ -7348,7 +7375,11 @@
   .cw-code-form-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-top:12px; }
   .cw-code-form-row input { min-height:42px; padding:0 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); font-size:13px; }
   .cw-code-form-row button { min-height:42px; padding:0 14px; border:0; border-radius:10px; background:#2f2c29; color:#fff; font-weight:650; cursor:pointer; }
+  .cw-worktree-form { display:grid; grid-template-columns:minmax(120px,.75fr) minmax(160px,1fr) minmax(120px,.7fr) auto; gap:8px; margin-top:12px; }
+  .cw-worktree-form input { min-width:0; min-height:42px; padding:0 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); font-size:12px; }
+  .cw-worktree-form button { min-height:42px; padding:0 14px; border:0; border-radius:10px; background:#2f2c29; color:#fff; font-weight:650; cursor:pointer; }
   :root.dark .cw-code-form-row button { background:#eee9e3; color:#24211f; }
+  :root.dark .cw-worktree-form button { background:#eee9e3; color:#24211f; }
   @media (max-width:640px) {
     .cw-conversation-search { top:58px; }
     .cw-context-overview { grid-template-columns:1fr; }
@@ -7356,6 +7387,7 @@
     .cw-context-row-bar { display:none; }
     .cw-code-list-row { grid-template-columns:1fr; }
     .cw-code-list-actions button,.cw-code-compact-btn { min-height:44px; }
+    .cw-worktree-form { grid-template-columns:1fr; }
   }
 
   /* Code source / diff inspector: dense desktop split view, full-screen mobile drawer. */
@@ -7645,7 +7677,7 @@
   }
   #cwContextUsageModal .cw-code-review-title { font-size:16px; }
   #cwContextUsageModal .cw-code-review-sub { margin-top:2px; font-size:11.5px; }
-  #cwContextUsageModal .cw-code-review-body { padding:18px 20px 20px; }
+  #cwContextUsageModal .cw-code-review-body { max-height:calc(100vh - 96px); overflow:auto; padding:18px 20px 20px; }
   #cwContextUsageModal .cw-context-overview { gap:8px; margin-bottom:12px; }
   #cwContextUsageModal .cw-context-metric {
     min-height:86px;
@@ -7668,6 +7700,17 @@
   }
   #cwContextUsageModal #cwContextCompactBtn:hover { border-color:var(--cw-control-primary-hover); background:var(--cw-control-primary-hover); }
   #cwContextUsageModal #cwContextRefreshBtn { background:transparent; }
+  .cw-context-ledger { margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
+  .cw-context-ledger-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:9px; }
+  .cw-context-ledger-head strong { color:var(--text); font-size:12.5px; }
+  .cw-context-ledger-budget { color:var(--text-subtle); font:10.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; text-align:right; }
+  .cw-context-ledger-list { display:flex; flex-direction:column; gap:6px; max-height:24vh; overflow:auto; }
+  .cw-context-ledger-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; padding:9px 10px; border:1px solid var(--border); border-radius:9px; background:var(--surface-2); }
+  .cw-context-ledger-title { overflow:hidden; color:var(--text); font-size:11.5px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+  .cw-context-ledger-meta { margin-top:3px; color:var(--text-muted); font-size:10px; line-height:1.45; }
+  .cw-context-ledger-token { color:var(--text); font:650 10.5px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:nowrap; }
+  .cw-context-ledger-state { color:var(--text-subtle); }
+  .cw-context-ledger-state.stale { color:#b56b18; }
 
   /* Code inspector toolbar and file picker. */
   .cw-code-inspector-head { min-height:44px; padding:5px 9px 5px 12px; gap:8px; }
@@ -7741,6 +7784,9 @@
     #cwContextUsageModal .cw-context-metric strong { font-size:15px; }
     #cwContextUsageModal #cwContextCompactBtn,
     #cwContextUsageModal #cwContextRefreshBtn { min-height:44px; }
+    .cw-context-ledger-head { display:block; }
+    .cw-context-ledger-budget { margin-top:4px; text-align:left; }
+    .cw-context-ledger-row { grid-template-columns:1fr; }
     .cw-code-form-row { grid-template-columns:1fr; }
     .cw-code-form-row input,.cw-code-form-row button { min-height:44px; }
   }
@@ -8199,6 +8245,9 @@
                       </button>
                       <button type="button" id="cwWorkspacePresetsBtn" class="cw-mode-option" role="menuitem">
                         <span class="cw-mode-option-copy"><span class="cw-mode-option-title">工作区预设</span><span class="cw-mode-option-description">保存项目、模型、模式和验证命令</span></span>
+                      </button>
+                      <button type="button" id="cwWorktreesBtn" class="cw-mode-option" role="menuitem">
+                        <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Git Worktrees</span><span class="cw-mode-option-description">为并行任务创建隔离的 Code 会话</span></span>
                       </button>
                     </span>
                   </span>
@@ -9059,6 +9108,20 @@
           <button id="codeValidationRun" type="button" class="cw-review-btn primary">运行验证</button>
         </div>
         <div id="codeValidationResult" class="cw-validation-result"></div>
+        <details id="cwBrowserValidation" class="cw-browser-validation cw-code-only">
+          <summary><span>浏览器验收配方</span><small>仅登记配方与证据，不会自动执行浏览器</small></summary>
+          <div class="cw-browser-validation-notice">Run 创建后会保持等待状态：<strong>待外部浏览器执行器回传证据</strong>。服务器启动命令建议只展示，不会在此处执行；环境不可用时请明确标记为 skipped。</div>
+          <div class="cw-browser-validation-form">
+            <input id="cwBrowserRecipeName" placeholder="配方名称" aria-label="浏览器验收配方名称" />
+            <input id="cwBrowserRecipeUrl" placeholder="http://127.0.0.1:8765" aria-label="浏览器验收 URL" />
+            <input id="cwBrowserRecipeViewport" value='{"width":1440,"height":900,"device_scale_factor":1}' aria-label="Viewport JSON" />
+            <textarea id="cwBrowserRecipeSteps" class="wide" aria-label="步骤 JSON">[{"id":"open","action":"navigate","value":"/"}]</textarea>
+            <textarea id="cwBrowserRecipeAssertions" class="wide" aria-label="断言 JSON">[]</textarea>
+            <textarea id="cwBrowserRecipeServerCommand" class="wide" aria-label="服务器启动命令建议" placeholder="服务器启动命令建议（只保存和展示，不执行）"></textarea>
+          </div>
+          <div class="cw-browser-validation-actions"><button type="button" id="cwBrowserValidationRefresh" class="cw-review-btn">刷新</button><button type="button" id="cwBrowserRecipeCreate" class="cw-review-btn primary">保存配方</button></div>
+          <div class="cw-browser-validation-columns"><div class="cw-browser-validation-panel"><strong>配方</strong><div id="cwBrowserRecipeList"></div></div><div class="cw-browser-validation-panel"><strong>运行与证据</strong><div id="cwBrowserRunList"></div></div></div>
+        </details>
       </section>
     </div>
   </div>
@@ -9095,6 +9158,10 @@
     <div class="cw-code-review-body">
       <div id="cwContextUsageOverview" class="cw-context-overview"></div>
       <div id="cwContextUsageList" class="cw-context-list" aria-live="polite"></div>
+      <section id="cwContextLedger" class="cw-context-ledger" aria-labelledby="cwContextLedgerTitle">
+        <div class="cw-context-ledger-head"><strong id="cwContextLedgerTitle">Context Ledger</strong><span id="cwContextLedgerBudget" class="cw-context-ledger-budget">正在读取预算…</span></div>
+        <div id="cwContextLedgerList" class="cw-context-ledger-list" aria-live="polite"></div>
+      </section>
       <div class="mt-3 flex justify-end gap-2"><button type="button" id="cwContextCompactBtn" class="cw-code-compact-btn">立即原生压缩</button><button type="button" id="cwContextRefreshBtn" class="cw-code-compact-btn">刷新统计</button></div>
     </div>
   </div>
@@ -9111,6 +9178,21 @@
   <div class="modal-box lg p-0" role="dialog" aria-modal="true" aria-labelledby="cwWorkspacePresetsTitle" style="max-width:720px;overflow:hidden;">
     <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorkspacePresetsTitle" class="cw-code-review-title">Code 工作区预设</div><div class="cw-code-review-sub">一键恢复项目、模型、运行模式、轻上下文和验证策略</div></div><button data-close class="cw-code-review-close" aria-label="关闭工作区预设">×</button></div>
     <div class="cw-code-review-body"><div id="cwWorkspacePresetsList" class="cw-code-list"></div><div class="cw-code-form-row"><input id="cwWorkspacePresetName" maxlength="80" placeholder="预设名称，例如：claude-web 开发" aria-label="预设名称" /><button type="button" id="cwWorkspacePresetSave">保存当前配置</button></div></div>
+  </div>
+</div>
+
+<div id="cwWorktreesModal" class="modal-backdrop hidden cw-code-only">
+  <div class="modal-box lg p-0" role="dialog" aria-modal="true" aria-labelledby="cwWorktreesTitle" style="max-width:860px;overflow:hidden;">
+    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorktreesTitle" class="cw-code-review-title">Git Worktrees</div><div class="cw-code-review-sub">每个 Worktree 使用独立目录与派生 Code 会话；删除不会自动删除 Git 分支</div></div><button data-close class="cw-code-review-close" aria-label="关闭 Worktrees">×</button></div>
+    <div class="cw-code-review-body">
+      <div id="cwWorktreesList" class="cw-code-list"></div>
+      <div class="cw-worktree-form" aria-label="新建 Worktree">
+        <input id="cwWorktreeSlug" maxlength="64" autocomplete="off" spellcheck="false" placeholder="名称，例如 api-fix" aria-label="Worktree 名称" />
+        <input id="cwWorktreeBranch" maxlength="180" autocomplete="off" spellcheck="false" placeholder="分支（留空为 claude-web/名称）" aria-label="Worktree 分支" />
+        <input id="cwWorktreeBase" maxlength="180" autocomplete="off" spellcheck="false" value="HEAD" placeholder="基础版本，例如 HEAD" aria-label="Worktree 基础版本" />
+        <button type="button" id="cwWorktreeCreate">新建并打开</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -9629,6 +9711,7 @@ const cwModeAutoApproveDescription = $('cwModeAutoApproveDescription');
 const cwModeAutoApproveState = $('cwModeAutoApproveState');
 const cwPermissionRulesBtn = $('cwPermissionRulesBtn');
 const cwWorkspacePresetsBtn = $('cwWorkspacePresetsBtn');
+const cwWorktreesBtn = $('cwWorktreesBtn');
 const cwConversationSearch = $('cwConversationSearch');
 const cwConversationSearchInput = $('cwConversationSearchInput');
 const cwConversationSearchCount = $('cwConversationSearchCount');
@@ -9639,6 +9722,9 @@ const cwContextUsageModal = $('cwContextUsageModal');
 const cwContextUsageOverview = $('cwContextUsageOverview');
 const cwContextUsageList = $('cwContextUsageList');
 const cwContextUsageSubtitle = $('cwContextUsageSubtitle');
+const cwContextLedger = $('cwContextLedger');
+const cwContextLedgerBudget = $('cwContextLedgerBudget');
+const cwContextLedgerList = $('cwContextLedgerList');
 const cwContextRefreshBtn = $('cwContextRefreshBtn');
 const cwContextCompactBtn = $('cwContextCompactBtn');
 const cwPermissionRulesModal = $('cwPermissionRulesModal');
@@ -9648,6 +9734,12 @@ const cwWorkspacePresetsModal = $('cwWorkspacePresetsModal');
 const cwWorkspacePresetsList = $('cwWorkspacePresetsList');
 const cwWorkspacePresetName = $('cwWorkspacePresetName');
 const cwWorkspacePresetSave = $('cwWorkspacePresetSave');
+const cwWorktreesModal = $('cwWorktreesModal');
+const cwWorktreesList = $('cwWorktreesList');
+const cwWorktreeSlug = $('cwWorktreeSlug');
+const cwWorktreeBranch = $('cwWorktreeBranch');
+const cwWorktreeBase = $('cwWorktreeBase');
+const cwWorktreeCreate = $('cwWorktreeCreate');
 const cwProjectManagerPanel = $('cwProjectManagerPanel');
 const cwProjectManagerClose = $('cwProjectManagerClose');
 const cwProjectManagerSub = $('cwProjectManagerSub');
@@ -9840,6 +9932,11 @@ const gitDiffModal = $('gitDiffModal'), gitDiffPath = $('gitDiffPath'), gitDiffC
 const codeReviewModal = $('codeReviewModal'), codeReviewList = $('codeReviewList'), codeReviewSummary = $('codeReviewSummary');
 const codeReviewKeepAll = $('codeReviewKeepAll'), codeReviewRevertAll = $('codeReviewRevertAll');
 const codeValidationCommand = $('codeValidationCommand'), codeValidationMode = $('codeValidationMode'), codeValidationRun = $('codeValidationRun'), codeValidationResult = $('codeValidationResult');
+const cwBrowserValidation = $('cwBrowserValidation');
+const cwBrowserRecipeName = $('cwBrowserRecipeName'), cwBrowserRecipeUrl = $('cwBrowserRecipeUrl'), cwBrowserRecipeViewport = $('cwBrowserRecipeViewport');
+const cwBrowserRecipeSteps = $('cwBrowserRecipeSteps'), cwBrowserRecipeAssertions = $('cwBrowserRecipeAssertions'), cwBrowserRecipeServerCommand = $('cwBrowserRecipeServerCommand');
+const cwBrowserRecipeCreate = $('cwBrowserRecipeCreate'), cwBrowserValidationRefresh = $('cwBrowserValidationRefresh');
+const cwBrowserRecipeList = $('cwBrowserRecipeList'), cwBrowserRunList = $('cwBrowserRunList');
 const cwOpenCodeFileBtn = $('cwOpenCodeFileBtn');
 const cwCodeInspector = $('cwCodeInspector'), cwCodeInspectorTabs = $('cwCodeInspectorTabs');
 const cwCodeInspectorBody = $('cwCodeInspectorBody'), cwCodeInspectorBreadcrumb = $('cwCodeInspectorBreadcrumb');
@@ -13007,11 +13104,82 @@ function renderNativeContextUsage(data = latestNativeContextUsage) {
   if (cwContextUsageSubtitle) cwContextUsageSubtitle.textContent = `Claude Agent SDK 实时统计 · ${percent}% 已使用`;
 }
 
+let contextLedgerRequestSerial = 0;
+
+function contextLedgerBytes(value) {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  return `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} KB`;
+}
+
+function renderCodeContextLedger(payload = {}) {
+  if (!cwContextLedgerBudget || !cwContextLedgerList) return;
+  const summary = payload.summary || {};
+  const limits = summary.limits || {};
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  cwContextLedgerBudget.textContent = [
+    `${Number(summary.count || 0).toLocaleString()} / ${Number(limits.max_entries || 0).toLocaleString()} 条`,
+    `${contextLedgerBytes(summary.descriptor_bytes)} / ${contextLedgerBytes(limits.max_total_descriptor_bytes)}`,
+    `活跃估算 ${_fmtTokens(summary.active_token_estimate || 0)}`,
+  ].join(' · ');
+  const typeLabels = {
+    project_map_pack:'Project Map Pack', sdk_context_usage:'SDK Usage', native_compact:'Native Compact',
+    user_pinned:'用户固定', auto_retrieval:'自动检索',
+  };
+  const lifecycleLabels = { active:'活跃', compacted:'已压缩', dropped:'已丢弃' };
+  cwContextLedgerList.innerHTML = items.length ? items.map(item => {
+    const type = typeLabels[item.type] || item.type || 'Context';
+    const source = String(item.source || 'unknown');
+    const lifecycle = lifecycleLabels[item.lifecycle_state] || item.lifecycle_state || '未知';
+    const stale = item.stale ? ' · 已过期' : '';
+    const revision = item.revision ? ` · rev ${item.revision}` : '';
+    const created = Number(item.created_at || 0);
+    const when = created ? new Date(created * 1000).toLocaleString() : '时间未知';
+    return `<div class="cw-context-ledger-row">
+      <div><div class="cw-context-ledger-title">${escapeHtml(type)} · ${escapeHtml(source)}</div><div class="cw-context-ledger-meta">${escapeHtml(when)}${escapeHtml(revision)} · v${escapeHtml(String(item.version || '1'))}</div></div>
+      <div class="cw-context-ledger-token">${_fmtTokens(item.token_estimate || 0)}<div class="cw-context-ledger-meta cw-context-ledger-state${item.stale ? ' stale' : ''}">${escapeHtml(lifecycle + stale)}</div></div>
+    </div>`;
+  }).join('') : '<div class="cw-activity-empty">当前 Code 会话还没有账本描述符。</div>';
+}
+
+async function refreshCodeContextLedger(options = {}) {
+  if (!codeMode || !sessionId) return null;
+  const targetSessionId = sessionId;
+  const requestSerial = ++contextLedgerRequestSerial;
+  try {
+    const base = `/api/sessions/${encodeURIComponent(targetSessionId)}/context-ledger`;
+    const [listResponse, summaryResponse] = await Promise.all([
+      fetch(`${base}?limit=100`),
+      fetch(`${base}/summary`),
+    ]);
+    const listData = await listResponse.json().catch(() => ({}));
+    const summaryData = await summaryResponse.json().catch(() => ({}));
+    if (!listResponse.ok || !summaryResponse.ok) {
+      const detail = listData.detail || summaryData.detail || `HTTP ${listResponse.ok ? summaryResponse.status : listResponse.status}`;
+      throw new Error(typeof detail === 'object' ? (detail.message || detail.code) : detail);
+    }
+    if (sessionId !== targetSessionId || requestSerial !== contextLedgerRequestSerial || !codeMode) return null;
+    const payload = { items:listData.items || [], summary:summaryData.summary || {} };
+    renderCodeContextLedger(payload);
+    return payload;
+  } catch (error) {
+    if (sessionId === targetSessionId && requestSerial === contextLedgerRequestSerial && cwContextLedgerList) {
+      cwContextLedgerList.innerHTML = '<div class="cw-activity-empty">Context Ledger 暂不可用。</div>';
+    }
+    if (!options.silent) toast('Context Ledger 读取失败：' + (error.message || error));
+    return null;
+  }
+}
+
 async function openNativeContextUsage() {
   if (!codeMode || !sessionId) return;
   openModal(cwContextUsageModal);
   cwContextUsageList.innerHTML = '<div class="cw-activity-empty">正在读取原生上下文统计…</div>';
-  const data = await refreshNativeContextUsage({ silent:false });
+  if (cwContextLedgerList) cwContextLedgerList.innerHTML = '<div class="cw-activity-empty">正在读取 Context Ledger…</div>';
+  const [data] = await Promise.all([
+    refreshNativeContextUsage({ silent:false }),
+    refreshCodeContextLedger({ silent:false }),
+  ]);
   renderNativeContextUsage(data || latestNativeContextUsage || {});
 }
 
@@ -13108,6 +13276,7 @@ cwContextCompactBtn?.addEventListener('click', async () => {
     if (!result?.ok) throw new Error(result?.error?.message || '原生压缩失败');
     if (sessionId === targetSessionId) {
       await refreshNativeContextUsage({ silent:false });
+      await refreshCodeContextLedger({ silent:false });
       renderNativeContextUsage();
     }
   }
@@ -15497,23 +15666,49 @@ function syncComposerDraftState() {
 // ===== draft autosave =====
 const draftKey = () => `draft_${codeMode ? 'code' : 'chat'}_${sessionId || 'new'}`;
 const draftFileRefsKey = () => draftKey() + '_code_files';
+const draftContextPacksKey = () => draftKey() + '_project_map_context_packs';
 const codeFileReferences = new Map();
+const codeContextPacks = new Map();
+
+function normalizeCodeContextPackDescriptor(descriptor, ownerSessionId = sessionId) {
+  const packId = String(descriptor?.packId || '').trim().toLowerCase();
+  const owner = String(descriptor?.ownerSessionId || ownerSessionId || '').trim();
+  const expiresAt = Number(descriptor?.expiresAt || 0);
+  if (!codeMode || !owner || owner !== sessionId || !/^[0-9a-f]{32}$/.test(packId)) return null;
+  if (expiresAt && expiresAt <= Date.now() / 1000) return null;
+  return {
+    packId,
+    ownerSessionId: owner,
+    revision: Math.max(0, Number(descriptor?.revision || 0)),
+    nodeIds: Array.isArray(descriptor?.nodeIds) ? descriptor.nodeIds.map(String).slice(0, 20) : [],
+    label: String(descriptor?.label || 'Project Map 上下文').slice(0, 160),
+    expiresAt,
+  };
+}
 
 function renderCodeFileReferences() {
   if (!cwFileContextChips) return;
-  if (!codeMode || codeFileReferences.size === 0) {
+  if (!codeMode || (codeFileReferences.size === 0 && codeContextPacks.size === 0)) {
     cwFileContextChips.classList.add('hidden');
     cwFileContextChips.innerHTML = '';
     return;
   }
   cwFileContextChips.classList.remove('hidden');
-  cwFileContextChips.innerHTML = [...codeFileReferences.entries()].map(([path, label]) => `
+  const fileChips = [...codeFileReferences.entries()].map(([path, label]) => `
     <span class="cw-file-context-chip" title="${escapeHtml(path)}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/></svg>
       <span>${escapeHtml(label || path)}</span>
       <button type="button" data-remove-code-file="${encodeURIComponent(path)}" aria-label="移除文件引用 ${escapeHtml(label || path)}">×</button>
     </span>
   `).join('');
+  const contextChips = [...codeContextPacks.values()].map(descriptor => `
+    <span class="cw-file-context-chip" title="Project Map v${descriptor.revision || '?'} · ${escapeHtml(descriptor.label)}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="m7.7 7 3.2 8.9M16.3 7l-3.2 8.9M8 6h8"/></svg>
+      <span>图谱 · ${escapeHtml(descriptor.label)}</span>
+      <button type="button" data-remove-context-pack="${descriptor.packId}" aria-label="移除图谱上下文 ${escapeHtml(descriptor.label)}">×</button>
+    </span>
+  `).join('');
+  cwFileContextChips.innerHTML = fileChips + contextChips;
 }
 
 function persistCodeFileReferences() {
@@ -15523,6 +15718,26 @@ function persistCodeFileReferences() {
       [...codeFileReferences.entries()].map(([path, label]) => ({ path, label })),
     ));
   } catch {}
+}
+
+function persistCodeContextPacks() {
+  if (!codeMode) return;
+  try {
+    localStorage.setItem(draftContextPacksKey(), JSON.stringify([...codeContextPacks.values()]));
+  } catch {}
+}
+
+function attachProjectMapContextPack(descriptor, options = {}) {
+  const normalized = normalizeCodeContextPackDescriptor(descriptor);
+  if (!normalized) {
+    if (!options.silent) toast('图谱上下文已失效或不属于当前 Code 会话');
+    return false;
+  }
+  codeContextPacks.set(normalized.packId, normalized);
+  persistCodeContextPacks();
+  renderCodeFileReferences();
+  if (!options.silent) toast(`已附加图谱上下文：${normalized.label}`);
+  return true;
 }
 
 function addCodeFileReference(path, label) {
@@ -15574,6 +15789,13 @@ function pruneCodeFileReferences() {
 }
 
 cwFileContextChips?.addEventListener('click', (event) => {
+  const contextButton = event.target.closest('[data-remove-context-pack]');
+  if (contextButton) {
+    codeContextPacks.delete(String(contextButton.dataset.removeContextPack || ''));
+    persistCodeContextPacks();
+    renderCodeFileReferences();
+    return;
+  }
   const button = event.target.closest('[data-remove-code-file]');
   if (!button) return;
   const path = decodeURIComponent(button.dataset.removeCodeFile || '');
@@ -15590,6 +15812,7 @@ cwFileContextChips?.addEventListener('click', (event) => {
 function saveDraft() {
   localStorage.setItem(draftKey(), input.value);
   persistCodeFileReferences();
+  persistCodeContextPacks();
 }
 function rememberCodeInput(text) {
   const value = String(text || '').trim();
@@ -15620,6 +15843,7 @@ function navigateCodeInputHistory(direction) {
 function restoreDraft() {
   input.value = localStorage.getItem(draftKey()) || '';
   codeFileReferences.clear();
+  codeContextPacks.clear();
   if (codeMode) {
     try {
       const saved = JSON.parse(localStorage.getItem(draftFileRefsKey()) || '[]');
@@ -15628,6 +15852,14 @@ function restoreDraft() {
           codeFileReferences.set(String(item.path), String(item.label || pathBasename(item.path) || item.path));
         }
       }
+    } catch {}
+    try {
+      const savedPacks = JSON.parse(localStorage.getItem(draftContextPacksKey()) || '[]');
+      for (const descriptor of Array.isArray(savedPacks) ? savedPacks : []) {
+        const normalized = normalizeCodeContextPackDescriptor(descriptor);
+        if (normalized) codeContextPacks.set(normalized.packId, normalized);
+      }
+      persistCodeContextPacks();
     } catch {}
   }
   renderCodeFileReferences();
@@ -15638,7 +15870,9 @@ function restoreDraft() {
 function clearDraft() {
   localStorage.removeItem(draftKey());
   localStorage.removeItem(draftFileRefsKey());
+  localStorage.removeItem(draftContextPacksKey());
   codeFileReferences.clear();
+  codeContextPacks.clear();
   renderCodeFileReferences();
   syncComposerDraftState();
 }
@@ -16376,6 +16610,7 @@ function codeQueueEntryMeta(entry) {
   if (imageCount) details.push(`${imageCount} 张图片`);
   if (docCount) details.push(`${docCount} 个文件`);
   if (entry?.snapshot?.urlEntries?.length) details.push(`${entry.snapshot.urlEntries.length} 个链接`);
+  if (entry?.snapshot?.contextPacks?.length) details.push(`${entry.snapshot.contextPacks.length} 个图谱上下文`);
   return details.join(' · ');
 }
 
@@ -16598,6 +16833,7 @@ async function captureCodeComposerEntry(text, owner, slashPayload = null, compos
       docs,
       urlEntries,
       webSearchPrefix: isWebSearchEnabled() ? webSearchPrefix() : '',
+      contextPacks: (capture.contextPacks || []).map(item => ({ ...item })),
     },
     queuedAt: Date.now(),
   };
@@ -16747,6 +16983,7 @@ async function send(message, options = {}) {
       docs: readyDocs,
       urlEntries: capture.urlEntries,
       webSearchPrefix: capture.webSearchPrefix,
+      contextPacks: (capture.contextPacks || []).map(item => ({ ...item })),
     },
   });
 }
@@ -16765,6 +17002,7 @@ let agentLoopJobId = '';
 let agentLoopSessionId = '';
 let agentLoopNotifyOnFinish = true;
 let agentLoopStopRequested = false;
+let pendingAgentLoopContextPacks = [];
 const AGENT_LOOP_ACTIVE_KEY = 'cw_agent_loop_active';
 
 function setAgentLoopStatus(text, active = agentLoopRunning) {
@@ -16857,6 +17095,9 @@ async function runAgentLoop() {
   const loopViewEpoch = conversationViewEpoch;
   const loopWorkspaceMode = codeMode ? 'code' : 'chat';
   const loopInitialSessionId = sessionId;
+  const loopContextPacks = pendingAgentLoopContextPacks
+    .map(item => normalizeCodeContextPackDescriptor(item, loopInitialSessionId))
+    .filter(Boolean);
   let startedJobId = '';
   const perm = buildPermissionPayload();
   closeModal(agentLoopModal);
@@ -16894,6 +17135,7 @@ async function runAgentLoop() {
         notify_on_finish: notifyOnFinish,
         browser_enabled: !!settings.codeBrowser,
         force_new: true,
+        context_pack_ids: loopContextPacks.map(item => item.packId),
       }),
     });
     if (!resp.ok) {
@@ -16908,6 +17150,9 @@ async function runAgentLoop() {
       throw new Error(message);
     }
     const data = await resp.json();
+    pendingAgentLoopContextPacks = pendingAgentLoopContextPacks.filter(
+      item => String(item?.ownerSessionId || '') !== String(loopInitialSessionId || ''),
+    );
     startedJobId = data.job_id;
     const loopStillVisible = conversationViewEpoch === loopViewEpoch
       && codeMode === (loopWorkspaceMode === 'code')
@@ -16929,6 +17174,11 @@ async function runAgentLoop() {
       viewEpoch: loopViewEpoch,
     });
   } catch (e) {
+    if (!startedJobId && codeMode && sessionId === loopInitialSessionId) {
+      for (const descriptor of loopContextPacks) codeContextPacks.set(descriptor.packId, descriptor);
+      persistCodeContextPacks();
+      renderCodeFileReferences();
+    }
     toast('Agent Loop 出错：' + (e.message || e), { timeout: 5000 });
   } finally {
     if (!startedJobId || agentLoopJobId === startedJobId) {
@@ -17236,6 +17486,9 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         disallowed_tools: perm.disallowed_tools,
         force_new: forceNew || null,
         client_turn_id: options.clientTurnId || null,
+        context_pack_ids: turnIsCode
+          ? (composerSnapshot?.contextPacks || []).map(item => item?.packId).filter(Boolean)
+          : null,
       }),
       signal: turnController.signal,
     });
@@ -17742,6 +17995,7 @@ function startNewSession() {
   }
   activateNewCodeQueueOwner();
   pendingNativeRewind = null;
+  pendingAgentLoopContextPacks = [];
   currentController = null;
   currentControllerQueueOwner = '';
   stopBtn.classList.add('hidden');
@@ -18331,6 +18585,7 @@ async function loadSession(id, options = {}) {
   if (!options.historyExpansion) conversationViewEpoch += 1;
   try {
     const prevSessionIdSnap = sessionId;
+    pendingAgentLoopContextPacks = [];
     const historyTurns = codeMode ? (sessionHistoryTurns.get(id) || DEFAULT_HISTORY_TURNS) : 0;
     const previousHeight = options.historyExpansion ? chatEl.scrollHeight : 0;
     const previousTop = options.historyExpansion ? chatEl.scrollTop : 0;
@@ -18684,11 +18939,16 @@ async function openGitFileDiff(path, providedDiff = null, options = {}) {
 const codeReviewState = {
   changeSets: [],
   validations: [],
+  indexRefreshSerial: 0,
 };
+let codeReviewIndexRefreshTimer = null;
 
 function resetCodeReviewState() {
   codeReviewState.changeSets = [];
   codeReviewState.validations = [];
+  codeReviewState.indexRefreshSerial += 1;
+  if (codeReviewIndexRefreshTimer) clearTimeout(codeReviewIndexRefreshTimer);
+  codeReviewIndexRefreshTimer = null;
   if (codeReviewList) codeReviewList.innerHTML = '';
   if (codeValidationResult) codeValidationResult.innerHTML = '';
 }
@@ -18717,6 +18977,14 @@ function registerCodeChangeSet(changedFiles, meta = {}) {
         deletions: Number(file?.deletions || 0),
         diff: typeof file?.diff === 'string' ? file.diff : '',
         review_state: String(file?.review_state || ''),
+        index_state: String(file?.index_state || 'loading'),
+        index_etag: String(file?.index_etag || ''),
+        index_can_stage: !!file?.index_can_stage,
+        index_can_unstage: !!file?.index_can_unstage,
+        index_hint: String(file?.index_hint || ''),
+        index_old_path: String(file?.index_old_path || ''),
+        index_renamed: !!file?.index_renamed,
+        index_deleted: !!file?.index_deleted,
       })).filter(file => file.path)
     : [];
   if (!files.length) return null;
@@ -18737,6 +19005,7 @@ function registerCodeChangeSet(changedFiles, meta = {}) {
     set.userIndex = Number(meta.userIndex ?? set.userIndex);
   }
   recomputeCodeReviewStats();
+  scheduleCodeReviewIndexStatusRefresh();
   return set;
 }
 
@@ -18788,6 +19057,110 @@ function applyCodeRewindEvent(event) {
   }
   recomputeCodeReviewStats();
   renderCodeReviewPanel();
+  scheduleCodeReviewIndexStatusRefresh(0);
+}
+
+function codeIndexStateLabel(file) {
+  const state = String(file?.index_state || 'loading');
+  const labels = {
+    loading: '读取暂存状态…', staged: '已 Stage', unstaged: '未 Stage', partial: '部分 Stage',
+    untracked: '未跟踪', conflicted: '存在冲突', clean: 'Git 已干净',
+  };
+  const suffix = file?.index_renamed ? ' · 重命名' : file?.index_deleted ? ' · 已删除' : '';
+  return `${labels[state] || '暂存状态未知'}${suffix}`;
+}
+
+function updateCodeReviewIndexItem(item) {
+  const requestedPath = String(item?.requested_path || '').trim();
+  if (!requestedPath) return;
+  codeReviewState.changeSets.forEach(set => set.files.forEach(file => {
+    if (file.path !== requestedPath) return;
+    file.index_state = String(item.index_state || 'clean');
+    file.index_etag = String(item.etag || '');
+    file.index_can_stage = !!item.can_stage;
+    file.index_can_unstage = !!item.can_unstage;
+    file.index_hint = String(item.action_hint || '');
+    file.index_old_path = String(item.old_path || '');
+    file.index_renamed = !!item.renamed;
+    file.index_deleted = !!item.deleted;
+    file.index_status = String(item.status || '');
+  }));
+}
+
+async function refreshCodeReviewIndexStatus(options = {}) {
+  if (!sessionId || !codeMode || currentCodeRuntime !== 'claude_agent_sdk') return false;
+  const paths = [...new Set(codeReviewState.changeSets.flatMap(set => set.files.map(file => file.path)).filter(Boolean))].slice(0, 200);
+  if (!paths.length) return true;
+  const targetSessionId = sessionId;
+  const serial = ++codeReviewState.indexRefreshSerial;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/changes/index-status`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ paths }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    if (sessionId !== targetSessionId || serial !== codeReviewState.indexRefreshSerial) return false;
+    (data.items || []).forEach(updateCodeReviewIndexItem);
+    renderCodeReviewPanel();
+    return true;
+  } catch (error) {
+    if (sessionId !== targetSessionId || serial !== codeReviewState.indexRefreshSerial) return false;
+    codeReviewState.changeSets.forEach(set => set.files.forEach(file => {
+      if (!paths.includes(file.path)) return;
+      file.index_state = 'loading';
+      file.index_etag = '';
+      file.index_can_stage = false;
+      file.index_can_unstage = false;
+      file.index_hint = error.message || '暂存状态读取失败';
+    }));
+    renderCodeReviewPanel();
+    if (!options.silent) toast(`读取暂存状态失败：${error.message || error}`, { timeout: 5000 });
+    return false;
+  }
+}
+
+function scheduleCodeReviewIndexStatusRefresh(delay = 120) {
+  if (codeReviewIndexRefreshTimer) clearTimeout(codeReviewIndexRefreshTimer);
+  codeReviewIndexRefreshTimer = setTimeout(() => {
+    codeReviewIndexRefreshTimer = null;
+    void refreshCodeReviewIndexStatus({ silent:true });
+  }, delay);
+}
+
+async function updateCodeReviewIndex(path, action, button) {
+  if (!sessionId || !codeMode || currentCodeRuntime !== 'claude_agent_sdk') return false;
+  const target = codeReviewState.changeSets.flatMap(set => set.files).find(file => file.path === path);
+  if (!target?.index_etag) {
+    toast('暂存状态仍在刷新，请稍后重试');
+    scheduleCodeReviewIndexStatusRefresh(0);
+    return false;
+  }
+  const targetSessionId = sessionId;
+  const priorText = button?.textContent || '';
+  if (button) { button.disabled = true; button.textContent = action === 'stage' ? 'Stage 中…' : 'Unstage 中…'; }
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/changes/index`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ path, action, expected_etag: target.index_etag }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    if (sessionId !== targetSessionId) return false;
+    updateCodeReviewIndexItem(data.item || {});
+    renderCodeReviewPanel();
+    refreshGitStatus();
+    scheduleCodeReviewIndexStatusRefresh(0);
+    toast(action === 'stage' ? '文件当前修改已 Stage；审查状态保持不变' : '文件已 Unstage；审查状态保持不变');
+    return true;
+  } catch (error) {
+    if (sessionId === targetSessionId) {
+      toast(`Git 操作失败：${error.message || error}`, { timeout: 5200 });
+      scheduleCodeReviewIndexStatusRefresh(0);
+    }
+    if (button) { button.disabled = false; button.textContent = priorText; }
+    return false;
+  }
 }
 
 function renderCodeReviewPanel() {
@@ -18833,6 +19206,9 @@ function renderCodeReviewPanel() {
           const keyId = encodeURIComponent(set.id);
           const keyPath = encodeURIComponent(file.path);
           const cannotRevert = !persistedChangeSet || set.rewound || state === 'reverted' || !file.revertible || file.diff_truncated;
+          const indexState = String(file.index_state || 'loading');
+          const indexHint = file.index_hint || codeIndexStateLabel(file);
+          const stageLabel = indexState === 'conflicted' ? 'Stage 解决' : 'Stage';
           return `<div class="cw-review-file">
             <div class="cw-review-file-main">
               <div class="cw-review-file-path" title="${escapeHtml(file.path)}">${escapeHtml(file.path)}</div>
@@ -18841,11 +19217,14 @@ function renderCodeReviewPanel() {
                 <span class="cw-code-diff-add">+${file.additions || 0}</span>
                 <span class="cw-code-diff-del">-${file.deletions || 0}</span>
                 <span class="cw-review-state ${escapeHtml(state)}">${stateLabel}</span>
+                <span class="cw-index-state ${escapeHtml(indexState)}" title="${escapeHtml(indexHint)}">${escapeHtml(codeIndexStateLabel(file))}</span>
                 ${file.diff_truncated ? '<span>Diff 已截断</span>' : ''}
               </div>
             </div>
             <div class="cw-review-file-actions">
               <button type="button" class="cw-review-btn" data-review-view="${keyId}" data-review-path="${keyPath}">查看 Diff</button>
+              <button type="button" class="cw-review-btn index-action" data-index-action="stage" data-review-path="${keyPath}" ${!file.index_can_stage || !file.index_etag ? 'disabled' : ''} title="${escapeHtml(indexHint || '把当前工作区内容加入 Git index')}">${stageLabel}</button>
+              <button type="button" class="cw-review-btn index-action" data-index-action="unstage" data-review-path="${keyPath}" ${!file.index_can_unstage || !file.index_etag ? 'disabled' : ''} title="${escapeHtml(indexHint || '从 Git index 移除，保留工作区内容')}">Unstage</button>
               <button type="button" class="cw-review-btn primary" data-review-keep="${keyId}" data-review-path="${keyPath}" ${state !== 'pending' || !persistedChangeSet ? 'disabled' : ''} title="${!persistedChangeSet ? '旧会话没有持久化变更集标识，仅支持查看' : '确认保留此文件'}">保留</button>
               <button type="button" class="cw-review-btn danger" data-review-revert="${keyId}" data-review-path="${keyPath}" ${cannotRevert ? 'disabled' : ''} title="${cannotRevert && state === 'pending' ? '没有完整可逆补丁，请使用整轮回退' : '撤销这个文件的本轮 AI 修改'}">撤销</button>
             </div>
@@ -18885,6 +19264,7 @@ async function reviewCodeChange(changeSetId, path, action, button, hunkIndex = n
     recomputeCodeReviewStats();
     renderCodeReviewPanel();
     refreshGitStatus();
+    scheduleCodeReviewIndexStatusRefresh(0);
     const scope = Number.isInteger(hunkIndex) ? '该差异块' : '该文件';
     toast(action === 'revert' ? `已安全撤销${scope}的 AI 修改` : `已标记保留${scope}`);
     return true;
@@ -18923,6 +19303,7 @@ async function reviewCodeChangesBatch(action) {
     renderCodeReviewPanel();
     renderWorkspaceActivity();
     refreshGitStatus();
+    scheduleCodeReviewIndexStatusRefresh(0);
     toast(action === 'revert' ? '全部待审查修改已安全撤销' : '全部待审查修改已标记保留');
   } catch (error) {
     toast(`批量操作失败：${error.message || error}`, { timeout: 6000 });
@@ -18938,10 +19319,14 @@ codeReviewRevertAll?.addEventListener('click', () => reviewCodeChangesBatch('rev
 codeReviewList?.addEventListener('click', (event) => {
   const rewind = event.target.closest('[data-review-rewind]');
   if (rewind) { previewNativeRewind(Number(rewind.dataset.reviewRewind)); return; }
-  const actionButton = event.target.closest('[data-review-view],[data-review-keep],[data-review-revert]');
+  const actionButton = event.target.closest('[data-review-view],[data-review-keep],[data-review-revert],[data-index-action]');
   if (!actionButton) return;
-  const changeSetId = decodeURIComponent(actionButton.dataset.reviewView || actionButton.dataset.reviewKeep || actionButton.dataset.reviewRevert || '');
   const path = decodeURIComponent(actionButton.dataset.reviewPath || '');
+  if (actionButton.hasAttribute('data-index-action')) {
+    updateCodeReviewIndex(path, actionButton.dataset.indexAction, actionButton);
+    return;
+  }
+  const changeSetId = decodeURIComponent(actionButton.dataset.reviewView || actionButton.dataset.reviewKeep || actionButton.dataset.reviewRevert || '');
   const found = findCodeReviewFile(changeSetId, path);
   if (!found) return;
   if (actionButton.hasAttribute('data-review-view')) {
@@ -19019,6 +19404,129 @@ async function runCodeValidation() {
 }
 
 codeValidationRun?.addEventListener('click', runCodeValidation);
+
+let browserValidationRefreshSerial = 0;
+
+function browserValidationErrorMessage(data, fallback) {
+  const detail = data?.detail;
+  if (detail && typeof detail === 'object') return detail.message || detail.code || fallback;
+  return detail || fallback;
+}
+
+function browserValidationRunLabel(run) {
+  return ({ queued:'等待外部执行器', running:'外部执行器运行中', passed:'通过', failed:'失败', skipped:'已跳过', cancelled:'已取消' })[run.status] || run.status;
+}
+
+function renderBrowserValidationData(recipes, runs) {
+  const recipeById = new Map(recipes.map(item => [item.id, item]));
+  cwBrowserRecipeList.innerHTML = recipes.length ? recipes.map(recipe => `
+    <div class="cw-browser-validation-item" data-browser-recipe="${escapeHtml(recipe.id)}">
+      <strong>${escapeHtml(recipe.name)}</strong> · ${escapeHtml(recipe.viewport?.width || '')}×${escapeHtml(recipe.viewport?.height || '')}
+      <code>${escapeHtml(recipe.url)}</code>
+      ${recipe.server_command_suggestion ? `<code>服务器命令建议（不执行）：${escapeHtml(recipe.server_command_suggestion)}</code>` : ''}
+      <div class="cw-browser-validation-actions"><button type="button" class="cw-review-btn primary" data-create-browser-run="${escapeHtml(recipe.id)}">创建 Run</button></div>
+    </div>
+  `).join('') : '<div class="cw-activity-empty">还没有浏览器验收配方。</div>';
+  cwBrowserRunList.innerHTML = runs.length ? runs.map(run => {
+    const recipe = recipeById.get(run.recipe_id);
+    const waiting = run.status === 'queued' || run.status === 'running';
+    const evidence = run.evidence;
+    return `<div class="cw-browser-validation-item" data-browser-run="${escapeHtml(run.id)}"><strong>${escapeHtml(recipe?.name || run.recipe_id)}</strong> · ${escapeHtml(browserValidationRunLabel(run))}<code>${waiting ? '待外部浏览器执行器回传证据' : (run.reason || run.reason_code || '')}</code>${evidence ? `<details><summary>查看结构化证据</summary><pre>${escapeHtml(JSON.stringify(evidence, null, 2))}</pre></details>` : '<code>尚无证据</code>'}${waiting ? `<div class="cw-browser-validation-actions"><button type="button" class="cw-review-btn" data-skip-browser-run="${escapeHtml(run.id)}">标记环境不可用</button></div>` : ''}</div>`;
+  }).join('') : '<div class="cw-activity-empty">尚未创建 Run。创建只会登记等待项，不会启动浏览器。</div>';
+
+  cwBrowserRecipeList.querySelectorAll('[data-create-browser-run]').forEach(button => button.addEventListener('click', async () => {
+    if (!sessionId || !codeMode) return;
+    const ownerSessionId = sessionId;
+    button.disabled = true;
+    try {
+      const response = await fetch(`/api/sessions/${encodeURIComponent(ownerSessionId)}/browser-validation/runs`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ recipe_id:button.dataset.createBrowserRun }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(browserValidationErrorMessage(data, `HTTP ${response.status}`));
+      toast(data.message || 'Run 已创建，等待外部浏览器执行器回传证据');
+      await refreshBrowserValidation();
+    } catch (error) { toast('创建 Run 失败：' + (error.message || error)); }
+    finally { button.disabled = false; }
+  }));
+  cwBrowserRunList.querySelectorAll('[data-skip-browser-run]').forEach(button => button.addEventListener('click', async () => {
+    if (!sessionId || !codeMode) return;
+    if (!confirm('确认当前浏览器环境不可用，并将这次 Run 明确标记为 skipped？')) return;
+    const ownerSessionId = sessionId;
+    button.disabled = true;
+    try {
+      const response = await fetch(`/api/sessions/${encodeURIComponent(ownerSessionId)}/browser-validation/runs/${encodeURIComponent(button.dataset.skipBrowserRun)}`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+          status:'skipped', reason_code:'browser_unavailable', reason:'当前未连接可用的外部浏览器执行器',
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(browserValidationErrorMessage(data, `HTTP ${response.status}`));
+      await refreshBrowserValidation();
+    } catch (error) { toast('标记 skipped 失败：' + (error.message || error)); }
+    finally { button.disabled = false; }
+  }));
+}
+
+async function refreshBrowserValidation() {
+  if (!codeMode || !sessionId || !cwBrowserRecipeList || !cwBrowserRunList) return;
+  const ownerSessionId = sessionId;
+  const serial = ++browserValidationRefreshSerial;
+  cwBrowserRecipeList.innerHTML = '<div class="cw-activity-empty">正在读取配方…</div>';
+  cwBrowserRunList.innerHTML = '<div class="cw-activity-empty">正在读取运行记录…</div>';
+  try {
+    const [recipeResponse, runResponse] = await Promise.all([
+      fetch(`/api/sessions/${encodeURIComponent(ownerSessionId)}/browser-validation/recipes`),
+      fetch(`/api/sessions/${encodeURIComponent(ownerSessionId)}/browser-validation/runs`),
+    ]);
+    const [recipeData, runData] = await Promise.all([
+      recipeResponse.json().catch(() => ({})), runResponse.json().catch(() => ({})),
+    ]);
+    if (!recipeResponse.ok) throw new Error(browserValidationErrorMessage(recipeData, `HTTP ${recipeResponse.status}`));
+    if (!runResponse.ok) throw new Error(browserValidationErrorMessage(runData, `HTTP ${runResponse.status}`));
+    if (serial !== browserValidationRefreshSerial || sessionId !== ownerSessionId || !codeMode) return;
+    renderBrowserValidationData(recipeData.recipes || [], runData.runs || []);
+  } catch (error) {
+    if (serial !== browserValidationRefreshSerial || sessionId !== ownerSessionId) return;
+    const message = escapeHtml(error.message || error);
+    cwBrowserRecipeList.innerHTML = `<div class="cw-activity-empty" style="color:#b53d38">${message}</div>`;
+    cwBrowserRunList.innerHTML = '<div class="cw-activity-empty">无法读取浏览器验收记录。</div>';
+  }
+}
+
+cwBrowserValidationRefresh?.addEventListener('click', refreshBrowserValidation);
+cwBrowserValidation?.addEventListener('toggle', () => {
+  if (cwBrowserValidation.open) void refreshBrowserValidation();
+});
+cwBrowserRecipeCreate?.addEventListener('click', async () => {
+  if (!sessionId || !codeMode) return;
+  const ownerSessionId = sessionId;
+  let viewport, steps, assertions;
+  try {
+    viewport = JSON.parse(cwBrowserRecipeViewport.value || '{}');
+    steps = JSON.parse(cwBrowserRecipeSteps.value || '[]');
+    assertions = JSON.parse(cwBrowserRecipeAssertions.value || '[]');
+    if (!Array.isArray(steps) || !Array.isArray(assertions)) throw new Error('步骤和断言必须是 JSON 数组');
+  } catch (error) {
+    toast('配方 JSON 无效：' + (error.message || error));
+    return;
+  }
+  cwBrowserRecipeCreate.disabled = true;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(ownerSessionId)}/browser-validation/recipes`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+        name:cwBrowserRecipeName.value.trim(), url:cwBrowserRecipeUrl.value.trim(), viewport, steps, assertions,
+        server_command_suggestion:cwBrowserRecipeServerCommand.value.trim(),
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(browserValidationErrorMessage(data, `HTTP ${response.status}`));
+    cwBrowserRecipeName.value = '';
+    toast('浏览器验收配方已保存；没有执行服务器命令或浏览器操作');
+    await refreshBrowserValidation();
+  } catch (error) { toast('保存配方失败：' + (error.message || error), { timeout:5200 }); }
+  finally { cwBrowserRecipeCreate.disabled = false; }
+});
 async function toggleCodeInspectorExternalMenu() {
   const tab = activeCodeInspectorTab();
   if (!tab || !sessionId || !cwCodeInspectorExternalMenu) return;
@@ -19241,6 +19749,7 @@ async function renderChangedFilesSummary(container, changedFiles = [], meta = {}
       btn.addEventListener('click', () => {
         renderCodeReviewPanel();
         openModal(codeReviewModal);
+        void refreshCodeReviewIndexStatus({ silent:true });
         codeValidationCommand?.focus();
       });
     });
@@ -20955,6 +21464,7 @@ cwWorkspaceActivity?.addEventListener('click', event => {
     closeWorkspaceActivity({ restoreFocus: false });
     renderCodeReviewPanel();
     openModal(codeReviewModal);
+    void refreshCodeReviewIndexStatus({ silent:true });
     return;
   }
   const tab = event.target.closest('[data-cw-activity-tab]');
@@ -21511,6 +22021,107 @@ cwWorkspacePresetSave?.addEventListener('click', async () => {
     cwWorkspacePresetName.value = ''; await refreshWorkspacePresets(); toast('工作区预设已保存');
   } catch (error) { toast('保存失败：' + (error.message || error)); }
   finally { cwWorkspacePresetSave.disabled = false; }
+});
+
+function codeWorktreeErrorMessage(data, fallback) {
+  const detail = data?.detail;
+  if (detail && typeof detail === 'object') return detail.message || detail.code || fallback;
+  return detail || fallback;
+}
+
+function codeWorktreeStatusLabel(item) {
+  if (item.runtime_active) return '运行中';
+  if (item.dirty) return '有未提交修改';
+  return ({ active:'可用', creating:'创建中', removing:'删除中', removed:'已删除', missing:'目录缺失', failed:'失败' })[item.status] || item.status || '未知';
+}
+
+function codeWorktreeDeleteReason(item) {
+  if (item.runtime_active) return '派生 Code 会话仍在运行，停止后才能删除';
+  if (item.dirty) return 'Worktree 有未提交修改，提交或清理后才能删除';
+  if (item.worktree_session_id === sessionId) return '请先切换到其他 Code 会话再删除当前 Worktree';
+  if (item.status !== 'active' || !item.exists) return '当前 Worktree 状态不允许删除';
+  return '删除 Worktree 目录；Git 分支会保留';
+}
+
+async function refreshCodeWorktrees() {
+  if (!codeMode || !sessionId || !cwWorktreesList) return;
+  const ownerSessionId = sessionId;
+  cwWorktreesList.innerHTML = '<div class="cw-activity-empty">正在读取 Worktrees…</div>';
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(ownerSessionId)}/worktrees`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(codeWorktreeErrorMessage(data, `HTTP ${response.status}`));
+    if (sessionId !== ownerSessionId || cwWorktreesModal?.classList.contains('hidden')) return;
+    const worktrees = data.worktrees || [];
+    cwWorktreesList.innerHTML = worktrees.length ? worktrees.map(item => {
+      const canOpen = item.status === 'active' && item.exists;
+      const deleteReason = codeWorktreeDeleteReason(item);
+      const canDelete = !item.runtime_active && !item.dirty && item.worktree_session_id !== sessionId && item.status === 'active' && item.exists;
+      return `<div class="cw-code-list-row" data-code-worktree="${escapeHtml(item.id)}"><div><strong>${escapeHtml(item.slug)} · ${escapeHtml(item.branch)}</strong><small>${escapeHtml(codeWorktreeStatusLabel(item))} · 基于 ${escapeHtml(item.base_ref || 'HEAD')} · ${escapeHtml(item.path || '')}</small></div><div class="cw-code-list-actions"><button type="button" data-open-code-worktree="${escapeHtml(item.id)}" ${canOpen ? '' : 'disabled'} title="${canOpen ? '打开独立的派生 Code 会话' : 'Worktree 当前不可打开'}">打开</button><button type="button" class="danger" data-remove-code-worktree="${escapeHtml(item.id)}" ${canDelete ? '' : 'disabled'} title="${escapeHtml(deleteReason)}">删除</button></div></div>`;
+    }).join('') : '<div class="cw-activity-empty">还没有 Worktree。新建后会创建独立目录和派生 Code 会话。</div>';
+    cwWorktreesList.querySelectorAll('[data-open-code-worktree]').forEach(button => button.addEventListener('click', async () => {
+      const item = worktrees.find(entry => entry.id === button.dataset.openCodeWorktree);
+      if (!item) return;
+      closeModal(cwWorktreesModal);
+      await refreshSessions();
+      const loaded = await loadSession(item.worktree_session_id, { expectedWorkspaceMode:'code' });
+      if (!loaded) toast('派生 Code 会话打开失败');
+    }));
+    cwWorktreesList.querySelectorAll('[data-remove-code-worktree]').forEach(button => button.addEventListener('click', async () => {
+      const item = worktrees.find(entry => entry.id === button.dataset.removeCodeWorktree);
+      if (!item || button.disabled) return;
+      if (!confirm(`确认删除 Worktree「${item.slug}」的独立目录？\n\n分支 ${item.branch} 会保留；有未提交修改或运行中时服务端会拒绝删除。`)) return;
+      button.disabled = true;
+      try {
+        const response = await fetch(`/api/sessions/${encodeURIComponent(ownerSessionId)}/worktrees/${encodeURIComponent(item.id)}`, {
+          method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ confirm:true }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(codeWorktreeErrorMessage(data, `HTTP ${response.status}`));
+        toast(`已删除 Worktree 目录；分支 ${item.branch} 已保留`);
+        await refreshCodeWorktrees();
+        await refreshSessions();
+      } catch (error) { toast('删除失败：' + (error.message || error), { timeout:5200 }); }
+      finally { button.disabled = false; }
+    }));
+  } catch (error) {
+    if (sessionId === ownerSessionId) cwWorktreesList.innerHTML = `<div class="cw-activity-empty" style="color:#c83a35">加载失败：${escapeHtml(error.message || error)}</div>`;
+  }
+}
+
+async function openCodeWorktreesModal() {
+  if (!codeMode || !sessionId) return toast('请先打开一个 Code 会话');
+  setPermissionModeMenuOpen(false);
+  openModal(cwWorktreesModal);
+  await refreshCodeWorktrees();
+}
+cwWorktreesBtn?.addEventListener('click', openCodeWorktreesModal);
+cwWorktreeCreate?.addEventListener('click', async () => {
+  if (!codeMode || !sessionId) return;
+  const ownerSessionId = sessionId;
+  const slug = cwWorktreeSlug.value.trim();
+  if (!slug) { cwWorktreeSlug.focus(); return; }
+  cwWorktreeCreate.disabled = true;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(ownerSessionId)}/worktrees`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+        slug, branch:cwWorktreeBranch.value.trim(), base_ref:cwWorktreeBase.value.trim() || 'HEAD',
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(codeWorktreeErrorMessage(data, `HTTP ${response.status}`));
+    const item = data.worktree;
+    cwWorktreeSlug.value = ''; cwWorktreeBranch.value = ''; cwWorktreeBase.value = 'HEAD';
+    await refreshSessions();
+    if (codeMode && sessionId === ownerSessionId) {
+      closeModal(cwWorktreesModal);
+      const loaded = await loadSession(item.worktree_session_id, { expectedWorkspaceMode:'code' });
+      if (!loaded) throw new Error('Worktree 已创建，但派生 Code 会话打开失败');
+    } else {
+      toast(`Worktree ${item.slug} 已创建`);
+    }
+  } catch (error) { toast('新建失败：' + (error.message || error), { timeout:5200 }); }
+  finally { cwWorktreeCreate.disabled = false; }
 });
 
 function setPermissionModeMenuOpen(open, options = {}) {
@@ -22279,6 +22890,7 @@ function snapshotComposerState() {
     docPromises: Array.from(activeDocUploadPromises),
     urlEntries: Array.from(urlContext.entries()).map(([url, state]) => [url, { ...state }]),
     webSearchPrefix: isWebSearchEnabled() ? webSearchPrefix() : '',
+    contextPacks: [...codeContextPacks.values()].map(item => ({ ...item })),
     resolved: false,
   };
 }
@@ -23504,6 +24116,48 @@ function updateWelcomeCopy() {
 
 let projectMapAssetsPromise = null;
 
+function projectMapPrefillText(kind, descriptor) {
+  const label = String(descriptor?.label || '所选节点');
+  if (kind === 'plan') return `请基于已附加的 Project Map 上下文「${label}」制定实施计划，先核对相关源码和依赖，不要修改文件。`;
+  return `请基于已附加的 Project Map 上下文「${label}」完成实现，核对影响范围并运行相关验证。`;
+}
+
+function prefillProjectMapPlan(descriptor) {
+  if (!attachProjectMapContextPack(descriptor)) return false;
+  setPermissionMode('plan');
+  const prompt = projectMapPrefillText('plan', descriptor);
+  input.value = input.value.trim() ? `${input.value.trim()}\n\n${prompt}` : prompt;
+  updateTokenCount(); autosizeTextarea(); syncComposerDraftState(); saveDraft(); input.focus();
+  return true;
+}
+
+function prefillProjectMapTask(descriptor) {
+  if (!attachProjectMapContextPack(descriptor)) return false;
+  const normalized = normalizeCodeContextPackDescriptor(descriptor);
+  if (!normalized) return false;
+  pendingAgentLoopContextPacks = [normalized];
+  openAgentLoopModal();
+  agentLoopGoal.value = projectMapPrefillText('task', normalized);
+  agentLoopGoal.focus();
+  return true;
+}
+
+function prefillProjectMapValidation(payload = {}) {
+  if (!codeMode || !sessionId) return false;
+  window.CWProjectMap?.close({ silent:true });
+  renderCodeReviewPanel();
+  const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+  const paths = [...new Set(suggestions.flatMap(item => Array.isArray(item?.paths) ? item.paths : []).filter(Boolean))];
+  if (codeValidationResult && paths.length) {
+    codeValidationResult.className = 'cw-validation-result visible';
+    codeValidationResult.innerHTML = `<div class="cw-validation-meta"><strong>Project Map 建议优先覆盖</strong><span>${paths.length} 个测试文件；确认命令后再运行</span></div><pre>${escapeHtml(paths.join('\n'))}</pre>`;
+  }
+  openModal(codeReviewModal);
+  void refreshCodeReviewIndexStatus({ silent:true });
+  codeValidationCommand?.focus();
+  return true;
+}
+
 function configureProjectMap() {
   if (!window.CWProjectMap) return;
   window.CWProjectMap.configure({
@@ -23514,6 +24168,10 @@ function configureProjectMap() {
       title: titleLabel?.textContent || '',
     }),
     openFile: (path, options = {}) => openCodeFileInspector(path, options),
+    attachContextPack: descriptor => attachProjectMapContextPack(descriptor),
+    prefillPlan: descriptor => prefillProjectMapPlan(descriptor),
+    prefillTask: descriptor => prefillProjectMapTask(descriptor),
+    prefillValidation: payload => prefillProjectMapValidation(payload),
     notify: (message, options = {}) => toast(message, options),
   });
 }
@@ -23526,15 +24184,16 @@ function ensureProjectMapAssets() {
   if (projectMapAssetsPromise) return projectMapAssetsPromise;
 
   projectMapAssetsPromise = new Promise((resolve, reject) => {
+    const projectMapAssetVersion = '20260801-v2';
     if (!document.querySelector('link[data-project-map-style]')) {
       const style = document.createElement('link');
       style.rel = 'stylesheet';
-      style.href = '/assets/project-map.css';
+      style.href = `/assets/project-map.css?v=${projectMapAssetVersion}`;
       style.dataset.projectMapStyle = 'true';
       document.head.appendChild(style);
     }
     const script = document.createElement('script');
-    script.src = '/assets/project-map.js';
+    script.src = `/assets/project-map.js?v=${projectMapAssetVersion}`;
     script.dataset.projectMapScript = 'true';
     script.onload = () => {
       configureProjectMap();
@@ -23580,6 +24239,7 @@ function setCodeMode(enabled, options = {}) {
     cwContextUsageModal?.classList.add('hidden');
     cwPermissionRulesModal?.classList.add('hidden');
     cwWorkspacePresetsModal?.classList.add('hidden');
+    cwWorktreesModal?.classList.add('hidden');
     setCodeConversationSearchOpen(false);
     setCodeInspectorOpen(false);
   }

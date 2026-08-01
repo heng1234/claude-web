@@ -20,6 +20,10 @@ class ProjectMapPublishCancelled(Exception):
     pass
 
 
+class ProjectMapPartialRefreshRejected(Exception):
+    pass
+
+
 class ProjectMapStorage:
     def __init__(self, db_path: Path) -> None:
         self.db_path = Path(db_path)
@@ -124,6 +128,25 @@ class ProjectMapStorage:
                 "CREATE INDEX IF NOT EXISTS idx_project_map_events_run "
                 "ON project_map_run_events (run_id, seq)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS project_map_context_packs (
+                    pack_id TEXT PRIMARY KEY,
+                    owner_session_id TEXT NOT NULL,
+                    storage_key TEXT NOT NULL,
+                    canonical_cwd TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    file_hashes_json TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    expires_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_project_map_context_packs_owner "
+                "ON project_map_context_packs (owner_session_id, expires_at)"
+            )
             now = time.time()
             placeholders = ",".join("?" for _ in ACTIVE_STATUSES)
             interrupted = conn.execute(
@@ -194,7 +217,8 @@ class ProjectMapStorage:
         with self.connect() as conn:
             row = conn.execute(
                 """
-                SELECT s.revision, s.run_id, s.dataset_json, s.source_root_hash, s.created_at
+                SELECT s.revision, s.run_id, s.dataset_json, s.source_root_hash,
+                       s.schema_version, s.scanner_version, s.prompt_version, s.created_at
                 FROM project_map_workspaces w
                 JOIN project_map_snapshots s
                   ON s.storage_key = w.storage_key AND s.revision = w.active_revision
@@ -204,13 +228,122 @@ class ProjectMapStorage:
             ).fetchone()
         if row is None:
             return None
+        return self._snapshot_payload(row)
+
+    @staticmethod
+    def _snapshot_payload(row: sqlite3.Row) -> Dict[str, Any]:
+        dataset = json.loads(row["dataset_json"])
+        partial = bool((dataset.get("manifest") or {}).get("partial"))
         return {
             "revision": int(row["revision"]),
             "run_id": row["run_id"],
-            "dataset": json.loads(row["dataset_json"]),
+            "dataset": dataset,
             "source_root_hash": row["source_root_hash"],
+            "schema_version": int(row["schema_version"]),
+            "scanner_version": row["scanner_version"],
+            "prompt_version": row["prompt_version"],
+            "completeness": "partial" if partial else "complete",
             "created_at": float(row["created_at"]),
         }
+
+    def snapshot(self, storage_key: str, revision: int) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT revision, run_id, dataset_json, source_root_hash,
+                       schema_version, scanner_version, prompt_version, created_at
+                FROM project_map_snapshots
+                WHERE storage_key = ? AND revision = ?
+                """,
+                (storage_key, int(revision)),
+            ).fetchone()
+        return self._snapshot_payload(row) if row else None
+
+    def list_snapshots(self, storage_key: str, *, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+        bounded_limit = max(1, min(100, int(limit)))
+        bounded_offset = max(0, int(offset))
+        with self.connect() as conn:
+            total_row = conn.execute(
+                "SELECT COUNT(*) AS value FROM project_map_snapshots WHERE storage_key = ?",
+                (storage_key,),
+            ).fetchone()
+            rows = conn.execute(
+                """
+                SELECT revision, run_id, dataset_json, source_root_hash,
+                       schema_version, scanner_version, prompt_version, created_at
+                FROM project_map_snapshots
+                WHERE storage_key = ?
+                ORDER BY revision DESC LIMIT ? OFFSET ?
+                """,
+                (storage_key, bounded_limit, bounded_offset),
+            ).fetchall()
+        items = []
+        for row in rows:
+            payload = self._snapshot_payload(row)
+            dataset = payload.pop("dataset")
+            payload["node_count"] = len(dataset.get("nodes") or [])
+            payload["relation_count"] = len(dataset.get("relations") or [])
+            payload["file_count"] = len(dataset.get("files") or [])
+            items.append(payload)
+        return {"items": items, "total": int(total_row["value"]), "limit": bounded_limit, "offset": bounded_offset}
+
+    def files_for_revision(self, storage_key: str, revision: int) -> List[Dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT path, hash, size, language, role, parse_quality
+                FROM project_map_files
+                WHERE storage_key = ? AND revision = ?
+                ORDER BY path
+                """,
+                (storage_key, int(revision)),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def create_context_pack(
+        self,
+        *,
+        pack_id: str,
+        owner_session_id: str,
+        storage_key: str,
+        canonical_cwd: str,
+        revision: int,
+        payload: Dict[str, Any],
+        file_hashes: Dict[str, str],
+        expires_at: float,
+    ) -> None:
+        now = time.time()
+        with self.connect(immediate=True) as conn:
+            conn.execute("DELETE FROM project_map_context_packs WHERE expires_at <= ?", (now,))
+            conn.execute(
+                """
+                INSERT INTO project_map_context_packs (
+                    pack_id, owner_session_id, storage_key, canonical_cwd, revision,
+                    payload_json, file_hashes_json, created_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    pack_id, owner_session_id, storage_key, canonical_cwd, int(revision),
+                    json.dumps(payload, ensure_ascii=False),
+                    json.dumps(file_hashes, ensure_ascii=False), now, float(expires_at),
+                ),
+            )
+
+    def context_pack(self, pack_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM project_map_context_packs WHERE pack_id = ?",
+                (pack_id,),
+            ).fetchone()
+        if not row:
+            return None
+        payload = dict(row)
+        payload["revision"] = int(payload["revision"])
+        payload["created_at"] = float(payload["created_at"])
+        payload["expires_at"] = float(payload["expires_at"])
+        payload["payload"] = json.loads(payload.pop("payload_json"))
+        payload["file_hashes"] = json.loads(payload.pop("file_hashes_json"))
+        return payload
 
     def create_run(
         self,
@@ -455,6 +588,20 @@ class ProjectMapStorage:
             current_revision = int(row["active_revision"]) if row else 0
             if current_revision != int(base_revision):
                 return None
+            incoming_partial = bool((dataset.get("manifest") or {}).get("partial"))
+            if current_revision > 0 and incoming_partial:
+                active_row = conn.execute(
+                    """
+                    SELECT dataset_json FROM project_map_snapshots
+                    WHERE storage_key = ? AND revision = ?
+                    """,
+                    (storage_key, current_revision),
+                ).fetchone()
+                if active_row is not None:
+                    active_dataset = json.loads(active_row["dataset_json"])
+                    active_partial = bool((active_dataset.get("manifest") or {}).get("partial"))
+                    if not active_partial:
+                        raise ProjectMapPartialRefreshRejected()
             revision = current_revision + 1
             manifest = dataset.setdefault("manifest", {})
             manifest.update({
