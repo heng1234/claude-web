@@ -2,6 +2,44 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.1.2",
+      "date": "2026-08-01",
+      "highlights": [
+        {
+          "type": "feature",
+          "text": "Project Map 增加加权搜索、总览 / 邻域视图、关系证据、修订历史和版本对比；移动端保留可访问的列表 / 详情模式"
+        },
+        {
+          "type": "feature",
+          "text": "图谱节点可生成受会话、工作目录和修订约束的 Context Pack，并安全预填 Plan、实现任务或建议测试"
+        },
+        {
+          "type": "feature",
+          "text": "Code 改动审查新增文件级 Stage / Unstage；Git Worktrees 可创建隔离目录、分支和派生 Code 会话"
+        },
+        {
+          "type": "feature",
+          "text": "新增 Context Ledger 和 Browser Validation 配方 / Run / 证据登记，明确展示上下文生命周期与浏览器验收边界"
+        },
+        {
+          "type": "fix",
+          "text": "compact、上下文统计、队列派发、终端状态和导航恢复改为按 Code 会话隔离；上下文读取不再重配运行中的 SDK runtime"
+        },
+        {
+          "type": "fix",
+          "text": "统一处理 SDK 中止诊断、连接中断、缺失最终文本和 Plan 等待状态；流式前缀与待发送消息不再重复"
+        },
+        {
+          "type": "security",
+          "text": "Context Pack、Worktree、Git 索引、Browser Validation 与 Context Ledger API 拒绝跨模式、跨会话和跨工作目录访问"
+        },
+        {
+          "type": "test",
+          "text": "全量回归扩展到 201 项，并完成桌面与手机浏览器验收；Project Map 动态资源增加版本标识避免旧缓存"
+        }
+      ]
+    },
+    {
       "version": "2.1.1",
       "date": "2026-07-30",
       "highlights": [

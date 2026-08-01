@@ -24184,7 +24184,7 @@ function ensureProjectMapAssets() {
   if (projectMapAssetsPromise) return projectMapAssetsPromise;
 
   projectMapAssetsPromise = new Promise((resolve, reject) => {
-    const projectMapAssetVersion = '20260801-v2';
+    const projectMapAssetVersion = '2.1.2';
     if (!document.querySelector('link[data-project-map-style]')) {
       const style = document.createElement('link');
       style.rel = 'stylesheet';

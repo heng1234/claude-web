@@ -1,6 +1,6 @@
 # Claude Code Web
 
-[![Version](https://img.shields.io/badge/version-2.1.1-c65f31.svg)](https://github.com/heng1234/claude-web)
+[![Version](https://img.shields.io/badge/version-2.1.2-c65f31.svg)](https://github.com/heng1234/claude-web)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![CSDN Blog](https://img.shields.io/badge/博客-CSDN-red.svg)](https://blog.csdn.net/qq_39313596?type=blog)
@@ -14,7 +14,7 @@ claude-web --open
 
 > 🔒 **隐私说明**：本工具只是 `claude` CLI 的本地 GUI 包装器，不上传任何数据到第三方服务。所有对话、图片、会话历史都存在本机 `history/` `uploads/` `claude-web.db` 中。认证沿用你本地 `claude` 的登录态（`~/.claude/`），本工具不接触任何 API Key。
 
-> 当前文档对应 `2.1.1`。历史变更见 [CHANGELOG.md](CHANGELOG.md)，Authenticator 配置见 [TOTP_SETUP.md](TOTP_SETUP.md)。
+> 当前文档对应 `2.1.2`。历史变更见 [CHANGELOG.md](CHANGELOG.md)，Authenticator 配置见 [TOTP_SETUP.md](TOTP_SETUP.md)。
 
 ## 📸 截图
 
@@ -74,6 +74,9 @@ Chrome MV3 Side Panel 支持读取当前页、选中文字右键提问，并把�
 ### 代码工作区
 
 - 项目、Git 分支和工作目录状态。
+- Project Map 支持项目结构、源码证据、关系筛选、修订历史和上下游影响分析；节点可作为受版本约束的 Context Pack 附加到 Plan、任务或测试草稿。
+- Git Worktrees 可从当前 Code 会话创建隔离目录、分支和派生会话；改动审查支持文件级 Stage / Unstage，并保持 Git 索引与“保留 / 撤销 AI 修改”相互独立。
+- Context Ledger 展示 SDK usage、Project Map Pack、原生 compact 等上下文来源与生命周期；Review 可登记浏览器验收配方、Run 和证据，不会伪装执行外部浏览器或服务器命令。
 - 默认、规划、代理、自动四种运行模式；root / sudo 环境会自动改用 `acceptEdits + 工具白名单` 兼容 Claude CLI 的安全限制。
 - Bash / Read / Write / Edit / Grep / Glob 等工具可视化。
 - 工具进度条、工具详情折叠、思考过程默认展示、文件修改摘要和 diff 查看。
@@ -275,7 +278,7 @@ git config core.hooksPath .githooks
 
 ## 💬 交流群
 
-扫码加入微信交流群（二维码 7 天有效，7 月 31 日前有效，过期请提 Issue 提醒）：
+扫码加入微信交流群（二维码 7 天有效，8 月 8 日前有效；过期后请提 Issue 提醒更新）：
 
 <img src="docs/wechat-group.png" alt="微信群二维码" width="300">
 

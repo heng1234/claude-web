@@ -2,9 +2,23 @@
 
 所有重要变更按版本记录。应用内的 What's New 和帮助面板使用 `static/changelog.json`，这里是给 GitHub / Git diff 浏览的 Markdown 版本。
 
-当前稳定版本：`2.1.1`。
+当前稳定版本：`2.1.2`。
 
 ## Unreleased
+
+## v2.1.2 - 2026-08-01
+
+- **FEATURE** Project Map Explorer 增加加权搜索、总览 / 邻域视图、关系筛选、关系证据、修订历史与版本对比；移动端保留可访问的列表 / 详情模式
+- **FEATURE** 图谱节点可生成受会话、工作目录、修订、TTL 与文件哈希约束的 Context Pack，并安全预填 Plan、实现任务或建议测试，不会自动发送或执行
+- **FEATURE** Code 改动审查新增文件级 Stage / Unstage，识别已暂存、未暂存、部分暂存、未跟踪、冲突、重命名和删除，同时保持 Git 索引与 AI 修改审查状态相互独立
+- **FEATURE** 新增 Git Worktrees 管理：为并行任务创建隔离目录、分支和派生 Code 会话；删除前检查脏目录、活跃任务和待发送队列，不自动删除分支或强制清理
+- **FEATURE** 新增 Context Ledger，记录 SDK usage、Project Map Pack、原生 compact 等上下文描述、Token 估算、版本和生命周期，不保存 prompt、源码正文或敏感内容
+- **FEATURE** Review 新增 Browser Validation 配方、Run 与证据登记；严格校验 URL、Viewport、断言和截图路径，环境不可用时明确标记 skipped，不会伪装执行浏览器或服务器启动命令
+- **FIX** Code 会话的 compact、上下文统计、队列派发、终端状态和导航恢复改为按会话隔离；上下文读取不再创建或重配正在运行的 SDK runtime，竞争时返回缓存的 stale 结果
+- **FIX** 统一处理 SDK 中止诊断、连接中断、缺失最终文本和 Plan 等待状态；流式前缀只保留一次，待发送消息不会在成功发送后继续残留
+- **SECURITY** Context Pack、Worktree、Git 索引、Browser Validation 与 Context Ledger API 均校验真实 Code 会话和服务端工作目录，拒绝跨模式或跨目录接管
+- **UI** Project Map 动态资源增加版本标识，避免升级后继续命中旧缓存；手机端搜索框与主要操作统一使用至少 44px 触控尺寸
+- **TEST** 全量回归扩展到 201 项，覆盖 Project Map、Context Pack、Stage / Unstage、Worktrees、Browser Validation、Context Ledger、runtime ownership 和普通聊天 / Code 隔离
 
 ## v2.1.1 - 2026-07-30
 
