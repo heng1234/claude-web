@@ -209,6 +209,16 @@ class _FakeNativeCompactTurn:
         yield {"type": "done", "sessionId": "native-compact-session"}
 
 
+class _FakeNativeCompactFailureTurn:
+    def __init__(self, result=None):
+        self.result = result
+
+    async def events(self):
+        if self.result is not None:
+            yield {"type": "event", "event": self.result}
+        yield {"type": "done", "sessionId": "native-compact-session"}
+
+
 class NativeCodeCompactionTest(unittest.IsolatedAsyncioTestCase):
     async def test_code_compact_uses_native_control_endpoint_and_keeps_1m_limit(self):
         session_id = "test-native-compact-" + uuid.uuid4().hex
@@ -244,6 +254,41 @@ class NativeCodeCompactionTest(unittest.IsolatedAsyncioTestCase):
             server.save_events(session_id, [])
             with server.db_connect() as conn:
                 conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+    async def test_native_compact_rejects_error_or_missing_result(self):
+        for label, result_event in (
+            ("missing", None),
+            ("error", {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "error": "compact failed",
+                "usage": {},
+            }),
+        ):
+            with self.subTest(label=label):
+                session_id = "test-native-compact-failure-" + uuid.uuid4().hex
+                server.upsert_session(session_id, "压缩失败测试", "/tmp/native-project", "code")
+                try:
+                    with patch.object(
+                        server._claude_agent_bridge,
+                        "ensure_started",
+                        new=AsyncMock(return_value=True),
+                    ), patch.object(
+                        server._claude_agent_bridge,
+                        "open_turn",
+                        new=AsyncMock(return_value=_FakeNativeCompactFailureTurn(result_event)),
+                    ):
+                        with self.assertRaises(server.HTTPException) as raised:
+                            await server.compact_agent_sdk_session(
+                                session_id,
+                                server.NativeCompactRequest(model="sonnet"),
+                            )
+                    self.assertEqual(502, raised.exception.status_code)
+                finally:
+                    server.save_events(session_id, [])
+                    with server.db_connect() as conn:
+                        conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
 
 if __name__ == "__main__":

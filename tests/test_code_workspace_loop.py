@@ -350,6 +350,60 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
             source,
         )
 
+    def test_compaction_context_and_queue_dispatch_are_session_scoped(self):
+        source = (
+            Path(__file__).parents[1] / "claude_web" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("const nativeContextUsageBySession = new Map()", source)
+        self.assertIn("const contextCompactionBySession = new Map()", source)
+        self.assertIn("function syncContextCompactionStatus()", source)
+        self.assertIn("runNativeCompact(targetSessionId)", source)
+        self.assertNotIn("压缩期间切换了会话，请重新发送", source)
+        self.assertIn("const codeQueueDispatchingEntryIds = new Set()", source)
+        self.assertIn("const visibleItems = (data.items || []).filter", source)
+        self.assertIn("const paused = visibleItems.some", source)
+        self.assertIn("function removeLocalCodeQueueEntry(owner, entryId)", source)
+        self.assertIn("removeLocalCodeQueueEntry(queueOwner, options.clientTurnId)", source)
+        self.assertIn("removeLocalCodeQueueEntry(owner, entry.id)", source)
+
+    def test_chat_code_navigation_and_composer_state_are_owned(self):
+        source = (
+            Path(__file__).parents[1] / "claude_web" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("let conversationViewEpoch = 0", source)
+        self.assertIn("let sessionLoadRequestId = 0", source)
+        self.assertIn("conversationViewEpoch !== turnViewEpoch || codeMode !== turnIsCode", source)
+        self.assertIn("requestId !== sessionLoadRequestId || codeMode !== expectedCodeMode", source)
+        self.assertIn("`draft_${codeMode ? 'code' : 'chat'}_${sessionId || 'new'}`", source)
+        self.assertIn("function snapshotComposerState()", source)
+        self.assertIn("async function resolveComposerCapture(capture)", source)
+        self.assertIn("workspaceMode: codeMode ? 'code' : 'chat'", source)
+        self.assertIn("function openSessionInWorkspace(targetSession)", source)
+        self.assertIn("if (codeMode) {\n      activateCodeQueueForSession(data.id);", source)
+
+    def test_failure_and_recovery_ui_paths_are_explicit(self):
+        source = (
+            Path(__file__).parents[1] / "claude_web" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("let doneEvent = null", source)
+        self.assertIn("const missingAuthoritativeTerminal", source)
+        self.assertIn("obj.subtype === 'stopped'", source)
+        self.assertIn("String(pending.toolName || '') === 'ExitPlanMode'", source)
+        self.assertIn("setContextCompactionStatus(true, 'Claude Code 正在原生压缩上下文…', targetSessionId)", source)
+        self.assertIn("const modalReturnFocus = new WeakMap()", source)
+        self.assertIn("if (!typingTarget && !openDialog", source)
+
+    def test_sdk_abort_diagnostics_and_connection_errors_are_humanized(self):
+        source = (
+            Path(__file__).parents[1] / "claude_web" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("function isNativeAbortDiagnosticResult(result)", source)
+        self.assertIn("if (isNativeAbortDiagnosticResult(obj)) return container", source)
+        self.assertIn("连接在响应中途断开", source)
+        server_source = (Path(__file__).parents[1] / "claude_web" / "server.py").read_text(encoding="utf-8")
+        self.assertIn("def _agent_sdk_final_text_event(", server_source)
+        self.assertIn("def _strip_agent_sdk_api_error_text(", server_source)
+
     def test_sdk_result_errors_and_reconnect_controls_are_not_silently_completed(self):
         source = (
             Path(__file__).parents[1] / "claude_web" / "static" / "index.html"

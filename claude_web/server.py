@@ -468,9 +468,9 @@ def _agent_sdk_turn_state(session_id: str, events: Optional[List[dict]] = None) 
             terminal_type = "result"
             terminal_event = event
             break
-        if event_type == "system" and str(event.get("subtype") or "") == "plan_ready":
+        if event_type == "system" and str(event.get("subtype") or "") in {"plan_ready", "stopped"}:
             terminal_index = index
-            terminal_type = "plan_ready"
+            terminal_type = str(event.get("subtype") or "")
             terminal_event = event
             break
         if event_type in {"error", "permission_error"}:
@@ -486,6 +486,8 @@ def _agent_sdk_turn_state(session_id: str, events: Optional[List[dict]] = None) 
         state = "failed" if (terminal_event or {}).get("is_error") is True or subtype.startswith("error_") else "completed"
     elif terminal_type == "plan_ready":
         state = "waiting_plan"
+    elif terminal_type == "stopped":
+        state = "stopped"
     elif terminal_type:
         message = str((terminal_event or {}).get("message") or "").lower()
         state = "stopped" if "用户中止" in message or "user interrupt" in message else "failed"
@@ -1034,11 +1036,14 @@ def init_db() -> None:
         # user_input event. Native forks intentionally keep Claude's earlier
         # transcript without copying those bubbles into the new Web session.
         ensure_column(conn, "sessions", "native_user_offset", "INTEGER NOT NULL DEFAULT 0")
+        # Only infer ownership for legacy rows that genuinely have no mode.
+        # An explicit Chat session may still carry a project cwd; cwd alone
+        # must never move it across the Chat/Code history boundary.
         conn.execute(
             """
             UPDATE sessions
             SET workspace_mode = 'code'
-            WHERE COALESCE(workspace_mode, 'chat') IN ('', 'chat')
+            WHERE COALESCE(workspace_mode, '') = ''
               AND TRIM(cwd) NOT IN ('', '~', ?)
             """,
             (os.path.expanduser("~"),),
@@ -1282,7 +1287,10 @@ def upsert_session(session_id: str, title: str, cwd: str, workspace_mode: Option
     now = time.time()
     normalized_mode = (workspace_mode or "").strip().lower()
     project_bound = bool((cwd or "").strip() not in {"", "~", os.path.expanduser("~")})
-    requested_mode = "code" if normalized_mode == "code" or project_bound else ("chat" if normalized_mode == "chat" else "")
+    if normalized_mode in {"chat", "code"}:
+        requested_mode = normalized_mode
+    else:
+        requested_mode = "code" if project_bound else ""
     with db_connect() as conn:
         row = conn.execute(
             "SELECT title, manual_title, workspace_mode FROM sessions WHERE id = ?", (session_id,)
@@ -5990,6 +5998,109 @@ def _agent_sdk_reported_api_error(event: dict) -> str:
     return ""
 
 
+def _agent_sdk_assistant_text(event: dict) -> str:
+    if event.get("type") != "assistant":
+        return ""
+    content = (event.get("message") or {}).get("content") or []
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        str(block.get("text") or "")
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "text"
+    ).strip()
+
+
+def _strip_agent_sdk_api_error_text(event: dict, reported_error: str) -> Optional[dict]:
+    """Hide SDK transport diagnostics that would otherwise render twice.
+
+    The same failure is carried by the terminal ``result`` event, where the UI
+    can show it once together with usage and reconnect state.  Preserve any
+    non-error assistant blocks in a mixed message.
+    """
+
+    if event.get("type") != "assistant" or not reported_error:
+        return event
+    message = event.get("message") or {}
+    content = message.get("content") or []
+    if not isinstance(content, list):
+        return event
+    filtered = [
+        block for block in content
+        if not (
+            isinstance(block, dict)
+            and block.get("type") == "text"
+            and str(block.get("text") or "").strip() == reported_error.strip()
+        )
+    ]
+    if not filtered:
+        return None
+    if len(filtered) == len(content):
+        return event
+    cleaned = dict(event)
+    cleaned["message"] = {**message, "content": filtered}
+    return cleaned
+
+
+def _agent_sdk_abort_diagnostic(result: dict) -> bool:
+    """Return True for the SDK's internal post-interrupt EDE diagnostic."""
+
+    if result.get("type") != "result" or result.get("parent_tool_use_id"):
+        return False
+    terminal_reason = str(result.get("terminal_reason") or "").lower()
+    if not terminal_reason.startswith("aborted"):
+        return False
+    errors = result.get("errors")
+    if not isinstance(errors, list) or not errors:
+        return False
+    return all(
+        isinstance(item, str) and item.strip().lower().startswith("[ede_diagnostic]")
+        for item in errors
+    )
+
+
+def _agent_sdk_final_text_event(
+    result: dict,
+    last_assistant_text: str,
+    session_id: str,
+    turn_id: str,
+) -> Optional[dict]:
+    """Recover a final answer omitted from partial-message forwarding.
+
+    Claude's terminal result includes the authoritative final ``result`` text.
+    Most turns already emitted the same assistant message; in that case this is
+    a no-op.  If only a prefix reached the event stream, append just the missing
+    suffix.  If no final assistant event arrived, persist the complete result.
+    """
+
+    if result.get("type") != "result" or result.get("parent_tool_use_id"):
+        return None
+    subtype = str(result.get("subtype") or "").lower()
+    if result.get("is_error") is True or subtype.startswith("error_"):
+        return None
+    final_text = str(result.get("result") or "").strip()
+    prior_text = str(last_assistant_text or "").strip()
+    if not final_text or final_text == prior_text:
+        return None
+    if prior_text and final_text.startswith(prior_text):
+        recovered_text = final_text[len(prior_text):].lstrip("\n")
+    else:
+        recovered_text = final_text
+    if not recovered_text:
+        return None
+    return {
+        "type": "assistant",
+        "message": {
+            "id": f"recovered-final-{turn_id or uuid.uuid4().hex}",
+            "role": "assistant",
+            "content": [{"type": "text", "text": recovered_text}],
+        },
+        "session_id": session_id,
+        "turn_id": turn_id,
+        "recovered_final": True,
+    }
+
+
 def _normalize_agent_sdk_result(result: dict, reported_error: str = "") -> dict:
     """Make contradictory SDK terminal fields deterministic for history and UI."""
     if result.get("type") != "result" or result.get("parent_tool_use_id"):
@@ -6171,6 +6282,7 @@ async def _drain_detached_agent_sdk_turn(
     saw_top_level_result: bool = False,
     saw_terminal_error: bool = False,
     reported_api_error: str = "",
+    last_assistant_text: str = "",
     reconnect_params: Optional[dict] = None,
 ) -> None:
     """Keep a native turn alive after its browser SSE subscriber disconnects."""
@@ -6210,13 +6322,26 @@ async def _drain_detached_agent_sdk_turn(
             detected_api_error = _agent_sdk_reported_api_error(obj)
             if detected_api_error:
                 reported_api_error = detected_api_error
+                cleaned = _strip_agent_sdk_api_error_text(obj, detected_api_error)
+                if cleaned is None:
+                    continue
+                obj = cleaned
+                event_type = obj.get("type")
+            if event_type == "assistant":
+                assistant_text = _agent_sdk_assistant_text(obj)
+                if assistant_text:
+                    last_assistant_text = assistant_text
             discovered = str(obj.get("session_id") or obj.get("sessionId") or "").strip()
             if discovered:
                 native_remote_id = discovered
             if (
                 event_type == "result"
                 and not obj.get("parent_tool_use_id")
-                and session_id in _plan_waiting_sessions
+                and (
+                    session_id in _plan_waiting_sessions
+                    or session_id in _stopped_sessions
+                    or _agent_sdk_abort_diagnostic(obj)
+                )
             ):
                 continue
             if event_type in {"result", "error", "permission_error"}:
@@ -6242,6 +6367,15 @@ async def _drain_detached_agent_sdk_turn(
             if event_type == "result" and not obj.get("parent_tool_use_id"):
                 _normalize_agent_sdk_result(obj, reported_api_error)
                 reported_api_error = reported_api_error or _agent_sdk_result_error_text(obj)
+                recovered_final = _agent_sdk_final_text_event(
+                    obj,
+                    last_assistant_text,
+                    session_id,
+                    turn_id,
+                )
+                if recovered_final is not None:
+                    append_event(session_id, recovered_final)
+                    last_assistant_text = str(obj.get("result") or "").strip()
                 saw_top_level_result = True
                 result_subtype = str(obj.get("subtype") or "").lower()
                 if obj.get("is_error") is True or result_subtype.startswith("error_"):
@@ -6353,6 +6487,7 @@ def _agent_sdk_streaming_response(
         saw_top_level_result = False
         saw_terminal_error = False
         reported_api_error = ""
+        last_assistant_text = ""
         daemon_done = False
         stopped_before_cleanup = False
         plan_waiting_before_cleanup = False
@@ -6425,13 +6560,26 @@ def _agent_sdk_streaming_response(
                 detected_api_error = _agent_sdk_reported_api_error(obj)
                 if detected_api_error:
                     reported_api_error = detected_api_error
+                    cleaned = _strip_agent_sdk_api_error_text(obj, detected_api_error)
+                    if cleaned is None:
+                        continue
+                    obj = cleaned
+                    event_type = obj.get("type")
+                if event_type == "assistant":
+                    assistant_text = _agent_sdk_assistant_text(obj)
+                    if assistant_text:
+                        last_assistant_text = assistant_text
                 discovered = str(obj.get("session_id") or obj.get("sessionId") or "").strip()
                 if discovered:
                     native_remote_id = discovered
                 if (
                     event_type == "result"
                     and not obj.get("parent_tool_use_id")
-                    and session_id in _plan_waiting_sessions
+                    and (
+                        session_id in _plan_waiting_sessions
+                        or session_id in _stopped_sessions
+                        or _agent_sdk_abort_diagnostic(obj)
+                    )
                 ):
                     continue
                 if event_type in {"result", "error", "permission_error"}:
@@ -6461,6 +6609,16 @@ def _agent_sdk_streaming_response(
                 if event_type == "result" and not obj.get("parent_tool_use_id"):
                     _normalize_agent_sdk_result(obj, reported_api_error)
                     reported_api_error = reported_api_error or _agent_sdk_result_error_text(obj)
+                    recovered_final = _agent_sdk_final_text_event(
+                        obj,
+                        last_assistant_text,
+                        session_id,
+                        turn_id,
+                    )
+                    if recovered_final is not None:
+                        append_event(session_id, recovered_final)
+                        yield f"data: {json.dumps(recovered_final, ensure_ascii=False)}\n\n"
+                        last_assistant_text = str(obj.get("result") or "").strip()
                     saw_top_level_result = True
                     result_subtype = str(obj.get("subtype") or "").lower()
                     if obj.get("is_error") is True or result_subtype.startswith("error_"):
@@ -6522,6 +6680,7 @@ def _agent_sdk_streaming_response(
                     saw_top_level_result=saw_top_level_result,
                     saw_terminal_error=saw_terminal_error,
                     reported_api_error=reported_api_error,
+                    last_assistant_text=last_assistant_text,
                     reconnect_params=reconnect_params,
                 )
             )
@@ -7810,9 +7969,18 @@ async def stop_chat(session_id: str, reason: Optional[str] = Query(default=None)
             _log.warning("Claude Agent SDK interrupt failed for %s: %s", session_id, exc)
             try:
                 await _claude_agent_bridge.close_session(session_id)
-            except Exception:
-                _agent_sdk_running_sessions.discard(session_id)
+            except Exception as close_exc:
                 _stopped_sessions.discard(session_id)
+                _plan_waiting_sessions.discard(session_id)
+                _log.error(
+                    "Claude Agent SDK stop failed for %s after interrupt and close errors: %s",
+                    session_id,
+                    close_exc,
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail="无法确认任务已经停止；运行所有权仍保留，请稍后重试",
+                ) from close_exc
         stop_event = (
             {
                 "type": "system",
@@ -7823,8 +7991,9 @@ async def stop_chat(session_id: str, reason: Optional[str] = Query(default=None)
             }
             if plan_ready
             else {
-                "type": "error",
-                "message": "用户中止",
+                "type": "system",
+                "subtype": "stopped",
+                "message": "已中止",
                 "turn_id": turn_id,
                 "ts": time.time(),
             }
@@ -7870,8 +8039,9 @@ async def stop_chat(session_id: str, reason: Optional[str] = Query(default=None)
         }
         if plan_ready
         else {
-            "type": "error",
-            "message": "用户中止",
+            "type": "system",
+            "subtype": "stopped",
+            "message": "已中止",
             "turn_id": turn_id,
             "ts": time.time(),
         }
@@ -7911,7 +8081,7 @@ async def _maybe_auto_approve_permission(session_id: str, envelope: dict) -> boo
         return False
     tool_name = str(envelope.get("toolName") or "")
     approval_id = str(envelope.get("approvalId") or "")
-    if not approval_id or tool_name == "AskUserQuestion":
+    if not approval_id or tool_name in {"AskUserQuestion", "ExitPlanMode"}:
         return False
     try:
         await _claude_agent_bridge.respond_permission(
@@ -7948,6 +8118,39 @@ def _agent_sdk_control_params(row: sqlite3.Row, req: NativeCompactRequest) -> di
     else:
         params["sessionId"] = remote_session_id
     return params
+
+
+def _agent_sdk_context_model_hint(requested_model: Optional[str]) -> str:
+    """Resolve Claude's local default-model alias, including a [1M] window hint."""
+    try:
+        settings = json.loads((Path.home() / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        settings = {}
+    if not isinstance(settings, dict):
+        settings = {}
+    configured = str(requested_model or "").strip()
+    if not configured or configured.lower() == "default":
+        configured = str(settings.get("model") or "").strip()
+    env = settings.get("env") if isinstance(settings.get("env"), dict) else {}
+    lowered = configured.lower()
+    for family in ("opus", "sonnet", "haiku"):
+        prefix = f"ANTHROPIC_DEFAULT_{family.upper()}_MODEL"
+        target = str(env.get(prefix) or "").strip()
+        public_name = str(env.get(f"{prefix}_NAME") or "").strip()
+        aliases = {family, f"claude-{family}"}
+        if public_name:
+            aliases.add(public_name.lower())
+        if target and lowered in aliases:
+            return target
+    return configured
+
+
+def _agent_sdk_context_usage_with_model(usage: dict, requested_model: Optional[str]) -> dict:
+    normalized = dict(usage or {})
+    model_hint = _agent_sdk_context_model_hint(requested_model)
+    if model_hint:
+        normalized["model"] = model_hint
+    return normalized
 
 
 @app.post("/api/sessions/{session_id}/permissions/{approval_id}")
@@ -8063,7 +8266,10 @@ async def agent_sdk_context_usage(
     row = _agent_sdk_session_row(session_id)
 
     def stale_context_usage() -> dict:
-        cached = dict(_agent_sdk_context_usage_cache.get(session_id) or {})
+        cached = _agent_sdk_context_usage_with_model(
+            _agent_sdk_context_usage_cache.get(session_id) or {},
+            model,
+        )
         return {
             "ok": True,
             "runtime": _RUNTIME_ORIGIN_AGENT_SDK,
@@ -8097,6 +8303,7 @@ async def agent_sdk_context_usage(
     usage = response.get("usage") or {}
     if not isinstance(usage, dict):
         raise HTTPException(status_code=502, detail="Claude Agent SDK returned invalid context usage")
+    usage = _agent_sdk_context_usage_with_model(usage, model)
     _agent_sdk_context_usage_cache[session_id] = dict(usage)
     set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
     return {
@@ -8181,10 +8388,12 @@ async def pending_agent_sdk_permissions(session_id: str):
             pending = response.get("pending") or []
         except (AgentSdkBridgeError, asyncio.TimeoutError):
             pending = []
+    pending_plan = any(str(item.get("toolName") or "") == "ExitPlanMode" for item in pending)
+    turn_state = "waiting_plan" if pending_plan else turn["state"]
     return {
         "ok": True,
         "running": session_id in _agent_sdk_running_sessions,
-        "turn_state": turn["state"],
+        "turn_state": turn_state,
         "terminal_event_index": turn["terminal_event_index"],
         "terminal_event_type": turn["terminal_event_type"],
         "pending": pending,
@@ -8205,7 +8414,7 @@ async def set_code_session_auto_approve(session_id: str, req: CodeAutoApproveReq
         try:
             response = await _claude_agent_bridge.pending_permissions(session_id)
             for item in response.get("pending") or []:
-                if str(item.get("toolName") or "") == "AskUserQuestion":
+                if str(item.get("toolName") or "") in {"AskUserQuestion", "ExitPlanMode"}:
                     continue
                 approval_id = str(item.get("approvalId") or "")
                 if not approval_id:
@@ -9409,12 +9618,21 @@ async def compact_agent_sdk_session(session_id: str, req: NativeCompactRequest):
                 record_usage(session_id, obj)
             if not (event_type == "system" and str(obj.get("subtype") or "").startswith("hook_")):
                 append_event(session_id, obj)
+        if not result_event:
+            raise AgentSdkBridgeError("Claude Agent SDK compact ended without a final result")
+        _normalize_agent_sdk_result(result_event)
+        compact_error = _agent_sdk_result_error_text(result_event)
+        result_subtype = str(result_event.get("subtype") or "").lower()
+        if result_event.get("is_error") is True or result_subtype.startswith("error_") or compact_error:
+            raise AgentSdkBridgeError(compact_error or "Claude Agent SDK compact failed")
         set_session_remote_state(session_id, native_remote_id, True)
         context_usage: dict = {}
         context_error = ""
         try:
             context_response = await _claude_agent_bridge.context_usage(session_id, params, timeout=180.0)
             context_usage = context_response.get("usage") or {}
+            if isinstance(context_usage, dict):
+                context_usage = _agent_sdk_context_usage_with_model(context_usage, req.model)
         except Exception as exc:
             context_error = str(exc)
         return {
@@ -9729,8 +9947,18 @@ async def prepare_fork(request: Request, session_id: str, req: ForkRequest):
 
     target_pos = user_event_positions[event_index]
     events_before = events[:target_pos]
-    original_text = events[target_pos].get("text", "")
+    original_event = events[target_pos]
+    original_text = original_event.get("text", "")
+    original_images = original_event.get("images", []) or []
+    original_docs = original_event.get("docs", []) or []
     new_text = req.new_text if req.new_text is not None and req.new_text.strip() else original_text
+    original_full_text = str(original_event.get("full_text") or "")
+    replay_text = new_text
+    if original_full_text:
+        if original_text and original_full_text.endswith(original_text):
+            replay_text = original_full_text[: -len(original_text)] + new_text
+        elif new_text == original_text:
+            replay_text = original_full_text
 
     with db_connect() as conn:
         row = conn.execute(
@@ -9799,22 +10027,24 @@ async def prepare_fork(request: Request, session_id: str, req: ForkRequest):
 
     context = format_context_snippet(events_before)
     if native_fork:
-        packed_message = new_text
+        packed_message = replay_text
     elif context:
         packed_message = (
             "【以下是之前的对话历史，仅作为参考上下文（不要重复回应历史问题）】\n"
             f"{context}\n\n"
             "【请基于以上历史上下文，回应这个新问题】\n"
-            f"{new_text}"
+            f"{replay_text}"
         )
     else:
-        packed_message = new_text
+        packed_message = replay_text
 
     return {
         "session_id": new_id,
         "cwd": cwd,
         "sent_message": packed_message,
         "display_message": new_text,
+        "images": original_images,
+        "docs": original_docs,
         "forked_from": session_id,
         "native_fork": native_fork,
         "remote_session_id": native_fork_id or None,
@@ -9837,7 +10067,15 @@ async def prepare_inline_edit(request: Request, session_id: str, req: ForkReques
     original_event = events[target_pos]
     original_text = original_event.get("text", "")
     original_images = original_event.get("images", []) or []
+    original_docs = original_event.get("docs", []) or []
     new_text = req.new_text if req.new_text is not None and req.new_text.strip() else original_text
+    original_full_text = str(original_event.get("full_text") or "")
+    replay_text = new_text
+    if original_full_text:
+        if original_text and original_full_text.endswith(original_text):
+            replay_text = original_full_text[: -len(original_text)] + new_text
+        elif new_text == original_text:
+            replay_text = original_full_text
 
     with db_connect() as conn:
         row = conn.execute(
@@ -9894,7 +10132,7 @@ async def prepare_inline_edit(request: Request, session_id: str, req: ForkReques
     await _discard_session_runtime(session_id)
     await discard_event_checkpoints(events[target_pos:], cwd)
     save_events(session_id, events_before)
-    upsert_session(session_id, derive_title(new_text), cwd)
+    upsert_session(session_id, derive_title(new_text), cwd, row["workspace_mode"] if row else None)
     if native_fork:
         set_session_remote_state(session_id, native_fork_id, True)
         set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
@@ -9906,16 +10144,16 @@ async def prepare_inline_edit(request: Request, session_id: str, req: ForkReques
 
     context = format_context_snippet(events_before)
     if native_fork:
-        packed_message = new_text
+        packed_message = replay_text
     elif context:
         packed_message = (
             "【以下是之前的对话历史，仅作为参考上下文（不要重复回应历史问题）】\n"
             f"{context}\n\n"
             "【请基于以上历史上下文，继续这个对话，并回应下面这条经过编辑的新消息】\n"
-            f"{new_text}"
+            f"{replay_text}"
         )
     else:
-        packed_message = new_text
+        packed_message = replay_text
 
     return {
         "session_id": session_id,
@@ -9923,6 +10161,7 @@ async def prepare_inline_edit(request: Request, session_id: str, req: ForkReques
         "sent_message": packed_message,
         "display_message": new_text,
         "images": original_images,
+        "docs": original_docs,
         "native_fork": native_fork,
         "remote_session_id": native_fork_id or None,
     }

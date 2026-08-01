@@ -1,9 +1,11 @@
 import asyncio
+import json
 import os
 import tempfile
 import unittest
 import uuid
 import time
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
@@ -25,6 +27,28 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
         server.save_events(session_id, [])
         with server.db_connect() as conn:
             conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+    async def test_context_usage_resolves_local_1m_default_model_alias(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            claude_dir = Path(tmp) / ".claude"
+            claude_dir.mkdir()
+            (claude_dir / "settings.json").write_text(
+                json.dumps({
+                    "model": "claude-opus-5",
+                    "env": {
+                        "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5[1M]",
+                        "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "claude-opus-5",
+                    },
+                }),
+                encoding="utf-8",
+            )
+            with patch.object(server.Path, "home", return_value=Path(tmp)):
+                usage = server._agent_sdk_context_usage_with_model(
+                    {"totalTokens": 100_000, "maxTokens": 200_000},
+                    None,
+                )
+        self.assertEqual("claude-opus-5[1M]", usage["model"])
+        self.assertEqual(200_000, usage["maxTokens"])
 
     async def test_omitted_workspace_mode_cannot_route_sdk_session_to_cli(self):
         session_id = "runtime-owner-" + uuid.uuid4().hex
@@ -56,6 +80,21 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(409, raised.exception.status_code)
             self.assertIn("session mode mismatch", str(raised.exception.detail))
             self.assertEqual([], server.load_events(session_id))
+        finally:
+            self._cleanup_session(session_id)
+
+    async def test_explicit_chat_mode_is_not_reclassified_by_project_cwd(self):
+        session_id = "runtime-chat-project-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/ordinary-chat-project"
+        server.upsert_session(session_id, "chat project", cwd, "chat")
+        try:
+            with server.db_connect() as conn:
+                row = conn.execute(
+                    "SELECT workspace_mode, cwd FROM sessions WHERE id = ?",
+                    (session_id,),
+                ).fetchone()
+            self.assertEqual("chat", row["workspace_mode"])
+            self.assertEqual(cwd, row["cwd"])
         finally:
             self._cleanup_session(session_id)
 
@@ -194,9 +233,36 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
             interrupt.assert_awaited_once_with(session_id)
             stops = [
                 event for event in server.load_events(session_id)
-                if event.get("type") == "error" and event.get("message") == "用户中止"
+                if event.get("type") == "system" and event.get("subtype") == "stopped"
             ]
             self.assertEqual(1, len(stops))
+        finally:
+            self._cleanup_session(session_id)
+
+    async def test_agent_sdk_stop_failure_keeps_runtime_ownership(self):
+        session_id = "runtime-stop-failed-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/sdk-stop-failed-project"
+        server.upsert_session(session_id, "stop failed", cwd, "code")
+        server._agent_sdk_running_sessions.add(session_id)
+        try:
+            with patch.object(
+                server._claude_agent_bridge,
+                "interrupt",
+                AsyncMock(side_effect=server.AgentSdkBridgeError("interrupt failed")),
+            ), patch.object(
+                server._claude_agent_bridge,
+                "close_session",
+                AsyncMock(side_effect=server.AgentSdkBridgeError("close failed")),
+            ):
+                with self.assertRaises(HTTPException) as raised:
+                    await server.stop_chat(session_id)
+            self.assertEqual(503, raised.exception.status_code)
+            self.assertIn(session_id, server._agent_sdk_running_sessions)
+            self.assertNotIn(session_id, server._stopped_sessions)
+            self.assertFalse(any(
+                event.get("subtype") == "stopped"
+                for event in server.load_events(session_id)
+            ))
         finally:
             self._cleanup_session(session_id)
 
@@ -252,6 +318,50 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
             "API Error: Stream idle timeout - no chunks received",
             normalized["error"],
         )
+
+    def test_transport_error_text_is_not_rendered_as_duplicate_assistant_message(self):
+        message = "API Error: Connection closed mid-response. The response above may be incomplete."
+        event = {
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": message}]},
+        }
+        self.assertEqual(message, server._agent_sdk_reported_api_error(event))
+        self.assertIsNone(server._strip_agent_sdk_api_error_text(event, message))
+
+        mixed = {
+            "type": "assistant",
+            "message": {"content": [
+                {"type": "text", "text": "已经完成的部分"},
+                {"type": "text", "text": message},
+            ]},
+        }
+        cleaned = server._strip_agent_sdk_api_error_text(mixed, message)
+        self.assertEqual("已经完成的部分", server._agent_sdk_assistant_text(cleaned))
+
+    def test_abort_diagnostic_and_missing_final_text_are_normalized(self):
+        abort_result = {
+            "type": "result",
+            "subtype": "error_during_execution",
+            "is_error": True,
+            "terminal_reason": "aborted_streaming",
+            "errors": ["[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use"],
+        }
+        self.assertTrue(server._agent_sdk_abort_diagnostic(abort_result))
+
+        result = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "现在根因很清楚了。让我给你最终总结：\n\n完整结论",
+        }
+        recovered = server._agent_sdk_final_text_event(
+            result,
+            "现在根因很清楚了。让我给你最终总结：",
+            "local-session",
+            "turn-1",
+        )
+        self.assertTrue(recovered["recovered_final"])
+        self.assertEqual("完整结论", recovered["message"]["content"][0]["text"])
 
     async def test_transport_failure_auto_reconnects_without_replaying_content(self):
         session_id = "runtime-auto-reconnect-" + uuid.uuid4().hex
@@ -661,6 +771,44 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
             if forked_session_id:
                 self._cleanup_session(forked_session_id)
 
+    async def test_prepare_fork_preserves_original_images_docs_and_full_prompt(self):
+        session_id = "attachment-fork-source-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/attachment-chat-project"
+        server.upsert_session(session_id, "attachment fork", cwd, "chat")
+        server.save_events(session_id, [{
+            "type": "user_input",
+            "text": "分析附件",
+            "full_text": "【文档: spec.pdf】\n---\n关键规格\n---\n\n分析附件",
+            "images": ["/tmp/screenshot.png"],
+            "docs": [{"name": "spec.pdf", "path": "/tmp/spec.pdf", "size": 42}],
+            "ts": time.time(),
+        }])
+        request = Request({
+            "type": "http", "method": "POST", "path": "/", "headers": [],
+            "client": ("127.0.0.1", 12345),
+        })
+        forked_session_id = ""
+        try:
+            result = await server.prepare_fork(
+                request,
+                session_id,
+                server.ForkRequest(event_index=0),
+            )
+            forked_session_id = result["session_id"]
+            self.assertEqual(["/tmp/screenshot.png"], result["images"])
+            self.assertEqual("spec.pdf", result["docs"][0]["name"])
+            self.assertIn("关键规格", result["sent_message"])
+            with server.db_connect() as conn:
+                row = conn.execute(
+                    "SELECT workspace_mode FROM sessions WHERE id = ?",
+                    (forked_session_id,),
+                ).fetchone()
+            self.assertEqual("chat", row["workspace_mode"])
+        finally:
+            self._cleanup_session(session_id)
+            if forked_session_id:
+                self._cleanup_session(forked_session_id)
+
     async def test_closing_sse_detaches_and_drains_native_turn(self):
         session_id = "native-detach-" + uuid.uuid4().hex
         cwd = tempfile.gettempdir() + "/native-detach-project"
@@ -704,6 +852,66 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("native-detach-finished", row["remote_session_id"])
             self.assertTrue(row["remote_ready"])
             self.assertNotIn(session_id, server._agent_sdk_running_sessions)
+        finally:
+            task = server._agent_sdk_detached_turn_tasks.get(session_id)
+            if task and not task.done():
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+            self._cleanup_session(session_id)
+
+    async def test_detached_final_recovery_keeps_streamed_prefix_once(self):
+        session_id = "native-detach-prefix-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/native-detach-prefix-project"
+        turn_id = "turn-" + uuid.uuid4().hex
+        server.upsert_session(session_id, "detach prefix", cwd, "code")
+        server.save_events(session_id, [{"type": "user_input", "text": "finish", "turn_id": turn_id}])
+        queue = asyncio.Queue()
+        turn = AgentSdkTurn("turn-detach-prefix", session_id, queue)
+        server._agent_sdk_running_sessions.add(session_id)
+        response = server._agent_sdk_streaming_response(
+            turn=turn,
+            session_id=session_id,
+            remote_session_id="native-detach-prefix",
+            remote_ready=True,
+            work_dir=cwd,
+            display_text="finish",
+            checkpoint=None,
+            git_dirty_before={},
+            workspace_mode="code",
+            turn_id=turn_id,
+        )
+        iterator = response.body_iterator
+        try:
+            await iterator.__anext__()
+            await queue.put({
+                "type": "event",
+                "event": {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "最终总结："}]},
+                },
+            })
+            streamed = await iterator.__anext__()
+            self.assertIn("最终总结", streamed)
+            await iterator.aclose()
+            await queue.put({
+                "type": "event",
+                "event": {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "最终总结：\n\n完整内容",
+                    "usage": {},
+                },
+            })
+            await queue.put({"type": "done", "sessionId": "native-detach-prefix"})
+            await asyncio.wait_for(server._agent_sdk_detached_turn_tasks[session_id], timeout=2)
+            assistant_text = [
+                server._agent_sdk_assistant_text(event)
+                for event in server.load_events(session_id)
+                if event.get("type") == "assistant"
+            ]
+            self.assertEqual(["最终总结：", "完整内容"], assistant_text)
         finally:
             task = server._agent_sdk_detached_turn_tasks.get(session_id)
             if task and not task.done():
@@ -815,6 +1023,64 @@ class RuntimeOwnershipTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("runtime ended before returning a final result", payload)
             self.assertIn('"turn_state": "failed"', payload)
             self.assertEqual("failed", server._agent_sdk_turn_state(session_id)["state"])
+        finally:
+            self._cleanup_session(session_id)
+
+    async def test_native_stream_recovers_final_result_text_missing_from_partial_messages(self):
+        session_id = "native-final-recovery-" + uuid.uuid4().hex
+        cwd = tempfile.gettempdir() + "/native-final-recovery-project"
+        turn_id = "turn-" + uuid.uuid4().hex
+        server.upsert_session(session_id, "final recovery", cwd, "code")
+        server.save_events(
+            session_id,
+            [{"type": "user_input", "text": "summarize", "turn_id": turn_id}],
+        )
+        queue = asyncio.Queue()
+        turn = AgentSdkTurn("turn-final-recovery", session_id, queue)
+        await queue.put({
+            "type": "event",
+            "event": {
+                "type": "assistant",
+                "message": {
+                    "id": "assistant-prefix",
+                    "content": [{"type": "text", "text": "最终总结："}],
+                },
+            },
+        })
+        await queue.put({
+            "type": "event",
+            "event": {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "最终总结：\n\n完整内容",
+                "usage": {},
+            },
+        })
+        await queue.put({"type": "done", "success": True, "sessionId": "native-final-recovery"})
+        server._agent_sdk_running_sessions.add(session_id)
+        response = server._agent_sdk_streaming_response(
+            turn=turn,
+            session_id=session_id,
+            remote_session_id="native-final-recovery",
+            remote_ready=True,
+            work_dir=cwd,
+            display_text="summarize",
+            checkpoint=None,
+            git_dirty_before={},
+            workspace_mode="code",
+            turn_id=turn_id,
+        )
+        try:
+            payload = "".join([chunk async for chunk in response.body_iterator])
+            self.assertIn('"recovered_final": true', payload)
+            self.assertIn("完整内容", payload)
+            recovered = [
+                event for event in server.load_events(session_id)
+                if event.get("recovered_final") is True
+            ]
+            self.assertEqual(1, len(recovered))
+            self.assertEqual("完整内容", recovered[0]["message"]["content"][0]["text"])
         finally:
             self._cleanup_session(session_id)
 

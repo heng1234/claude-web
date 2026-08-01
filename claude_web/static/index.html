@@ -9448,6 +9448,9 @@ let archivedView = false;
 let cliView = false;
 let milestoneView = false;
 let codeMode = false;
+let conversationViewEpoch = 0;
+let sessionLoadRequestId = 0;
+let gitStatusRequestId = 0;
 const LAST_CHAT_SESSION_KEY = 'cw_last_chat_session_v1';
 const LAST_CODE_SESSION_KEY = 'cw_last_code_session_v1';
 let currentCodeRuntime = 'unknown';
@@ -9464,6 +9467,7 @@ let activeCodeQueueOwner = `draft:${Date.now()}:0`;
 const codeQueueOwnerBySession = new Map();
 const codeMessageQueues = new Map();
 const codeQueueDispatchingOwners = new Set();
+const codeQueueDispatchingEntryIds = new Set();
 const codeQueuePauseReasons = new Map();
 // A Code turn belongs to the session that started it, even when the user
 // switches to another conversation. Never use the currently visible session
@@ -9475,6 +9479,8 @@ let currentCodeAutoApprove = false;
 let currentCodeAutoApproveUpdating = false;
 let currentCodeProjectSettings = { validation_command: '', validation_mode: 'ask', validation_timeout: 120 };
 let latestNativeContextUsage = null;
+const nativeContextUsageBySession = new Map();
+const contextCompactionBySession = new Map();
 let codeConversationMatches = [];
 let codeConversationMatchIndex = -1;
 let codeInputHistory = LS.get('codeInputHistoryV1', []);
@@ -10533,7 +10539,7 @@ function applyMobileQuestionMode() {
   document.documentElement.classList.toggle('mobile-question-mode', mobileQuestionMode);
   if (mobileModeBanner) mobileModeBanner.classList.toggle('active', mobileQuestionMode && !mobileBannerDismissed);
 
-  const hiddenFeatures = isMobile ? [] : [configCenterBtn, mcpBtn];
+  const hiddenFeatures = [configCenterBtn, mcpBtn];
   hiddenFeatures.forEach(el => {
     if (!el) return;
     el.classList.toggle('mobile-mode-hidden', mobileQuestionMode);
@@ -10546,7 +10552,7 @@ function applyMobileQuestionMode() {
     cwdInput.title = mobileQuestionMode ? '手机问答模式只能切换到已保存项目目录' : '';
   }
 
-  const restrictedControls = isMobile ? [] : [
+  const restrictedControls = [
     systemPromptInput,
     notificationMasterEnabled,
     saveNotificationsBtn,
@@ -10582,12 +10588,12 @@ async function refreshMobileQuestionMode() {
     const r = await fetch('/api/mobile-access/status');
     if (!r.ok) return;
     mobileAccessStatus = await r.json();
-    const isRemoteAuth = mobileAccessStatus.local === false && mobileAccessStatus.authorized === true;
     const isMobile = isMobileDevice();
+    const allowedMobile = mobileAccessStatus.local === true || mobileAccessStatus.authorized === true;
 
-    mobileQuestionMode = isRemoteAuth;
+    mobileQuestionMode = isMobile && allowedMobile;
 
-    if (isRemoteAuth && isMobile) {
+    if (isMobile) {
       document.body.classList.add('mobile-device-detected');
     } else {
       document.body.classList.remove('mobile-device-detected');
@@ -12872,6 +12878,15 @@ function contextLimitFromModel(model, fallback) {
     : Math.round(value * 1_000);
 }
 
+function nativeContextLimit(data, fallback = 0) {
+  const reported = Number(data?.maxTokens ?? data?.max_tokens ?? 0);
+  const raw = Number(data?.rawMaxTokens ?? data?.raw_max_tokens ?? 0);
+  const explicit = contextLimitFromModel(data?.model, 0);
+  const candidates = [reported, raw, explicit]
+    .filter(value => Number.isFinite(value) && value > 0);
+  return candidates.length ? Math.max(...candidates) : fallback;
+}
+
 function getComposerContextLimit() {
   if (latestContextLimit > 0) return latestContextLimit;
   return contextLimitFromModel(
@@ -12911,6 +12926,9 @@ function resetSessionTokens() {
   latestContextTokens = 0;
   latestContextLimit = 0;
   latestContextExact = false;
+  latestNativeContextUsage = null;
+  const cached = sessionId ? nativeContextUsageBySession.get(sessionId) : null;
+  if (cached) applyNativeContextUsage(cached, sessionId);
   renderSessionTokens();
 }
 
@@ -12931,15 +12949,18 @@ function accumulateSessionTokens(usage, modelUsage = null) {
   renderSessionTokens();
 }
 
-function applyNativeContextUsage(data) {
+function applyNativeContextUsage(data, targetSessionId = sessionId) {
   if (!data || typeof data !== 'object') return false;
   const total = Number(data.totalTokens ?? data.total_tokens ?? 0);
-  const max = Number(data.maxTokens ?? data.max_tokens ?? data.rawMaxTokens ?? 0);
+  const max = nativeContextLimit(data);
   if (!Number.isFinite(total) || total < 0 || !Number.isFinite(max) || max <= 0) return false;
+  const sid = String(targetSessionId || '').trim();
+  if (sid) nativeContextUsageBySession.set(sid, { ...data, maxTokens:max });
+  if (sid && sid !== sessionId) return true;
   latestContextTokens = total;
   latestContextLimit = max;
   latestContextExact = true;
-  latestNativeContextUsage = data;
+  latestNativeContextUsage = { ...data, maxTokens:max };
   renderSessionTokens();
   updateTokenCount();
   return true;
@@ -12973,7 +12994,7 @@ function nativeContextCategoryEntries(data) {
 function renderNativeContextUsage(data = latestNativeContextUsage) {
   if (!cwContextUsageOverview || !cwContextUsageList) return;
   const total = Number(data?.totalTokens ?? data?.total_tokens ?? latestContextTokens ?? 0);
-  const max = Number(data?.maxTokens ?? data?.max_tokens ?? data?.rawMaxTokens ?? latestContextLimit ?? 0);
+  const max = nativeContextLimit(data, latestContextLimit || 0);
   const remaining = Math.max(0, max - total);
   const percent = max > 0 ? Math.min(100, Math.round(total / max * 100)) : 0;
   cwContextUsageOverview.innerHTML = [
@@ -13077,11 +13098,25 @@ tokenCounter?.addEventListener('keydown', event => {
 });
 cwContextRefreshBtn?.addEventListener('click', openNativeContextUsage);
 cwContextCompactBtn?.addEventListener('click', async () => {
+  const targetSessionId = sessionId;
+  if (!targetSessionId) return;
   cwContextCompactBtn.disabled = true;
   cwContextCompactBtn.textContent = '正在压缩…';
-  try { await runNativeCompact(); await refreshNativeContextUsage({ silent:false }); renderNativeContextUsage(); }
+  setContextCompactionStatus(true, 'Claude Code 正在原生压缩上下文…', targetSessionId);
+  try {
+    const result = await runNativeCompact(targetSessionId);
+    if (!result?.ok) throw new Error(result?.error?.message || '原生压缩失败');
+    if (sessionId === targetSessionId) {
+      await refreshNativeContextUsage({ silent:false });
+      renderNativeContextUsage();
+    }
+  }
   catch (error) { toast('原生压缩失败：' + (error.message || error)); }
-  finally { cwContextCompactBtn.disabled = false; cwContextCompactBtn.textContent = '立即原生压缩'; }
+  finally {
+    setContextCompactionStatus(false, '', targetSessionId);
+    cwContextCompactBtn.disabled = false;
+    cwContextCompactBtn.textContent = '立即原生压缩';
+  }
 });
 
 async function refreshNativeContextUsage(options = {}) {
@@ -13113,7 +13148,7 @@ async function refreshNativeContextUsage(options = {}) {
     }
     const data = await response.json();
     if (sessionId !== targetSessionId || requestSerial !== contextUsageRequestSerial) return null;
-    applyNativeContextUsage(data);
+    applyNativeContextUsage(data, targetSessionId);
     return data;
   } catch (error) {
     if (!options.silent) toast('上下文统计失败：' + (error.message || error));
@@ -13218,9 +13253,12 @@ async function retryTurnWithCurrentPermissions(targetSessionId, userIdx) {
       return;
     }
     const data = await r.json();
-    if (data.cwd) cwdInput.value = data.cwd;
+    cwdInput.value = codeMode ? (data.cwd || '') : '';
     await loadSession(targetSessionId);
-    await sendRaw(data.sent_message, data.display_message, data.images || [], { forceNew: !data.native_fork });
+    await sendRaw(data.sent_message, data.display_message, data.images || [], {
+      forceNew: !data.native_fork,
+      composerSnapshot: { docs: data.docs || [], urlEntries: [], webSearchPrefix: '' },
+    });
   } catch (e) {
     alert('重试失败: ' + e.message);
     try { await loadSession(targetSessionId); } catch {}
@@ -13562,6 +13600,20 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
       markConnectionRestored();
       reconnectAttempt = 0;
       for (const pending of (state.pending || [])) {
+        if (String(pending.toolName || '') === 'ExitPlanMode') {
+          const toolId = String(pending.toolUseId || pending.approvalId || '');
+          let planEntry = planCards.get(toolId);
+          if (!planEntry) {
+            if (!asstContainer) asstContainer = newAssistantBubble();
+            renderPlanCard(asstContainer, pending.input || {}, { id: toolId, pending: false });
+            planEntry = planCards.get(toolId);
+          }
+          if (planEntry && !planEntry.runStopped) {
+            planEntry.runStopped = true;
+            planEntry.pausePromise = stopCurrentRunForPlan(planEntry);
+          }
+          continue;
+        }
         const result = handleEvent(recoveredPermissionEvent(pending), asstContainer);
         if (result) asstContainer = result;
       }
@@ -14337,11 +14389,22 @@ function nativeResultErrorMessage(result) {
     if (typeof item === 'string') return item;
     if (item && typeof item === 'object') return item.message || item.error || JSON.stringify(item);
     return String(item || '');
-  }).filter(Boolean);
+  }).filter(Boolean).filter(item => !/^\[ede_diagnostic\]/i.test(item.trim()));
   const safeSubtype = subtype && subtype.toLowerCase() !== 'success' ? subtype : '';
-  return details.join('\n')
+  const message = details.join('\n')
     || String(result.error || result.message || '').trim()
     || `Claude Agent SDK 执行失败${safeSubtype ? `（${safeSubtype}）` : ''}`;
+  if (/connection closed mid-response/i.test(message)) {
+    return '连接在响应中途断开，以上内容可能不完整；系统正在自动恢复当前会话连接。';
+  }
+  return message;
+}
+
+function isNativeAbortDiagnosticResult(result) {
+  if (!result || result.type !== 'result' || result.parent_tool_use_id) return false;
+  if (!String(result.terminal_reason || '').toLowerCase().startsWith('aborted')) return false;
+  const errors = Array.isArray(result.errors) ? result.errors : [];
+  return errors.length > 0 && errors.every(item => typeof item === 'string' && /^\[ede_diagnostic\]/i.test(item.trim()));
 }
 
 function nativeReconnectStatusText(obj) {
@@ -14438,6 +14501,19 @@ function handleEvent(obj, container, options = {}) {
   }
   if (obj.type === 'permission_request') {
     hideThinking(container);
+    if (codeMode && obj.tool_name === 'ExitPlanMode') {
+      const toolId = String(obj.tool_use_id || obj.approval_id || '');
+      let planEntry = planCards.get(toolId);
+      if (!planEntry) {
+        renderPlanCard(container, obj.input || {}, { id: toolId, pending: false });
+        planEntry = planCards.get(toolId);
+      }
+      if (planEntry && !planEntry.runStopped) {
+        planEntry.runStopped = true;
+        planEntry.pausePromise = stopCurrentRunForPlan(planEntry);
+      }
+      return container;
+    }
     if (codeMode && obj.tool_name === 'AskUserQuestion' && !replay) {
       notifyUser('Code 会话等待回答', obj.title || obj.description || 'Claude 有问题需要你回答');
       beep();
@@ -14459,6 +14535,12 @@ function handleEvent(obj, container, options = {}) {
     return nextContainer;
   }
   if (obj.type === 'error') {
+    if (/^用户中止$/.test(String(obj.message || '').trim())) {
+      hideThinking(container, { force: true });
+      finishPendingToolUses('已中止', 'stopped');
+      if (replay) addSystemInfo('已中止');
+      return container;
+    }
     const terminal = prepareTerminalRender(obj, eventIndex, 'error');
     if (terminal.skip) return container;
     hideThinking(container, { force: true });
@@ -14469,7 +14551,9 @@ function handleEvent(obj, container, options = {}) {
   }
   if (obj.type === 'done') {
     hideThinking(container, { force: true });
-    finishPendingToolUses(obj.turn_state === 'waiting_plan' ? '等待审批' : '已结束', 'done');
+    const waitingPlan = obj.turn_state === 'waiting_plan';
+    const failed = obj.success === false && !waitingPlan;
+    finishPendingToolUses(waitingPlan ? '等待审批' : (failed ? '出错' : '已结束'), failed ? 'error' : 'done');
     return container;
   }
   if (obj.type === 'raw') { addSystemInfo(obj.text); return container; }
@@ -14491,6 +14575,12 @@ function handleEvent(obj, container, options = {}) {
   if (obj.type === 'system' && obj.subtype === 'plan_ready') {
     hideThinking(container, { force: true });
     finishPendingToolUses('等待审批', 'done');
+    return container;
+  }
+  if (obj.type === 'system' && obj.subtype === 'stopped') {
+    hideThinking(container, { force: true });
+    finishPendingToolUses('已中止', 'stopped');
+    if (replay) addSystemInfo(obj.message || '已中止');
     return container;
   }
   if (obj.type === 'system' && obj.subtype === 'status') {
@@ -14586,6 +14676,9 @@ function handleEvent(obj, container, options = {}) {
     return container;
   }
   if (obj.type === 'result') {
+    // Claude emits an internal EDE diagnostic after an intentional interrupt.
+    // The authoritative "用户中止" event already owns this turn's terminal UI.
+    if (isNativeAbortDiagnosticResult(obj)) return container;
     const terminal = prepareTerminalRender(obj, eventIndex, 'result');
     if (terminal.skip) return container;
     hideThinking(container, { force: true });
@@ -14983,7 +15076,10 @@ async function editInPlaceAndChat(targetSessionId, userIdx, newText) {
     const data = await r.json();
     if (data.cwd) cwdInput.value = data.cwd;
     await loadSession(targetSessionId);
-    await sendRaw(data.sent_message, data.display_message, data.images || [], { forceNew: !data.native_fork });
+    await sendRaw(data.sent_message, data.display_message, data.images || [], {
+      forceNew: !data.native_fork,
+      composerSnapshot: { docs: data.docs || [], urlEntries: [], webSearchPrefix: '' },
+    });
   } catch (e) {
     alert('出错: ' + e.message);
     try { await loadSession(targetSessionId); } catch {}
@@ -15012,7 +15108,10 @@ async function forkAndChat(fromSession, userIdx, newText) {
     sessionLabelText.textContent = '会话 ' + sessionId.slice(0, 8) + ' · 分叉自 ' + fromSession.slice(0, 6);
     suggestTitleBtn.classList.remove('hidden');
     // Send with display_message override
-    await sendRaw(data.sent_message, data.display_message, [], { forceNew: !data.native_fork });
+    await sendRaw(data.sent_message, data.display_message, data.images || [], {
+      forceNew: !data.native_fork,
+      composerSnapshot: { docs: data.docs || [], urlEntries: [], webSearchPrefix: '' },
+    });
   } catch (e) {
     alert('出错: ' + e.message);
   }
@@ -15162,14 +15261,16 @@ async function uploadFile(file) {
     fd.append('file', file);
     try {
       const r = await fetch('/api/upload', { method:'POST', body: fd });
-      if (!r.ok) { alert('上传失败: ' + r.status); return; }
+      if (!r.ok) { alert('上传失败: ' + r.status); return null; }
       const data = await r.json();
-      if (uploadGeneration !== pendingImageGeneration) return;
       data._imageKey = imageKey;
-      pendingImages.push(data);
-      pendingImageKeys.add(imageKey);
-      renderAttachments();
-    } catch (e) { alert('上传出错: ' + e.message); }
+      if (uploadGeneration === pendingImageGeneration) {
+        pendingImages.push(data);
+        pendingImageKeys.add(imageKey);
+        renderAttachments();
+      }
+      return data;
+    } catch (e) { alert('上传出错: ' + e.message); return null; }
     finally { activeImageUploadKeys.delete(imageKey); }
   })();
   activeImageUploadPromises.add(uploadPromise);
@@ -15394,7 +15495,7 @@ function syncComposerDraftState() {
 }
 
 // ===== draft autosave =====
-const draftKey = () => 'draft_' + (sessionId || 'new');
+const draftKey = () => `draft_${codeMode ? 'code' : 'chat'}_${sessionId || 'new'}`;
 const draftFileRefsKey = () => draftKey() + '_code_files';
 const codeFileReferences = new Map();
 
@@ -15724,9 +15825,9 @@ async function slashFork() {
   toast('已分叉，审过后发送');
 }
 
-async function runNativeCompact() {
-  if (!sessionId) return { ok: false, error: { message: '当前没有会话' } };
-  const targetSessionId = sessionId;
+async function runNativeCompact(targetSessionId = sessionId) {
+  targetSessionId = String(targetSessionId || '').trim();
+  if (!targetSessionId) return { ok: false, error: { message: '当前没有会话' } };
   const perm = buildPermissionPayload();
   try {
     const response = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/compact/native`, {
@@ -15742,9 +15843,8 @@ async function runNativeCompact() {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
-    if (sessionId !== targetSessionId) throw new Error('压缩期间切换了会话');
     const compact = data.compact || {};
-    if (!applyNativeContextUsage(data.context_usage || {})) {
+    if (!applyNativeContextUsage(data.context_usage || {}, targetSessionId) && sessionId === targetSessionId) {
       const after = Number(compact.post_tokens || 0);
       if (after > 0) latestContextTokens = after;
       renderSessionTokens();
@@ -15752,10 +15852,12 @@ async function runNativeCompact() {
     }
     const before = Number(compact.pre_tokens || 0);
     const after = Number(compact.post_tokens || data.context_usage?.totalTokens || 0);
-    addSystemInfo(before || after
-      ? `Claude Code 原生压缩 · ${_fmtTokens(before)} → ${_fmtTokens(after)}`
-      : 'Claude Code 原生压缩完成');
-    if (!data.context_usage || !Object.keys(data.context_usage).length) scheduleNativeContextUsageRefresh(0);
+    if (sessionId === targetSessionId) {
+      addSystemInfo(before || after
+        ? `Claude Code 原生压缩 · ${_fmtTokens(before)} → ${_fmtTokens(after)}`
+        : 'Claude Code 原生压缩完成');
+      if (!data.context_usage || !Object.keys(data.context_usage).length) scheduleNativeContextUsageRefresh(0);
+    }
     return { ok: true, data };
   } catch (error) {
     return { ok: false, error: { message: error.message || String(error) } };
@@ -15767,11 +15869,16 @@ async function slashCompact() {
   if (codeMode) {
     if (!confirm('由 Claude Code 原生压缩当前会话上下文。会话 ID 保持不变，继续？')) return;
     toast('Claude Code 正在原生压缩上下文...', { sticky: true });
-    setContextCompactionStatus(true, 'Claude Code 正在原生压缩上下文…');
-    const result = await runNativeCompact();
-    setContextCompactionStatus(false);
+    const targetSessionId = sessionId;
+    setContextCompactionStatus(true, 'Claude Code 正在原生压缩上下文…', targetSessionId);
+    const result = await runNativeCompact(targetSessionId);
+    setContextCompactionStatus(false, '', targetSessionId);
     toast.dismiss();
-    if (!result?.ok) { toast('原生压缩失败：' + (result?.error?.message || '未知错误')); return; }
+    if (!result?.ok) {
+      if (sessionId === targetSessionId) toast('原生压缩失败：' + (result?.error?.message || '未知错误'));
+      return;
+    }
+    if (sessionId !== targetSessionId) return;
     renderSessionTokens();
     updateTokenCount();
     toast(`原生压缩完成 · ${currentCodeRuntime === 'claude_agent_sdk' ? 'Agent SDK' : 'Claude Code'}`);
@@ -16064,13 +16171,22 @@ function mobileCwdOrStop() {
   return null;
 }
 
-function setContextCompactionStatus(active, text = '') {
-  contextCompactionRunning = !!active;
+function syncContextCompactionStatus() {
+  const state = sessionId ? contextCompactionBySession.get(sessionId) : null;
+  contextCompactionRunning = !!state;
   if (cwContextCompactionStatus) cwContextCompactionStatus.classList.toggle('active', contextCompactionRunning);
-  if (cwContextCompactionText && text) cwContextCompactionText.textContent = text;
+  if (cwContextCompactionText && state?.text) cwContextCompactionText.textContent = state.text;
   if (form) form.setAttribute('aria-busy', contextCompactionRunning ? 'true' : 'false');
   if (input) input.disabled = contextCompactionRunning;
   if (sendBtn) sendBtn.disabled = contextCompactionRunning || agentLoopRunning;
+}
+
+function setContextCompactionStatus(active, text = '', targetSessionId = sessionId) {
+  const sid = String(targetSessionId || '').trim();
+  if (!sid) return;
+  if (active) contextCompactionBySession.set(sid, { text:text || 'Claude Code 正在原生压缩上下文…' });
+  else contextCompactionBySession.delete(sid);
+  if (sid === sessionId) syncContextCompactionStatus();
 }
 
 function shouldAutoCompactContext() {
@@ -16094,14 +16210,16 @@ function restoreQueuedComposerMessage(message) {
 async function maybeAutoCompactBeforeSend(message, options = {}) {
   if (!shouldAutoCompactContext()) return true;
   const targetSessionId = sessionId;
-  setContextCompactionStatus(true, `轻上下文：已达 ${_fmtTokens(latestContextTokens)}，正在执行 Claude Code 原生 compact…`);
+  const contextTokensAtStart = latestContextTokens;
+  setContextCompactionStatus(true, `轻上下文：已达 ${_fmtTokens(contextTokensAtStart)}，正在执行 Claude Code 原生 compact…`, targetSessionId);
   try {
-    const result = await runNativeCompact();
+    const result = await runNativeCompact(targetSessionId);
     if (!result?.ok) throw new Error(result?.error?.message || 'Claude Code 原生 compact 失败');
-    if (sessionId !== targetSessionId) throw new Error('压缩期间切换了会话，请重新发送');
-    renderSessionTokens();
-    updateTokenCount();
-    toast('Claude Code 已原生压缩上下文，正在继续原任务');
+    if (sessionId === targetSessionId) {
+      renderSessionTokens();
+      updateTokenCount();
+      toast('Claude Code 已原生压缩上下文，正在继续原任务');
+    }
     return true;
   } catch (e) {
     if (options.restoreOnFailure !== false) restoreQueuedComposerMessage(message);
@@ -16111,7 +16229,7 @@ async function maybeAutoCompactBeforeSend(message, options = {}) {
     toast(prefix + (e.message || e), { timeout: 5200 });
     return false;
   } finally {
-    setContextCompactionStatus(false);
+    setContextCompactionStatus(false, '', targetSessionId);
   }
 }
 
@@ -16369,12 +16487,14 @@ async function loadPersistedCodeQueue(targetSessionId) {
     const data = await response.json();
     if (serial !== codeQueueSyncSerial) return;
     const queue = codeQueueFor(owner);
-    queue.splice(0, queue.length, ...(data.items || []).map(item => ({
+    const visibleItems = (data.items || []).filter(item => !codeQueueDispatchingEntryIds.has(item.id));
+    queue.splice(0, queue.length, ...visibleItems
+      .map(item => ({
       id: item.id,
       owner,
       ...(item.payload || {}),
     })));
-    const paused = (data.items || []).some(item => item.state === 'paused' || item.state === 'dispatching');
+    const paused = visibleItems.some(item => item.state === 'paused' || item.state === 'dispatching');
     if (paused && queue.length) codeQueuePauseReasons.set(owner, '已恢复待发送队列，请确认后继续');
     else codeQueuePauseReasons.delete(owner);
     if (owner === activeCodeQueueOwner) renderCodeMessageQueue();
@@ -16405,6 +16525,17 @@ function removeQueuedCodeMessage(entryId) {
   persistCodeQueueOrder(activeCodeQueueOwner);
 }
 
+function removeLocalCodeQueueEntry(owner, entryId) {
+  if (!owner || !entryId) return false;
+  const queue = codeQueueFor(owner);
+  const next = queue.filter(entry => entry.id !== entryId);
+  if (next.length === queue.length) return false;
+  queue.splice(0, queue.length, ...next);
+  if (!queue.length) codeQueuePauseReasons.delete(owner);
+  if (owner === activeCodeQueueOwner) renderCodeMessageQueue();
+  return true;
+}
+
 function pauseCodeMessageQueue(owner, reason) {
   if (!codeQueueFor(owner).length) return;
   codeQueuePauseReasons.set(owner, reason || '上一轮未完成，队列已暂停');
@@ -16432,11 +16563,12 @@ async function drainCodeMessageQueue(owner = activeCodeQueueOwner) {
   await dispatchCodeQueueEntry(entry);
 }
 
-async function captureCodeComposerEntry(text, owner, slashPayload = null) {
-  if (activeImageUploadPromises.size > 0 || activeDocUploadPromises.size > 0) {
+async function captureCodeComposerEntry(text, owner, slashPayload = null, composerCapture = null) {
+  const capture = composerCapture || snapshotComposerState();
+  if (capture.imagePromises.length > 0 || capture.docPromises.length > 0) {
     sendBtn.disabled = true;
     input.disabled = true;
-    try { await Promise.all([waitForImageUploads(), waitForDocUploads()]); }
+    try { await resolveComposerCapture(capture); }
     finally {
       sendBtn.disabled = false;
       input.disabled = false;
@@ -16444,16 +16576,15 @@ async function captureCodeComposerEntry(text, owner, slashPayload = null) {
     }
   }
   const ownerStillActive = owner === activeCodeQueueOwner;
-  const imagePaths = ownerStillActive ? pendingImages.map(item => item.path).filter(Boolean) : [];
-  const docs = ownerStillActive
-    ? pendingDocs.filter(isReadyDocForSend).map(doc => ({
+  await resolveComposerCapture(capture);
+  if (capture.failedUploads > 0) throw new Error('有附件上传失败，请移除失败项或重试');
+  const imagePaths = capture.images.map(item => item.path).filter(Boolean);
+  const docs = capture.docs
+    .filter(isReadyDocForSend).map(doc => ({
         name: doc.name, size: doc.size, length: doc.length, path: doc.path || null,
         content: doc.content || '', truncated: !!doc.truncated,
-      }))
-    : [];
-  const urlEntries = ownerStillActive
-    ? Array.from(urlContext.entries()).map(([url, state]) => [url, { ...state }])
-    : [];
+      }));
+  const urlEntries = capture.urlEntries;
   const fallbackMessage = text || (imagePaths.length > 0 ? '（仅图片）' : '（仅文档）');
   const entry = {
     id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -16487,6 +16618,7 @@ async function dispatchCodeQueueEntry(entry) {
     return;
   }
   codeQueueDispatchingOwners.add(owner);
+  codeQueueDispatchingEntryIds.add(entry.id);
   codeQueuePauseReasons.delete(owner);
   renderCodeMessageQueue();
   let result = null;
@@ -16518,8 +16650,10 @@ async function dispatchCodeQueueEntry(entry) {
     addErrorBlock(error?.message || String(error));
   } finally {
     codeQueueDispatchingOwners.delete(owner);
+    codeQueueDispatchingEntryIds.delete(entry.id);
   }
   if (result?.ok) {
+    removeLocalCodeQueueEntry(owner, entry.id);
     deletePersistedQueueEntry(entry);
     scheduleCodeQueueDrain(owner);
   } else {
@@ -16576,21 +16710,54 @@ cwCodeQueueResume?.addEventListener('click', () => {
   scheduleCodeQueueDrain(activeCodeQueueOwner, 0);
 });
 
-async function send(message) {
-  if (activeImageUploadPromises.size > 0 || activeDocUploadPromises.size > 0) {
+async function send(message, options = {}) {
+  const sendOptions = {
+    workspaceMode: options.workspaceMode || (codeMode ? 'code' : 'chat'),
+    viewEpoch: options.viewEpoch ?? conversationViewEpoch,
+    sessionId: Object.prototype.hasOwnProperty.call(options, 'sessionId') ? options.sessionId : sessionId,
+    cwd: Object.prototype.hasOwnProperty.call(options, 'cwd') ? options.cwd : (cwdInput.value.trim() || null),
+  };
+  const capture = options.composerCapture || snapshotComposerState();
+  if (capture.imagePromises.length > 0 || capture.docPromises.length > 0) {
     sendBtn.disabled = true;
-    try { await Promise.all([waitForImageUploads(), waitForDocUploads()]); }
+    try { await resolveComposerCapture(capture); }
     finally { sendBtn.disabled = false; }
   }
-  const imagePaths = pendingImages.map(i => i.path);
-  if (!await maybeAutoCompactBeforeSend(message)) return { ok: false, compactFailed: true };
-  return sendCore(message, null, imagePaths);
+  await resolveComposerCapture(capture);
+  if (capture.failedUploads > 0) {
+    if (conversationViewEpoch === sendOptions.viewEpoch && codeMode === (sendOptions.workspaceMode === 'code')) {
+      input.value = message;
+      saveDraft();
+      autosizeTextarea();
+    }
+    toast('附件上传失败，消息没有发送');
+    return { ok: false, uploadFailed: true };
+  }
+  const imagePaths = capture.images.map(i => i.path).filter(Boolean);
+  const readyDocs = capture.docs.filter(isReadyDocForSend);
+  const finalMessage = message || (imagePaths.length ? '（仅图片）' : (readyDocs.length ? '（仅文档）' : ''));
+  if (!finalMessage) {
+    toast('附件上传失败，消息没有发送');
+    return { ok: false, uploadFailed: true };
+  }
+  if (!await maybeAutoCompactBeforeSend(finalMessage)) return { ok: false, compactFailed: true };
+  return sendCore(finalMessage, null, imagePaths, {
+    ...sendOptions,
+    composerSnapshot: {
+      docs: readyDocs,
+      urlEntries: capture.urlEntries,
+      webSearchPrefix: capture.webSearchPrefix,
+    },
+  });
 }
 
 async function sendRaw(sentMessage, displayMessage, imagePaths = [], options = {}) {
   // Legacy edits start a fresh conversation; native SDK forks already own a
   // resumable remote session and must not be reset by force_new.
-  return sendCore(sentMessage, displayMessage, imagePaths, { forceNew: options.forceNew !== false });
+  return sendCore(sentMessage, displayMessage, imagePaths, {
+    ...options,
+    forceNew: options.forceNew !== false,
+  });
 }
 
 let agentLoopRunning = false;
@@ -16636,6 +16803,7 @@ function clearActiveAgentLoop(jobId = agentLoopJobId) {
 async function restoreActiveAgentLoopForSession() {
   if (agentLoopRunning || !sessionId) return;
   const restoreSessionId = sessionId;
+  let restoredJobId = '';
   try {
     const data = JSON.parse(localStorage.getItem(AGENT_LOOP_ACTIVE_KEY) || '{}');
     if (!data.jobId || data.sessionId !== restoreSessionId) return;
@@ -16651,6 +16819,7 @@ async function restoreActiveAgentLoopForSession() {
     agentLoopRunning = true;
     agentLoopStopRequested = false;
     agentLoopJobId = data.jobId;
+    restoredJobId = data.jobId;
     agentLoopSessionId = restoreSessionId;
     agentLoopNotifyOnFinish = data.notifyOnFinish !== false;
     if (agentLoopBtn) agentLoopBtn.classList.add('toolbar-btn-active');
@@ -16660,12 +16829,14 @@ async function restoreActiveAgentLoopForSession() {
   } catch (e) {
     console.warn('restore agent loop failed', e);
   } finally {
-    agentLoopRunning = false;
-    if (agentLoopBtn) agentLoopBtn.classList.remove('toolbar-btn-active');
-    sendBtn.disabled = false;
-    agentLoopJobId = '';
-    agentLoopSessionId = '';
-    setAgentLoopStatus('');
+    if (restoredJobId && agentLoopJobId === restoredJobId) {
+      agentLoopRunning = false;
+      if (agentLoopBtn) agentLoopBtn.classList.remove('toolbar-btn-active');
+      sendBtn.disabled = !!contextCompactionRunning;
+      agentLoopJobId = '';
+      agentLoopSessionId = '';
+      setAgentLoopStatus('');
+    }
   }
 }
 
@@ -16683,6 +16854,10 @@ async function runAgentLoop() {
   const cwd = mobileCwdOrStop();
   if (cwd === null) return;
   const notifyOnFinish = !!agentLoopNotify.checked;
+  const loopViewEpoch = conversationViewEpoch;
+  const loopWorkspaceMode = codeMode ? 'code' : 'chat';
+  const loopInitialSessionId = sessionId;
+  let startedJobId = '';
   const perm = buildPermissionPayload();
   closeModal(agentLoopModal);
   clearDraft();
@@ -16733,38 +16908,59 @@ async function runAgentLoop() {
       throw new Error(message);
     }
     const data = await resp.json();
-    agentLoopJobId = data.job_id;
-    agentLoopSessionId = data.session_id;
-    sessionId = data.session_id;
-    saveActiveAgentLoop(agentLoopJobId, sessionId, goal, notifyOnFinish);
-    sessionLabelText.textContent = '会话 ' + sessionId.slice(0, 8);
-    suggestTitleBtn.classList.remove('hidden');
-    if (agentLoopStopRequested) {
-      await fetch(`/api/agent-loop/${encodeURIComponent(agentLoopJobId)}/stop`, { method:'POST' });
+    startedJobId = data.job_id;
+    const loopStillVisible = conversationViewEpoch === loopViewEpoch
+      && codeMode === (loopWorkspaceMode === 'code')
+      && sessionId === loopInitialSessionId;
+    if (loopStillVisible) {
+      agentLoopJobId = data.job_id;
+      agentLoopSessionId = data.session_id;
+      sessionId = data.session_id;
+      sessionLabelText.textContent = '会话 ' + sessionId.slice(0, 8);
+      suggestTitleBtn.classList.remove('hidden');
     }
-    await streamAgentLoop(agentLoopJobId, goal);
+    saveActiveAgentLoop(data.job_id, data.session_id, goal, notifyOnFinish);
+    if (agentLoopStopRequested) {
+      await fetch(`/api/agent-loop/${encodeURIComponent(data.job_id)}/stop`, { method:'POST' });
+    }
+    await streamAgentLoop(data.job_id, goal, 0, {
+      targetSessionId: data.session_id,
+      workspaceMode: loopWorkspaceMode,
+      viewEpoch: loopViewEpoch,
+    });
   } catch (e) {
     toast('Agent Loop 出错：' + (e.message || e), { timeout: 5000 });
   } finally {
-    agentLoopRunning = false;
-    agentLoopStopRequested = false;
-    if (agentLoopBtn) agentLoopBtn.classList.remove('toolbar-btn-active');
-    sendBtn.disabled = false;
-    agentLoopJobId = '';
-    agentLoopSessionId = '';
-    setAgentLoopStatus('');
+    if (!startedJobId || agentLoopJobId === startedJobId) {
+      agentLoopRunning = false;
+      agentLoopStopRequested = false;
+      if (agentLoopBtn) agentLoopBtn.classList.remove('toolbar-btn-active');
+      sendBtn.disabled = !!contextCompactionRunning;
+      agentLoopJobId = '';
+      agentLoopSessionId = '';
+      setAgentLoopStatus('');
+    }
     refreshSessions();
   }
 }
 
-async function streamAgentLoop(jobId, goal, fromEvent = 0) {
-  currentController = new AbortController();
-  stopBtn.classList.remove('hidden');
+async function streamAgentLoop(jobId, goal, fromEvent = 0, owner = {}) {
+  const targetSessionId = owner.targetSessionId || agentLoopSessionId || sessionId;
+  const targetWorkspaceMode = owner.workspaceMode || (codeMode ? 'code' : 'chat');
+  const targetViewEpoch = owner.viewEpoch ?? conversationViewEpoch;
+  const loopController = new AbortController();
+  const loopViewIsActive = () => conversationViewEpoch === targetViewEpoch
+    && codeMode === (targetWorkspaceMode === 'code')
+    && sessionId === targetSessionId;
+  if (loopViewIsActive()) {
+    currentController = loopController;
+    stopBtn.classList.remove('hidden');
+  }
   let asstContainer = null;
   try {
     const query = fromEvent > 0 ? `?from=${encodeURIComponent(fromEvent)}` : '';
     const resp = await fetch(`/api/agent-loop/${encodeURIComponent(jobId)}/stream${query}`, {
-      signal: currentController.signal,
+      signal: loopController.signal,
     });
     if (!resp.ok || !resp.body) throw new Error('Agent Loop stream failed: ' + resp.status);
     const reader = resp.body.getReader();
@@ -16780,6 +16976,7 @@ async function streamAgentLoop(jobId, goal, fromEvent = 0) {
         const line = chunk.split('\n').find(l => l.startsWith('data: '));
         if (!line) continue;
         const obj = JSON.parse(line.slice(6));
+        if (!loopViewIsActive()) continue;
         const result = handleAgentLoopEvent(obj, asstContainer, goal);
         if (result === null) {
           asstContainer = null;
@@ -16789,9 +16986,11 @@ async function streamAgentLoop(jobId, goal, fromEvent = 0) {
       }
     }
   } finally {
-    stopBtn.classList.add('hidden');
-    currentController = null;
-    finishPendingToolUses('已结束', 'done');
+    if (loopViewIsActive()) {
+      stopBtn.classList.add('hidden');
+      if (currentController === loopController) currentController = null;
+      finishPendingToolUses('已结束', 'done');
+    }
     refreshSessions();
     refreshCwds();
     refreshGitStatus();
@@ -16889,23 +17088,25 @@ async function stopAgentLoop() {
 
 async function sendCore(message, displayMessage, imagePaths, options = {}) {
   const turnStartedAt = Date.now();
-  const turnIsCode = codeMode;
+  const turnIsCode = options.workspaceMode ? options.workspaceMode === 'code' : codeMode;
+  const turnViewEpoch = options.viewEpoch ?? conversationViewEpoch;
   const isFork = !!displayMessage;
   const forceNew = options.forceNew === true;
   const quiet = options.quiet === true;
   const composerSnapshot = options.composerSnapshot || null;
   const queueOwner = options.queueOwner || activeCodeQueueOwner;
-  let turnSessionId = sessionId;
+  let turnSessionId = Object.prototype.hasOwnProperty.call(options, 'sessionId') ? options.sessionId : sessionId;
   const turnTitle = titleLabel.textContent;
   let snapshotUrlBlock = '';
   let turnSucceeded = false;
   let optimisticUserElement = null;
   let optimisticUserIndex = -1;
   const turnViewIsActive = () => {
-    if (!turnIsCode) return true;
+    if (conversationViewEpoch !== turnViewEpoch || codeMode !== turnIsCode) return false;
     if (turnSessionId) return sessionId === turnSessionId;
-    return !sessionId && activeCodeQueueOwner === queueOwner;
+    return !sessionId && (!turnIsCode || activeCodeQueueOwner === queueOwner);
   };
+  const renderTurn = turnViewIsActive();
 
   // Gemini-style: fetch detected URLs at send time
   if (!isFork && composerSnapshot?.urlEntries?.length) {
@@ -16919,10 +17120,9 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let actualMessage = message;
   let actualDisplay = displayMessage;
   // Snapshot doc metadata before clearDocs() so we can both render badges and persist to server.
-  const docMetadata = !isFork
-    ? (composerSnapshot?.docs || pendingDocs.filter(d => d.status !== 'error' && (d.path || d.content)))
-        .map(d => ({ name: d.name, size: d.size, length: d.length, path: d.path || null }))
-    : [];
+  const docMetadata = (composerSnapshot?.docs
+    || (!isFork ? pendingDocs.filter(d => d.status !== 'error' && (d.path || d.content)) : []))
+    .map(d => ({ name: d.name, size: d.size, length: d.length, path: d.path || null }));
   if (!isFork) {
     const urlBlock = composerSnapshot ? snapshotUrlBlock : composeUrlContext();
     const docBlock = composerSnapshot
@@ -16938,9 +17138,11 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   }
 
   if (!isFork) {
-    addUserMessage(message, imagePaths, { docs: docMetadata, fullText: actualMessage !== message ? actualMessage : '' });
-    optimisticUserElement = chatInner.lastElementChild;
-    optimisticUserIndex = lastUserIndex;
+    if (renderTurn) {
+      addUserMessage(message, imagePaths, { docs: docMetadata, fullText: actualMessage !== message ? actualMessage : '' });
+      optimisticUserElement = chatInner.lastElementChild;
+      optimisticUserIndex = lastUserIndex;
+    }
     if (!composerSnapshot) {
       clearPendingImages();
       clearDraft();
@@ -16948,23 +17150,27 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       clearDocs();
     }
   } else {
-    addUserMessage(displayMessage, imagePaths);
-    optimisticUserElement = chatInner.lastElementChild;
-    optimisticUserIndex = lastUserIndex;
+    if (renderTurn) {
+      addUserMessage(displayMessage, imagePaths, { docs: docMetadata, fullText: actualMessage !== displayMessage ? actualMessage : '' });
+      optimisticUserElement = chatInner.lastElementChild;
+      optimisticUserIndex = lastUserIndex;
+    }
   }
 
   lastStreamingMsgId = null;
   resetToolUseRuntimeState();
 
-  const container = newAssistantBubble();
+  const container = renderTurn ? newAssistantBubble() : document.createElement('div');
   container.dataset.turnStartedAt = String(turnStartedAt);
-  showThinking(container, turnIsCode ? '正在生成响应…' : '正在思考');
-  forceScrollBottom();
+  if (renderTurn) {
+    showThinking(container, turnIsCode ? '正在生成响应…' : '正在思考');
+    forceScrollBottom();
+  }
 
   sendBtn.disabled = !turnIsCode;
   const turnController = new AbortController();
   const turnRun = turnIsCode
-    ? registerCodeSessionRun({ sessionId: turnSessionId, queueOwner, controller: turnController, startedAt: turnStartedAt, container })
+    ? registerCodeSessionRun({ sessionId: turnSessionId, queueOwner, queueEntryId:options.clientTurnId || '', controller: turnController, startedAt: turnStartedAt, container })
     : null;
   let targetSessionState = turnIsCode && turnSessionId ? getOrCreateSessionState(turnSessionId) : null;
   let turnRecoveryEventCount = Number(targetSessionState?.eventCount || 0);
@@ -16975,7 +17181,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   }
   if (turnIsCode) {
     syncActiveCodeRunControls();
-  } else {
+  } else if (renderTurn) {
     currentController = turnController;
     currentControllerQueueOwner = queueOwner;
     stopBtn.classList.remove('hidden');
@@ -16985,9 +17191,12 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let collectedAssistantText = '';
   let streamErrorEvent = null;
   let serverAccepted = false;
+  let doneEvent = null;
 
   const perm = buildPermissionPayload();
-  const cwd = mobileCwdOrStop();
+  const cwd = Object.prototype.hasOwnProperty.call(options, 'cwd')
+    ? options.cwd
+    : mobileCwdOrStop();
   if (cwd === null) {
     hideThinking(container, { force: true });
     sendBtn.disabled = false;
@@ -17094,9 +17303,15 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
           const wasTurnViewActive = turnViewIsActive();
           if (obj.type === 'meta') {
             serverAccepted = true;
+            if (turnIsCode && options.clientTurnId) {
+              // The backend atomically removes the persisted row when it accepts
+              // this client_turn_id. Mirror that transition immediately so a
+              // concurrent queue refresh cannot leave an already-sent item visible.
+              removeLocalCodeQueueEntry(queueOwner, options.clientTurnId);
+            }
             const acknowledgedSessionId = String(obj.session_id || '').trim();
+            if (acknowledgedSessionId) turnSessionId = acknowledgedSessionId;
             if (turnIsCode && acknowledgedSessionId) {
-              turnSessionId = acknowledgedSessionId;
               migrateCodeSessionRun(turnRun, acknowledgedSessionId);
               targetSessionState = getOrCreateSessionState(acknowledgedSessionId);
               if (targetSessionState) {
@@ -17113,6 +17328,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
             }
           }
           if (obj.type === 'user_input') continue;
+          if (obj.type === 'done') doneEvent = obj;
           if (obj.type === 'error' || obj.type === 'permission_error') {
             streamErrorEvent = obj;
           }
@@ -17155,7 +17371,10 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         } catch (e) { console.warn('parse fail', line, e); }
       }
     }
-    if (turnIsCode && serverAccepted && !lastResultEvent && !streamErrorEvent) {
+    const missingAuthoritativeTerminal = !lastResultEvent
+      && !streamErrorEvent
+      && String(doneEvent?.turn_state || '') !== 'waiting_plan';
+    if (turnIsCode && missingAuthoritativeTerminal && turnSessionId) {
       if (turnViewIsActive()) {
         startNativeTurnRecovery(
           turnSessionId,
@@ -17176,6 +17395,18 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         usage: null,
       };
     }
+    if (missingAuthoritativeTerminal) {
+      streamErrorEvent = {
+        type: 'error',
+        message: doneEvent?.success === false
+          ? '响应未完整结束，服务端已将本轮标记为失败'
+          : '连接在最终结果返回前中断，响应可能不完整',
+      };
+      if (turnViewIsActive()) addErrorBlock(streamErrorEvent.message);
+    } else if (doneEvent?.success === false && !streamErrorEvent && String(doneEvent.turn_state || '') !== 'waiting_plan') {
+      streamErrorEvent = { type: 'error', message: '本轮执行失败' };
+      if (turnViewIsActive()) addErrorBlock(streamErrorEvent.message);
+    }
     if (turnViewIsActive()) {
       hideThinking(asstContainer, { force: true });
       finishPendingToolUses(streamErrorEvent ? '出错' : '已结束', streamErrorEvent ? 'error' : 'done');
@@ -17183,9 +17414,9 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     if (streamErrorEvent) {
       return { ok: false, accepted: serverAccepted, error: streamErrorEvent, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
     }
-    if (!quiet) {
+    if (!quiet && String(doneEvent?.turn_state || '') !== 'waiting_plan') {
       if (turnViewIsActive()) {
-        notifyUser('Claude Code 已完成', turnTitle);
+        notifyUser(turnIsCode ? 'Claude Code 已完成' : 'Claude 已完成', turnTitle);
         beep();
       } else {
         toast('后台会话已完成');
@@ -17330,7 +17561,7 @@ async function stopCurrentRunForPlan(entry = null) {
   const run = codeMode ? activeCodeSessionRun() : null;
   const controller = run?.controller || currentController;
   const sid = sessionId;
-  if (!controller || !sid) return null;
+  if (!sid) return null;
   try { toast('计划已就绪 · 已暂停运行，等待你审批'); } catch {}
   const response = await fetch(
     `/api/chat/stop/${encodeURIComponent(sid)}?reason=plan_ready`,
@@ -17360,6 +17591,13 @@ form.addEventListener('submit', async (e) => {
   const loadingDocs = pendingDocs.filter(d => d.status === 'loading').length;
   if (!text && pendingImages.length === 0 && activeImageUploadPromises.size === 0 && readyDocs === 0 && loadingDocs === 0) return;
   const owner = activeCodeQueueOwner;
+  const submitContext = {
+    workspaceMode: codeMode ? 'code' : 'chat',
+    viewEpoch: conversationViewEpoch,
+    sessionId,
+    cwd: cwdInput.value.trim() || null,
+  };
+  const composerCapture = snapshotComposerState();
   const slashPayload = pendingSlashFork && pendingImages.length === 0 && readyDocs === 0 && loadingDocs === 0
     ? slashForkPayloadFor(text)
     : null;
@@ -17370,11 +17608,18 @@ form.addEventListener('submit', async (e) => {
   syncComposerDraftState();
   if (codeMode) {
     pendingSlashFork = null;
-    const entry = await captureCodeComposerEntry(
-      text,
-      owner,
-      slashPayload,
-    );
+    let entry;
+    try {
+      entry = await captureCodeComposerEntry(text, owner, slashPayload, composerCapture);
+    } catch (error) {
+      if (owner === activeCodeQueueOwner) {
+        input.value = text;
+        saveDraft();
+        autosizeTextarea();
+      }
+      toast(error.message || '附件上传失败，任务没有发送');
+      return;
+    }
     const hasPendingQueue = codeQueueFor(owner).length > 0;
     if (owner !== activeCodeQueueOwner || isCodeQueueOwnerBusy(owner) || hasPendingQueue || codeQueuePauseReasons.has(owner)) {
       enqueueCodeMessage(entry, { silent: owner !== activeCodeQueueOwner });
@@ -17391,7 +17636,7 @@ form.addEventListener('submit', async (e) => {
     sendRaw(payload.sent, payload.display, [], { forceNew: !payload.native });
   } else {
     pendingSlashFork = null;
-    send(text || (pendingImages.length > 0 ? '（仅图片）' : '（仅文档）'));
+    send(text, { ...submitContext, composerCapture });
   }
 });
 
@@ -17449,6 +17694,11 @@ function switchConversationWorkspaceMode(nextCodeMode) {
   }
   rememberWorkspaceSession(sessionId, codeMode);
   setCodeMode(nextCode);
+  if (!nextCode) {
+    cwdInput.value = '';
+    gitBar.classList.add('hidden');
+    updateWorkspaceLabels();
+  }
   const targetSessionId = String(LS.get(workspaceSessionStorageKey(nextCode), '') || '').trim();
   startNewSession();
   if (targetSessionId) {
@@ -17460,7 +17710,25 @@ function switchConversationWorkspaceMode(nextCodeMode) {
   }
 }
 
+function openSessionInWorkspace(targetSession) {
+  if (!targetSession?.id) return;
+  const targetCode = isCodeWorkspaceSession(targetSession);
+  if (targetCode !== codeMode) {
+    rememberWorkspaceSession(sessionId, codeMode);
+    setCodeMode(targetCode);
+    if (!targetCode) {
+      cwdInput.value = '';
+      gitBar.classList.add('hidden');
+      updateWorkspaceLabels();
+    }
+    startNewSession();
+  }
+  loadSession(targetSession.id, { expectedWorkspaceMode: targetCode ? 'code' : 'chat' });
+}
+
 function startNewSession() {
+  sessionLoadRequestId += 1;
+  conversationViewEpoch += 1;
   window.CWProjectMap?.close({ silent:true });
   stopNativeTurnRecovery();
   hidePicker();
@@ -17476,7 +17744,16 @@ function startNewSession() {
   pendingNativeRewind = null;
   currentController = null;
   currentControllerQueueOwner = '';
+  stopBtn.classList.add('hidden');
+  if (agentLoopRunning) {
+    agentLoopRunning = false;
+    agentLoopJobId = '';
+    agentLoopSessionId = '';
+    agentLoopBtn?.classList.remove('toolbar-btn-active');
+    setAgentLoopStatus('', false);
+  }
   sessionId = null;
+  syncContextCompactionStatus();
   currentCodeRuntime = 'unknown';
   sessionFeedback = {};
   milestoneView = false;
@@ -17577,7 +17854,7 @@ function isGeneralChatCwd(cwd) {
 }
 
 function isCodeWorkspaceSession(session) {
-  return session?.workspace_mode === 'code' || !isGeneralChatCwd(session?.cwd || '');
+  return session?.workspace_mode === 'code';
 }
 
 function codeProjectKey(cwd) {
@@ -17635,8 +17912,9 @@ function renderSearchOverlayResults(list = [], q = '') {
   cwSearchOverlayResults.querySelectorAll('[data-search-session]').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.searchSession;
+      const target = rows.find(item => item.id === id);
       closeSearchOverlay(true);
-      loadSession(id);
+      openSessionInWorkspace(target);
     });
   });
 }
@@ -17690,13 +17968,24 @@ async function deleteSessionById(targetId) {
     } catch {}
   }
   let r = await fetch('/api/sessions/' + targetId, { method:'DELETE' });
+  if (r.status === 409 && bgState?.controller && targetId !== sessionId) {
+    const deadline = Date.now() + 8000;
+    do {
+      await new Promise(resolve => setTimeout(resolve, 120));
+      r = await fetch('/api/sessions/' + targetId, { method:'DELETE' });
+    } while (r.status === 409 && Date.now() < deadline);
+  }
   if (r.status === 409 && targetId === sessionId) {
     if (!confirm('当前会话正在生成回复。要先停止生成并删除吗？')) return false;
     try {
       await fetch('/api/chat/stop/' + targetId, { method:'POST' });
       if (currentController) currentController.abort();
     } catch {}
-    r = await fetch('/api/sessions/' + targetId, { method:'DELETE' });
+    const deadline = Date.now() + 8000;
+    do {
+      await new Promise(resolve => setTimeout(resolve, 120));
+      r = await fetch('/api/sessions/' + targetId, { method:'DELETE' });
+    } while (r.status === 409 && Date.now() < deadline);
   }
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
@@ -17776,7 +18065,7 @@ function renderCodeProjectSessionList(list) {
   const generalSessions = [];
 
   (list || []).forEach(s => {
-    if (!isCodeWorkspaceSession(s) && isGeneralChatCwd(s.cwd)) {
+    if (!isCodeWorkspaceSession(s)) {
       generalSessions.push(s);
       return;
     }
@@ -17811,7 +18100,10 @@ function renderCodeProjectSessionList(list) {
   `;
 
   sessionItems.querySelectorAll('.cw-project-session').forEach(btn => {
-    btn.addEventListener('click', () => loadSession(btn.dataset.id));
+    btn.addEventListener('click', () => {
+      const target = (list || []).find(item => item.id === btn.dataset.id);
+      openSessionInWorkspace(target);
+    });
   });
   bindSessionMenuToggles(sessionItems);
   bindSessionDeleteActions(sessionItems);
@@ -18033,6 +18325,10 @@ function highlightActiveSession() {
 }
 
 async function loadSession(id, options = {}) {
+  const requestId = ++sessionLoadRequestId;
+  const expectedWorkspaceMode = options.expectedWorkspaceMode || (codeMode ? 'code' : 'chat');
+  const expectedCodeMode = expectedWorkspaceMode === 'code';
+  if (!options.historyExpansion) conversationViewEpoch += 1;
   try {
     const prevSessionIdSnap = sessionId;
     const historyTurns = codeMode ? (sessionHistoryTurns.get(id) || DEFAULT_HISTORY_TURNS) : 0;
@@ -18045,17 +18341,20 @@ async function loadSession(id, options = {}) {
     if (!r.ok) return false;
     const data = await r.json();
     const loadedWorkspaceMode = data.workspace_mode === 'code' ? 'code' : 'chat';
-    const expectedWorkspaceMode = options.expectedWorkspaceMode || (codeMode ? 'code' : 'chat');
+    if (requestId !== sessionLoadRequestId || codeMode !== expectedCodeMode) return false;
     if (loadedWorkspaceMode !== expectedWorkspaceMode) {
       console.warn(`refusing cross-mode session load: expected ${expectedWorkspaceMode}, got ${loadedWorkspaceMode}`);
       return false;
     }
     sessionId = data.id;
+    syncContextCompactionStatus();
     rememberWorkspaceSession(data.id, loadedWorkspaceMode === 'code');
     if (codeMode && codeInspectorState.sessionId && codeInspectorState.sessionId !== data.id) resetCodeInspector();
     codeInspectorState.sessionId = data.id;
-    activateCodeQueueForSession(data.id);
-    loadPersistedCodeQueue(data.id);
+    if (codeMode) {
+      activateCodeQueueForSession(data.id);
+      loadPersistedCodeQueue(data.id);
+    }
     currentCodeRuntime = data.runtime_origin || 'unknown';
     currentCodeAutoApprove = !!data.auto_approve;
     if (codeMode && typeof data.browser_enabled === 'boolean') {
@@ -18246,17 +18545,23 @@ async function refreshCwds() {
   } catch {}
 }
 async function refreshGitStatus() {
+  const requestId = ++gitStatusRequestId;
   const cwd = cwdInput.value.trim();
   if (!cwd) { gitBar.classList.add('hidden'); updateWorkspaceLabels(); return; }
   try {
     const r = await fetch('/api/git?cwd=' + encodeURIComponent(cwd));
+    if (requestId !== gitStatusRequestId || cwdInput.value.trim() !== cwd) return;
     if (!r.ok) { gitBar.classList.add('hidden'); updateWorkspaceLabels(); return; }
     const d = await r.json();
     if (!d.available || !d.branch) { gitBar.classList.add('hidden'); updateWorkspaceLabels(); return; }
     gitBar.classList.remove('hidden');
     gitBar.textContent = `⎇ ${d.branch}${d.dirty ? ' ±' + d.dirty : ''}`;
     updateWorkspaceLabels();
-  } catch { gitBar.classList.add('hidden'); updateWorkspaceLabels(); }
+  } catch {
+    if (requestId !== gitStatusRequestId || cwdInput.value.trim() !== cwd) return;
+    gitBar.classList.add('hidden');
+    updateWorkspaceLabels();
+  }
 }
 cwdInput.addEventListener('change', refreshGitStatus);
 cwdInput.addEventListener('input', updateWorkspaceLabels);
@@ -20413,8 +20718,26 @@ if (notificationEnabledOnly) notificationEnabledOnly.addEventListener('change', 
 });
 
 // ===== modals =====
-function openModal(m) { m.classList.remove('hidden'); }
-function closeModal(m) { m.classList.add('hidden'); }
+const modalReturnFocus = new WeakMap();
+function modalFocusable(m) {
+  return Array.from(m?.querySelectorAll?.('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') || [])
+    .filter(el => !el.hidden && el.offsetParent !== null);
+}
+function openModal(m) {
+  if (!m) return;
+  modalReturnFocus.set(m, document.activeElement);
+  m.setAttribute('role', m.getAttribute('role') || 'dialog');
+  m.setAttribute('aria-modal', 'true');
+  m.classList.remove('hidden');
+  requestAnimationFrame(() => modalFocusable(m)[0]?.focus());
+}
+function closeModal(m) {
+  if (!m) return;
+  m.classList.add('hidden');
+  const trigger = modalReturnFocus.get(m);
+  modalReturnFocus.delete(m);
+  trigger?.focus?.();
+}
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', (e) => closeModal(e.target.closest('.modal-backdrop'))));
 document.querySelectorAll('.modal-backdrop').forEach(m => m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }));
 
@@ -20694,14 +21017,19 @@ if (codeWebSearchDefaultEl) codeWebSearchDefaultEl.addEventListener('change', ()
 });
 
 async function refreshMemories() {
+  const targetSessionId = sessionId;
+  const targetCwd = cwdInput.value.trim();
+  const targetViewEpoch = conversationViewEpoch;
   try {
     const [r, activeResp] = await Promise.all([
       fetch('/api/memories'),
-      fetch(`/api/memories/active?cwd=${encodeURIComponent(cwdInput.value.trim() || '')}&session_id=${encodeURIComponent(sessionId || '')}`),
+      fetch(`/api/memories/active?cwd=${encodeURIComponent(targetCwd)}&session_id=${encodeURIComponent(targetSessionId || '')}`),
     ]);
+    if (targetViewEpoch !== conversationViewEpoch || targetSessionId !== sessionId || targetCwd !== cwdInput.value.trim()) return;
     if (!r.ok) return;
     const list = await r.json();
     const activeList = activeResp.ok ? await activeResp.json() : [];
+    if (targetViewEpoch !== conversationViewEpoch || targetSessionId !== sessionId || targetCwd !== cwdInput.value.trim()) return;
     activeMemoryCount.textContent = `${activeList.length} 条生效`;
     renderMemoryBar(activeList);
     if (list.length === 0) {
@@ -21693,10 +22021,21 @@ if (poAddCurrentSession) poAddCurrentSession.addEventListener('click', () => poA
 
 // ===== keyboard shortcuts =====
 document.addEventListener('keydown', (e) => {
+  const openDialog = Array.from(document.querySelectorAll('.modal-backdrop:not(.hidden)')).pop();
+  if (e.key === 'Tab' && openDialog) {
+    const focusable = modalFocusable(openDialog);
+    if (focusable.length) {
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); return; }
+      if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); return; }
+    }
+  }
   const isMac = navigator.platform.includes('Mac');
   const mod = isMac ? e.metaKey : e.ctrlKey;
-  if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); showSearchField(); refreshSessions(); return; }
-  if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); startNewSession(); return; }
+  const typingTarget = e.target?.matches?.('input, textarea, select, [contenteditable="true"]');
+  if (!typingTarget && !openDialog && mod && e.key.toLowerCase() === 'k') { e.preventDefault(); showSearchField(); refreshSessions(); return; }
+  if (!typingTarget && !openDialog && mod && e.key.toLowerCase() === 'n') { e.preventDefault(); startNewSession(); return; }
   if (e.key === 'Escape') {
     if (document.body.classList.contains('cw-search-open')) { closeSearchOverlay(true); return; }
     if (!artifactPanel.classList.contains('hidden')) {
@@ -21706,7 +22045,7 @@ document.addEventListener('keydown', (e) => {
     }
     if (!$('tourOverlay').classList.contains('hidden')) { hideTour(); return; }
     if (!$('whatsnewToast').classList.contains('hidden')) { dismissWhatsNew(); return; }
-    document.querySelectorAll('.modal-backdrop:not(.hidden)').forEach(m => m.classList.add('hidden'));
+    document.querySelectorAll('.modal-backdrop:not(.hidden)').forEach(m => closeModal(m));
     if (!lightbox.classList.contains('hidden')) lightbox.classList.add('hidden');
   }
 });
@@ -21896,22 +22235,28 @@ async function uploadDocFile(file) {
       fd.append('file', file);
       const r = await fetch('/api/upload-doc', { method: 'POST', body: fd, signal: controller.signal });
       const idx = pendingDocs.findIndex(d => d.uid === placeholder.uid);
-      if (idx === -1) return; // user removed it during upload
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        pendingDocs[idx] = { ...placeholder, status: 'error', error: d.detail || ('HTTP ' + r.status) };
-        renderDocChips();
-        return;
+        if (idx >= 0) {
+          pendingDocs[idx] = { ...placeholder, status: 'error', error: d.detail || ('HTTP ' + r.status) };
+          renderDocChips();
+        }
+        return null;
       }
       const data = await r.json();
-      pendingDocs[idx] = { ...data, uid: placeholder.uid, status: 'ready' };
-      renderDocChips();
+      const ready = { ...data, uid: placeholder.uid, status: 'ready' };
+      if (idx >= 0) {
+        pendingDocs[idx] = ready;
+        renderDocChips();
+      }
+      return ready;
     } catch (e) {
       const idx = pendingDocs.findIndex(d => d.uid === placeholder.uid);
       if (idx === -1) return;
-      if (e.name === 'AbortError') return; // user-initiated cancel, chip already removed
+      if (e.name === 'AbortError') return null; // user-initiated cancel, chip already removed
       pendingDocs[idx] = { ...placeholder, status: 'error', error: e.message };
       renderDocChips();
+      return null;
     }
   })();
   placeholder._uploadPromise = uploadPromise;
@@ -21924,6 +22269,51 @@ async function waitForDocUploads() {
   while (activeDocUploadPromises.size > 0) {
     await Promise.allSettled(Array.from(activeDocUploadPromises));
   }
+}
+
+function snapshotComposerState() {
+  return {
+    images: pendingImages.map(item => ({ ...item })),
+    docs: pendingDocs.filter(isReadyDocForSend).map(item => ({ ...item })),
+    imagePromises: Array.from(activeImageUploadPromises),
+    docPromises: Array.from(activeDocUploadPromises),
+    urlEntries: Array.from(urlContext.entries()).map(([url, state]) => [url, { ...state }]),
+    webSearchPrefix: isWebSearchEnabled() ? webSearchPrefix() : '',
+    resolved: false,
+  };
+}
+
+async function resolveComposerCapture(capture) {
+  if (!capture || capture.resolved) return capture;
+  capture.resolved = true;
+  const [imageResults, docResults] = await Promise.all([
+    Promise.allSettled(capture.imagePromises || []),
+    Promise.allSettled(capture.docPromises || []),
+  ]);
+  capture.failedUploads = [...imageResults, ...docResults].filter(
+    result => result.status === 'rejected' || !result.value,
+  ).length;
+  for (const result of imageResults) {
+    if (result.status === 'fulfilled' && result.value?.path) capture.images.push(result.value);
+  }
+  for (const result of docResults) {
+    if (result.status === 'fulfilled' && result.value) capture.docs.push(result.value);
+  }
+  const seenImages = new Set();
+  capture.images = capture.images.filter(item => {
+    const key = item?.path || item?._imageKey;
+    if (!key || seenImages.has(key)) return false;
+    seenImages.add(key);
+    return true;
+  });
+  const seenDocs = new Set();
+  capture.docs = capture.docs.filter(item => {
+    const key = item?.path || item?.uid || `${item?.name || ''}:${item?.size || 0}`;
+    if (!key || seenDocs.has(key)) return false;
+    seenDocs.add(key);
+    return true;
+  });
+  return capture;
 }
 
 docInput.addEventListener('change', async () => {
@@ -22166,11 +22556,19 @@ let pinnedDocs = [];
 
 async function loadPinnedDocs() {
   if (!sessionId || codeMode) { pinnedDocs = []; renderPinnedDocs(); return; }
+  const targetSessionId = sessionId;
+  const targetViewEpoch = conversationViewEpoch;
   try {
-    const r = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/pinned-docs`);
+    const r = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/pinned-docs`);
+    if (targetViewEpoch !== conversationViewEpoch || targetSessionId !== sessionId || codeMode) return;
     if (!r.ok) { pinnedDocs = []; renderPinnedDocs(); return; }
-    pinnedDocs = await r.json();
-  } catch { pinnedDocs = []; }
+    const nextPinnedDocs = await r.json();
+    if (targetViewEpoch !== conversationViewEpoch || targetSessionId !== sessionId || codeMode) return;
+    pinnedDocs = nextPinnedDocs;
+  } catch {
+    if (targetViewEpoch !== conversationViewEpoch || targetSessionId !== sessionId || codeMode) return;
+    pinnedDocs = [];
+  }
   renderPinnedDocs();
 }
 
@@ -22192,6 +22590,7 @@ function renderPinnedDocs() {
       <button class="pin-remove" title="移除"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg></button>
     </div>
   `).join('');
+  const renderedSessionId = sessionId;
   pinnedDocsChips.querySelectorAll('.pin-toggle').forEach(btn => {
     btn.addEventListener('click', async () => {
       const chip = btn.closest('.pinned-doc-chip');
@@ -22199,7 +22598,8 @@ function renderPinnedDocs() {
       const doc = pinnedDocs.find(d => d.id === id);
       if (!doc) return;
       const newEnabled = !doc.enabled;
-      await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/pinned-docs/${id}`, {
+      if (!renderedSessionId || renderedSessionId !== sessionId) return;
+      await fetch(`/api/sessions/${encodeURIComponent(renderedSessionId)}/pinned-docs/${id}`, {
         method: 'PATCH', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ enabled: newEnabled }),
       });
@@ -22211,7 +22611,8 @@ function renderPinnedDocs() {
     btn.addEventListener('click', async () => {
       const chip = btn.closest('.pinned-doc-chip');
       const id = chip.dataset.id;
-      await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/pinned-docs/${id}`, { method: 'DELETE' });
+      if (!renderedSessionId || renderedSessionId !== sessionId) return;
+      await fetch(`/api/sessions/${encodeURIComponent(renderedSessionId)}/pinned-docs/${id}`, { method: 'DELETE' });
       pinnedDocs = pinnedDocs.filter(d => d.id !== id);
       renderPinnedDocs();
     });
@@ -22225,8 +22626,9 @@ if (pinnedDocsAddBtn) {
   });
 }
 if (pinnedDocsInput) {
-  pinnedDocsInput.addEventListener('change', async () => {
+pinnedDocsInput.addEventListener('change', async () => {
     const files = Array.from(pinnedDocsInput.files || []);
+    const targetSessionId = sessionId;
     pinnedDocsInput.value = '';
     for (const file of files) {
       const fd = new FormData();
@@ -22235,7 +22637,8 @@ if (pinnedDocsInput) {
         const r = await fetch('/api/upload-doc', { method: 'POST', body: fd });
         if (!r.ok) { toast('上传失败: ' + file.name); continue; }
         const data = await r.json();
-        const resp = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/pinned-docs`, {
+        if (!targetSessionId || targetSessionId !== sessionId || codeMode) return;
+        const resp = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/pinned-docs`, {
           method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ name: data.name, content: data.content, path: data.path, size: data.size }),
         });
