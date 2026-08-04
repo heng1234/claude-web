@@ -12756,22 +12756,15 @@ async function applyPlanDecision(toolId, decision, editedPlan) {
     return;
   }
 
-  let targetMode = 'acceptEdits';
+  const targetMode = prePlanPermissionMode || permSelect.value || 'acceptEdits';
+  prePlanPermissionMode = null;
   try {
-    // Restore pre-plan permission mode if saved, otherwise default to acceptEdits
-    targetMode = prePlanPermissionMode || 'acceptEdits';
-    if (!setPermissionMode(targetMode, { syncRuntime: false })) {
-      throw new Error('无法恢复计划前的运行模式');
-    }
-    if (!await syncNativeRuntimePermissionMode(targetMode)) {
-      throw new Error('SDK 未接受运行模式切换');
-    }
-    prePlanPermissionMode = null; // Clear after use
+    setPermissionMode(targetMode);
   } catch (error) {
-    entry.actionsEl?.querySelectorAll?.('button').forEach(button => { button.disabled = false; });
-    toast('切换运行模式失败：' + (error?.message || error), { timeout: 5200 });
-    return;
+    console.warn('setPermissionMode failed during plan approval:', error);
   }
+  // Best-effort runtime sync — failure does not block the approval
+  syncNativeRuntimePermissionMode(targetMode).catch(() => {});
 
   entry.status = 'approved';
   entry.decision = decision;
@@ -12951,6 +12944,8 @@ let latestContextExact = false;
 let contextUsageRefreshTimer = null;
 let contextUsageRequestSerial = 0;
 let contextCompactionRunning = false;
+let lastCompactionTime = 0;
+let lastCompactionPostTokens = 0;
 let selectedModel = LS.get('model', '');
 let selectedEffort = LS.get('effort', '');
 const DEFAULT_CHAT_CONTEXT_LIMIT = 200_000;
@@ -13024,6 +13019,8 @@ function resetSessionTokens() {
   latestContextLimit = 0;
   latestContextExact = false;
   latestNativeContextUsage = null;
+  lastCompactionTime = 0;
+  lastCompactionPostTokens = 0;
   const cached = sessionId ? nativeContextUsageBySession.get(sessionId) : null;
   if (cached) applyNativeContextUsage(cached, sessionId);
   renderSessionTokens();
@@ -13054,6 +13051,13 @@ function applyNativeContextUsage(data, targetSessionId = sessionId) {
   const sid = String(targetSessionId || '').trim();
   if (sid) nativeContextUsageBySession.set(sid, { ...data, maxTokens:max });
   if (sid && sid !== sessionId) return true;
+  // Skip stale pre-compaction value: if a compaction completed recently and the
+  // incoming total is much larger than the post-compact count, the API hasn't
+  // updated yet — don't overwrite the correct low value with the stale high one.
+  if (lastCompactionPostTokens > 0 && Date.now() - lastCompactionTime < 15000
+      && total > lastCompactionPostTokens * 3) {
+    return false;
+  }
   latestContextTokens = total;
   latestContextLimit = max;
   latestContextExact = true;
@@ -14733,7 +14737,11 @@ function handleEvent(obj, container, options = {}) {
     const compact = obj.compact_metadata || {};
     const before = Number(compact.pre_tokens || 0);
     const after = Number(compact.post_tokens || 0);
-    if (after > 0) latestContextTokens = after;
+    if (after > 0) {
+      latestContextTokens = after;
+      lastCompactionTime = Date.now();
+      lastCompactionPostTokens = after;
+    }
     renderSessionTokens();
     updateTokenCount();
     if (!replay && (before > 0 || after > 0)) {
@@ -16080,7 +16088,11 @@ async function runNativeCompact(targetSessionId = sessionId) {
     const compact = data.compact || {};
     if (!applyNativeContextUsage(data.context_usage || {}, targetSessionId) && sessionId === targetSessionId) {
       const after = Number(compact.post_tokens || 0);
-      if (after > 0) latestContextTokens = after;
+      if (after > 0) {
+        latestContextTokens = after;
+        lastCompactionTime = Date.now();
+        lastCompactionPostTokens = after;
+      }
       renderSessionTokens();
       updateTokenCount();
     }
@@ -16090,7 +16102,8 @@ async function runNativeCompact(targetSessionId = sessionId) {
       addSystemInfo(before || after
         ? `Claude Code 原生压缩 · ${_fmtTokens(before)} → ${_fmtTokens(after)}`
         : 'Claude Code 原生压缩完成');
-      if (!data.context_usage || !Object.keys(data.context_usage).length) scheduleNativeContextUsageRefresh(0);
+      // Only refresh from API if we have no post_tokens (avoid stale value overwriting correct count)
+      if (!after) scheduleNativeContextUsageRefresh(0);
     }
     return { ok: true, data };
   } catch (error) {
@@ -18627,6 +18640,8 @@ async function loadSession(id, options = {}) {
     resetToolUseRuntimeState();
     hideTodoPanel();
     clearArtifacts();
+    clearPendingImages();
+    clearDocs();
     currentUserIndex = Number(data.user_offset || 0);
     lastUserIndex = currentUserIndex - 1;
     resetSessionTokens();

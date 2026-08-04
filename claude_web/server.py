@@ -6729,6 +6729,15 @@ def _recoverable_agent_sdk_transport_error(message: str) -> bool:
     ))
 
 
+def _corrupted_tool_history_error(message: str) -> bool:
+    return bool(re.search(
+        r"unexpected.*tool_use_id.*found in.*tool_result"
+        r"|toolResult blocks.*exceeds.*toolUse blocks",
+        str(message or ""),
+        re.IGNORECASE,
+    ))
+
+
 async def _auto_reconnect_agent_sdk_session(
     session_id: str,
     remote_session_id: str,
@@ -6772,6 +6781,96 @@ async def _auto_reconnect_agent_sdk_session(
     if on_status is not None:
         await on_status(max_attempts, max_attempts, False, last_error)
     return False, last_error
+
+
+async def _auto_recover_corrupted_sdk_session(
+    session_id: str,
+    *,
+    timeout: float = 30.0,
+) -> dict:
+    """Abandon a corrupted remote SDK session and rebuild history as a local summary.
+
+    Writes a compacted event with sdk_recovered=True (not remote_detached) so the
+    session stays on Agent SDK rather than being downgraded to the CLI path.
+    """
+    if not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", session_id or ""):
+        return {"ok": False, "error": f"invalid session_id: {session_id!r}"}
+    _compacting_sessions.add(session_id)
+    try:
+        events = load_events(session_id)
+        user_indices = [i for i, e in enumerate(events) if e.get("type") == "user_input"]
+        if len(user_indices) >= 3:
+            split_at = user_indices[-2]
+            old_events, new_events = events[:split_at], events[split_at:]
+        elif len(user_indices) >= 2:
+            split_at = user_indices[-1]
+            old_events, new_events = events[:split_at], events[split_at:]
+        else:
+            old_events, new_events = [], events
+
+        fallback = False
+        summary = ""
+        if old_events:
+            snippet = format_light_context_snippet(old_events, max_chars=16000)
+            summary_prompt = (
+                "请把以下 Code 会话记录压缩成一份可继续工作的精简记忆。\n"
+                "必须保留：当前目标、用户明确要求、关键决策、已修改文件及修改目的、"
+                "验证结果、未完成工作、风险与约定。\n"
+                "工具调用按结果合并，不复述流水账；使用简洁 markdown，最多 40 行。\n\n"
+                + snippet
+            )
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *claude_cli_argv("-p", summary_prompt, "--output-format", "text", "--model", "haiku"),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                try:
+                    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+                    summary = stdout.decode("utf-8", errors="replace").strip()
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+                    summary = ""
+                if not summary:
+                    fallback = True
+                    summary = snippet
+            except Exception:
+                fallback = True
+                summary = format_light_context_snippet(old_events, max_chars=8000)
+
+        with db_connect() as conn:
+            row = conn.execute("SELECT cwd FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        cwd = row["cwd"] if row else ""
+
+        src = HISTORY_DIR / f"{session_id}.jsonl"
+        if src.exists():
+            backup = HISTORY_DIR / f"{session_id}.before-compact-{int(time.time())}.jsonl"
+            backup.write_bytes(src.read_bytes())
+            prune_session_compact_backups(session_id)
+
+        await _discard_session_runtime(session_id)
+        if old_events:
+            await discard_event_checkpoints(old_events, cwd)
+
+        compacted_event = {
+            "type": "user_input",
+            "text": f"【会话已自动恢复 · 以下为之前对话的摘要】\n\n{summary}" if summary else "【会话已自动恢复】",
+            "ts": time.time(),
+            "compacted": True,
+            "sdk_recovered": True,
+            "context_strategy": "sdk-recovery-v1",
+        }
+        save_events(session_id, [compacted_event] + new_events)
+        set_session_remote_state(session_id, str(uuid.uuid4()), False)
+        set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
+        set_session_native_user_offset(session_id, 0)
+        _agent_sdk_context_usage_cache.pop(session_id, None)
+        return {"ok": True, "fallback": fallback}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    finally:
+        _compacting_sessions.discard(session_id)
 
 
 async def _drain_detached_agent_sdk_turn(
@@ -6932,6 +7031,15 @@ async def _drain_detached_agent_sdk_turn(
                 native_remote_id,
                 reconnect_params or {},
             )
+        elif (
+            saw_terminal_error
+            and _corrupted_tool_history_error(reported_api_error)
+            and session_id not in _plan_waiting_sessions
+        ):
+            try:
+                await _auto_recover_corrupted_sdk_session(session_id, timeout=30.0)
+            except Exception as exc:
+                _log.warning("Auto-recovery failed for session %s: %s", session_id, exc)
         if session_id not in _plan_waiting_sessions:
             activation_state = await _settle_pending_agent_sdk_activation(
                 success=saw_top_level_result and not saw_terminal_error,
@@ -6967,7 +7075,9 @@ async def _drain_detached_agent_sdk_turn(
         _plan_waiting_sessions.discard(session_id)
         _agent_sdk_detached_turn_tasks.pop(session_id, None)
         upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode)
-        if remote_became_ready and native_remote_id:
+        if remote_became_ready and native_remote_id and not (
+            saw_terminal_error and _corrupted_tool_history_error(reported_api_error)
+        ):
             set_session_remote_state(session_id, native_remote_id, True)
 
 
@@ -7212,7 +7322,9 @@ def _agent_sdk_streaming_response(
                 _stopped_sessions.discard(session_id)
                 _plan_waiting_sessions.discard(session_id)
                 upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode)
-                if remote_became_ready and native_remote_id:
+                if remote_became_ready and native_remote_id and not (
+                    saw_terminal_error and _corrupted_tool_history_error(reported_api_error)
+                ):
                     set_session_remote_state(session_id, native_remote_id, True)
 
         if (
@@ -7260,6 +7372,32 @@ def _agent_sdk_streaming_response(
                     pass
             reconnected, _ = await reconnect_task
             auto_reconnect_failed = not reconnected
+
+        elif (
+            not detached
+            and saw_terminal_error
+            and _corrupted_tool_history_error(reported_api_error)
+            and not plan_waiting_before_cleanup
+        ):
+            recovery_result = await _auto_recover_corrupted_sdk_session(session_id, timeout=30.0)
+            if recovery_result.get("ok"):
+                status_event = {
+                    "type": "system",
+                    "subtype": "status",
+                    "status": "session_auto_recovered",
+                    "message": "会话历史已自动压缩恢复，下次发消息将使用新会话" + (
+                        "（摘要为精简模式）" if recovery_result.get("fallback") else ""
+                    ),
+                }
+            else:
+                status_event = {
+                    "type": "system",
+                    "subtype": "status",
+                    "status": "session_auto_recover_failed",
+                    "message": "会话自动恢复失败，建议新开会话继续",
+                }
+            append_event(session_id, status_event)
+            yield f"data: {json.dumps(status_event, ensure_ascii=False)}\n\n"
 
         if not plan_waiting_before_cleanup:
             activation_state = await _settle_pending_agent_sdk_activation(
@@ -7448,7 +7586,17 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     )
     if context_pack_prefix:
         full_message = context_pack_prefix + full_message
-    if not remote_ready and (not code_workspace or runtime_origin == _RUNTIME_ORIGIN_CLI):
+    _last_compacted = next(
+        (e for e in reversed(existing_events) if e.get("type") == "user_input" and e.get("compacted") is True),
+        None,
+    )
+    sdk_recovery_pending = (
+        code_workspace
+        and runtime_origin == _RUNTIME_ORIGIN_AGENT_SDK
+        and _last_compacted is not None
+        and _last_compacted.get("sdk_recovered") is True
+    )
+    if not remote_ready and (not code_workspace or runtime_origin == _RUNTIME_ORIGIN_CLI or sdk_recovery_pending):
         resume_context = build_compacted_resume_context(existing_events)
         if resume_context:
             full_message = resume_context + full_message

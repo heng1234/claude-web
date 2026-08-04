@@ -291,5 +291,126 @@ class NativeCodeCompactionTest(unittest.IsolatedAsyncioTestCase):
                         conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
 
+class CorruptedToolHistoryErrorDetectorTest(unittest.TestCase):
+    def test_anthropic_variant(self):
+        msg = "API Error: 400 messages.2.content.0: unexpected `tool_use_id` found in `tool_result` blocks: toolu_abc123"
+        self.assertTrue(server._corrupted_tool_history_error(msg))
+
+    def test_bedrock_variant(self):
+        msg = "Bedrock error message: The number of toolResult blocks at messages.2.content exceeds the number of toolUse blocks of previous turn."
+        self.assertTrue(server._corrupted_tool_history_error(msg))
+
+    def test_transport_error_not_matched(self):
+        self.assertFalse(server._corrupted_tool_history_error("stream idle timeout"))
+        self.assertFalse(server._corrupted_tool_history_error("connection closed"))
+
+    def test_empty_not_matched(self):
+        self.assertFalse(server._corrupted_tool_history_error(""))
+        self.assertFalse(server._corrupted_tool_history_error(None))
+
+
+class AutoRecoverCorruptedSdkSessionTest(unittest.IsolatedAsyncioTestCase):
+    async def _make_session(self, events):
+        session_id = str(uuid.uuid4())
+        server.upsert_session(session_id, "恢复测试", os.path.expanduser("~"), "code")
+        server.save_events(session_id, events)
+        server.set_session_remote_state(session_id, "old-remote-id", True)
+        server.set_session_runtime_origin(session_id, server._RUNTIME_ORIGIN_AGENT_SDK)
+        return session_id
+
+    async def _cleanup(self, session_id):
+        server.save_events(session_id, [])
+        with server.db_connect() as conn:
+            conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        for backup in server.iter_session_compact_backups(session_id):
+            backup.unlink(missing_ok=True)
+
+    async def test_recovery_writes_sdk_recovered_marker(self):
+        events = [
+            {"type": "user_input", "text": "第一轮"},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "结论一"}]}},
+            {"type": "user_input", "text": "第二轮"},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "结论二"}]}},
+        ]
+        session_id = await self._make_session(events)
+        fake_process = SimpleNamespace(
+            communicate=AsyncMock(return_value=(b"- goal: continue work\n- changed: app.py", b"")),
+            kill=lambda: None,
+            wait=AsyncMock(return_value=0),
+        )
+        try:
+            with patch.object(server.asyncio, "create_subprocess_exec", new=AsyncMock(return_value=fake_process)):
+                result = await server._auto_recover_corrupted_sdk_session(session_id, timeout=30.0)
+
+            self.assertTrue(result["ok"])
+            self.assertFalse(result.get("fallback"))
+
+            saved = server.load_events(session_id)
+            self.assertTrue(saved[0]["compacted"])
+            self.assertTrue(saved[0]["sdk_recovered"])
+            self.assertNotIn("remote_detached", saved[0])
+            self.assertEqual("sdk-recovery-v1", saved[0]["context_strategy"])
+            self.assertIn("goal: continue work", saved[0]["text"])
+
+            with server.db_connect() as conn:
+                row = conn.execute(
+                    "SELECT remote_session_id, remote_ready, runtime_origin FROM sessions WHERE id = ?",
+                    (session_id,),
+                ).fetchone()
+            self.assertNotEqual("old-remote-id", row["remote_session_id"])
+            self.assertEqual(0, row["remote_ready"])
+            self.assertEqual(server._RUNTIME_ORIGIN_AGENT_SDK, row["runtime_origin"])
+        finally:
+            await self._cleanup(session_id)
+
+    async def test_recovery_fallback_on_haiku_timeout(self):
+        events = [
+            {"type": "user_input", "text": "任务一"},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "done"}]}},
+            {"type": "user_input", "text": "任务二"},
+        ]
+        session_id = await self._make_session(events)
+
+        async def slow_communicate():
+            await asyncio.sleep(999)
+            return b"", b""
+
+        fake_process = SimpleNamespace(
+            communicate=slow_communicate,
+            kill=lambda: None,
+            wait=AsyncMock(return_value=0),
+        )
+        try:
+            with patch.object(server.asyncio, "create_subprocess_exec", new=AsyncMock(return_value=fake_process)):
+                result = await server._auto_recover_corrupted_sdk_session(session_id, timeout=0.05)
+
+            self.assertTrue(result["ok"])
+            self.assertTrue(result.get("fallback"))
+
+            saved = server.load_events(session_id)
+            self.assertTrue(saved[0]["compacted"])
+            self.assertTrue(saved[0]["sdk_recovered"])
+        finally:
+            await self._cleanup(session_id)
+
+    async def test_sdk_recovery_pending_injects_resume_context(self):
+        """sdk_recovery_pending guard ensures resume context is built for SDK sessions."""
+        events = [
+            {
+                "type": "user_input",
+                "text": "【会话已自动恢复 · 以下为之前对话的摘要】\n\n- goal: keep going",
+                "compacted": True,
+                "sdk_recovered": True,
+                "context_strategy": "sdk-recovery-v1",
+            },
+            {"type": "user_input", "text": "继续"},
+        ]
+        resume = server.build_compacted_resume_context(events)
+        self.assertIn("goal: keep going", resume)
+
+
+import asyncio as _asyncio_mod  # noqa: E402 — needed for timeout mock in fallback test
+
+
 if __name__ == "__main__":
     unittest.main()
