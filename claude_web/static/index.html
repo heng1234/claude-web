@@ -12757,9 +12757,10 @@ async function applyPlanDecision(toolId, decision, editedPlan) {
   }
 
   const targetMode = prePlanPermissionMode || permSelect.value || 'acceptEdits';
-  prePlanPermissionMode = null;
   try {
-    setPermissionMode(targetMode);
+    if (setPermissionMode(targetMode) !== false) {
+      prePlanPermissionMode = null;
+    }
   } catch (error) {
     console.warn('setPermissionMode failed during plan approval:', error);
   }
@@ -13055,7 +13056,8 @@ function applyNativeContextUsage(data, targetSessionId = sessionId) {
   // incoming total is much larger than the post-compact count, the API hasn't
   // updated yet — don't overwrite the correct low value with the stale high one.
   if (lastCompactionPostTokens > 0 && Date.now() - lastCompactionTime < 15000
-      && total > lastCompactionPostTokens * 3) {
+      && total > lastCompactionPostTokens * 3
+      && total - lastCompactionPostTokens > 5000) {
     return false;
   }
   latestContextTokens = total;
@@ -16086,24 +16088,28 @@ async function runNativeCompact(targetSessionId = sessionId) {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
     const compact = data.compact || {};
+    const after = Number(compact.post_tokens || 0);
+    // Always arm the stale-value guard when we have post_tokens, regardless of whether
+    // applyNativeContextUsage succeeded (compact_boundary event may arrive late or not at all).
+    if (after > 0 && sessionId === targetSessionId) {
+      lastCompactionTime = Date.now();
+      lastCompactionPostTokens = after;
+    }
     if (!applyNativeContextUsage(data.context_usage || {}, targetSessionId) && sessionId === targetSessionId) {
-      const after = Number(compact.post_tokens || 0);
       if (after > 0) {
         latestContextTokens = after;
-        lastCompactionTime = Date.now();
-        lastCompactionPostTokens = after;
       }
       renderSessionTokens();
       updateTokenCount();
     }
     const before = Number(compact.pre_tokens || 0);
-    const after = Number(compact.post_tokens || data.context_usage?.totalTokens || 0);
+    const afterDisplay = after || Number(data.context_usage?.totalTokens || 0);
     if (sessionId === targetSessionId) {
-      addSystemInfo(before || after
-        ? `Claude Code 原生压缩 · ${_fmtTokens(before)} → ${_fmtTokens(after)}`
+      addSystemInfo(before || afterDisplay
+        ? `Claude Code 原生压缩 · ${_fmtTokens(before)} → ${_fmtTokens(afterDisplay)}`
         : 'Claude Code 原生压缩完成');
       // Only refresh from API if we have no post_tokens (avoid stale value overwriting correct count)
-      if (!after) scheduleNativeContextUsageRefresh(0);
+      if (!afterDisplay) scheduleNativeContextUsageRefresh(0);
     }
     return { ok: true, data };
   } catch (error) {
