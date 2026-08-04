@@ -2,6 +2,36 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.1.3",
+      "date": "2026-08-04",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "Code 模式计划审批失败（「切换运行模式失败：SDK 未接受运行模式切换」）：运行时模式同步改为非阻塞，失败不再中断审批流程"
+        },
+        {
+          "type": "fix",
+          "text": "计划批准后权限模式自动降级到代理模式：现在保留审批前的原始模式（如自动模式），仅在无历史记录时才回落到代理模式"
+        },
+        {
+          "type": "fix",
+          "text": "粘贴的图片和文件切换会话后仍被携带：切换会话时现在正确清除待发送附件"
+        },
+        {
+          "type": "fix",
+          "text": "双重压缩竞态条件：SDK 原生压缩完成后 API 返回旧 token 数导致前端再次触发压缩；现在记录压缩后 token 数，15 秒内拒绝明显偏大的旧值"
+        },
+        {
+          "type": "fix",
+          "text": "权限请求「Permission request is no longer pending」报错：计划暂停流程取消权限请求后，UI 仍显示旧弹窗，点击时改为友好提示而非红色错误"
+        },
+        {
+          "type": "fix",
+          "text": "ExitPlanMode 计划内容为空：修复流式传输中断时 JSON 解析失败导致计划内容丢失的问题"
+        }
+      ]
+    },
+    {
       "version": "2.1.2",
       "date": "2026-08-01",
       "highlights": [
