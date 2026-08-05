@@ -7050,7 +7050,10 @@ async def _drain_detached_agent_sdk_turn(
             if activation_event is not None:
                 append_event(session_id, activation_event)
     except asyncio.CancelledError:
-        await _claude_agent_bridge.abandon_turn(turn)
+        try:
+            await _claude_agent_bridge.abandon_turn(turn)
+        except Exception as exc:
+            _log.warning("abandon_turn failed for session %s: %s", session_id, exc)
         raise
     except Exception as exc:
         saw_terminal_error = True
@@ -7282,27 +7285,42 @@ def _agent_sdk_streaming_response(
                 yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
         except (asyncio.CancelledError, GeneratorExit):
             detached = True
-            task = asyncio.create_task(
-                _drain_detached_agent_sdk_turn(
-                    turn=turn,
-                    session_id=session_id,
-                    native_remote_id=native_remote_id,
-                    remote_became_ready=remote_became_ready,
-                    work_dir=work_dir,
-                    display_text=display_text,
-                    checkpoint=checkpoint,
-                    git_dirty_before=git_dirty_before,
-                    workspace_mode=workspace_mode,
-                    turn_id=turn_id,
-                    code_write_intent_seen=code_write_intent_seen,
-                    code_write_targets=set(code_write_targets),
-                    saw_top_level_result=saw_top_level_result,
-                    saw_terminal_error=saw_terminal_error,
-                    reported_api_error=reported_api_error,
-                    last_assistant_text=last_assistant_text,
-                    reconnect_params=reconnect_params,
-                )
-            )
+            _DRAIN_TIMEOUT = 30 * 60  # 30 minutes max for a detached drain
+
+            async def _drain_with_timeout():
+                try:
+                    await asyncio.wait_for(
+                        _drain_detached_agent_sdk_turn(
+                            turn=turn,
+                            session_id=session_id,
+                            native_remote_id=native_remote_id,
+                            remote_became_ready=remote_became_ready,
+                            work_dir=work_dir,
+                            display_text=display_text,
+                            checkpoint=checkpoint,
+                            git_dirty_before=git_dirty_before,
+                            workspace_mode=workspace_mode,
+                            turn_id=turn_id,
+                            code_write_intent_seen=code_write_intent_seen,
+                            code_write_targets=set(code_write_targets),
+                            saw_top_level_result=saw_top_level_result,
+                            saw_terminal_error=saw_terminal_error,
+                            reported_api_error=reported_api_error,
+                            last_assistant_text=last_assistant_text,
+                            reconnect_params=reconnect_params,
+                        ),
+                        timeout=_DRAIN_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    _log.warning("Detached drain for session %s timed out after %ds; forcing cleanup", session_id, _DRAIN_TIMEOUT)
+                    _agent_sdk_running_sessions.discard(session_id)
+                    _stopped_sessions.discard(session_id)
+                    _plan_waiting_sessions.discard(session_id)
+                    err_event = classify_claude_error("Claude Agent SDK drain timed out; session was reset")
+                    err_event["turn_id"] = turn_id
+                    append_event(session_id, err_event)
+
+            task = asyncio.create_task(_drain_with_timeout())
             _agent_sdk_detached_turn_tasks[session_id] = task
             raise
         except Exception as exc:
@@ -7447,8 +7465,17 @@ def _reserve_code_turn(session_id: str, client_turn_id: Optional[str]) -> str:
                 "INSERT INTO code_turn_requests (id, session_id, state, created_at, updated_at) VALUES (?, ?, 'starting', ?, ?)",
                 (turn_id, session_id, now, now),
             )
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(status_code=409, detail="this queued turn was already accepted; reload the session") from exc
+    except sqlite3.IntegrityError:
+        # Already accepted — idempotent: return the existing turn_id so the
+        # caller can proceed without replaying the request.
+        with db_connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM code_turn_requests WHERE id = ? AND state = 'accepted'",
+                (turn_id,),
+            ).fetchone()
+        if row:
+            return turn_id
+        raise HTTPException(status_code=409, detail="this queued turn was already accepted; reload the session")
     return turn_id
 
 
@@ -8924,6 +8951,10 @@ async def stop_chat(session_id: str, reason: Optional[str] = Query(default=None)
                     status_code=503,
                     detail="无法确认任务已经停止；运行所有权仍保留，请稍后重试",
                 ) from close_exc
+        # Cancel the detached drain task so it doesn't keep running after stop
+        drain_task = _agent_sdk_detached_turn_tasks.get(session_id)
+        if drain_task is not None and not drain_task.done():
+            drain_task.cancel()
         stop_event = (
             {
                 "type": "system",

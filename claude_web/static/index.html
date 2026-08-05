@@ -7766,7 +7766,7 @@
   .cw-code-form-row button:hover { background:var(--cw-control-primary-hover); box-shadow:0 2px 5px rgba(31,27,24,.14); }
   .cw-code-form-row button:focus-visible { outline:0; box-shadow:0 0 0 3px var(--cw-control-ring); }
 
-  @media (max-width:900px) {
+  @media (max-width:640px) {
     .composer-btn { width:40px !important; height:40px !important; }
     .composer-send,.composer-btn-stop { width:44px !important; height:44px !important; border-radius:13px !important; }
     #cwComposerSettingsBtn { min-height:40px !important; }
@@ -9522,6 +9522,7 @@ let activeImageUploadKeys = new Set();
 let activeImageUploadPromises = new Set();
 const activeDocUploadPromises = new Set();
 let pendingImageGeneration = 0;
+const sessionAttachmentSnapshots = new Map();
 let currentController = null;
 let currentControllerQueueOwner = '';
 let pendingPermissionAutoRetry = null;
@@ -13494,7 +13495,11 @@ async function renderPrewritePermissionPreview(card, toolName, input, targetSess
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ tool_name:toolName, input }),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    if (!response.ok) {
+      const detail = data.detail;
+      const msg = typeof detail === 'string' ? detail : (detail ? JSON.stringify(detail) : `HTTP ${response.status}`);
+      throw new Error(msg);
+    }
     if (!data.supported) {
       preview.innerHTML = `<div class="cw-prewrite-head"><span>写入前检查</span><span>无法生成 Diff</span></div><div class="cw-prewrite-note">${escapeHtml(data.reason || '当前工具不支持预览')}</div>`;
       return;
@@ -15420,6 +15425,7 @@ function clearPendingImages() {
   pendingImages = [];
   pendingImageKeys.clear();
   activeImageUploadKeys.clear();
+  activeImageUploadPromises.clear();
   renderAttachments();
 }
 
@@ -16858,6 +16864,7 @@ async function captureCodeComposerEntry(text, owner, slashPayload = null, compos
   };
   if (ownerStillActive) {
     clearPendingImages();
+    sessionAttachmentSnapshots.delete(sessionId);
     clearUrlContext();
     clearDocs();
     clearDraft();
@@ -17414,6 +17421,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     }
     if (!composerSnapshot) {
       clearPendingImages();
+      sessionAttachmentSnapshots.delete(sessionId);
       clearDraft();
       clearUrlContext();
       clearDocs();
@@ -18646,7 +18654,18 @@ async function loadSession(id, options = {}) {
     resetToolUseRuntimeState();
     hideTodoPanel();
     clearArtifacts();
+    // Save current session's attachments before switching, restore new session's
+    if (sessionId) {
+      sessionAttachmentSnapshots.set(sessionId, { images: [...pendingImages], keys: new Set(pendingImageKeys), activeKeys: new Set(activeImageUploadKeys) });
+    }
     clearPendingImages();
+    const savedAttachments = sessionAttachmentSnapshots.get(data.id);
+    if (savedAttachments && savedAttachments.images.length > 0) {
+      pendingImages = savedAttachments.images;
+      pendingImageKeys = new Set(savedAttachments.keys);
+      activeImageUploadKeys = new Set(savedAttachments.activeKeys || []);
+      renderAttachments();
+    }
     clearDocs();
     currentUserIndex = Number(data.user_offset || 0);
     lastUserIndex = currentUserIndex - 1;
