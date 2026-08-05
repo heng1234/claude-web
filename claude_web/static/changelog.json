@@ -2,6 +2,36 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.1.4",
+      "date": "2026-08-05",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "断开连接后 drain 任务无超时限制：现在设置 30 分钟上限，超时后自动清理会话状态并记录错误事件，防止僵尸任务永久占用资源"
+        },
+        {
+          "type": "fix",
+          "text": "abandon_turn 抛出异常导致 CancelledError 被吞：现在捕获并记录警告，确保取消信号正常传播"
+        },
+        {
+          "type": "fix",
+          "text": "重复发送同一 turn 请求时返回 409 错误：改为幂等处理，返回已有 turn_id 而非报错"
+        },
+        {
+          "type": "fix",
+          "text": "prewrite 权限预览接口错误信息显示为 [object Object]：修复 detail 字段非字符串时的序列化问题"
+        },
+        {
+          "type": "fix",
+          "text": "切换会话后上传中的图片仍残留在附件列表：clearPendingImages 现在同时清除 activeImageUploadPromises；发送后清除会话附件快照"
+        },
+        {
+          "type": "ui",
+          "text": "工具栏按钮响应式断点从 900px 调整为 640px，平板端不再被误压缩"
+        }
+      ]
+    },
+    {
       "version": "2.1.3",
       "date": "2026-08-04",
       "highlights": [
