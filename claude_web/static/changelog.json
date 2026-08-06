@@ -2,6 +2,24 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.1.5",
+      "date": "2026-08-06",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "普通聊天模式新会话发送消息无反应：聊天模式下 cwd 为空被误判为移动端 CWD 校验失败，导致 fetch 在执行前被中止；现在仅在 mobileCwdOrStop() 返回 null 时才终止发送"
+        },
+        {
+          "type": "fix",
+          "text": "新会话第一条消息发送后发送按钮永久禁用：finally 块中用 turnViewIsActive() 重新启用 sendBtn，但新会话 turnSessionId 为 null 而 sessionId 已被赋值导致判断为 false；改用 conversationViewEpoch 对比修复"
+        },
+        {
+          "type": "fix",
+          "text": "切换会话时附件快照保存到错误的会话 ID：loadSession 中 sessionId 已被覆盖为新会话 ID，改用 prevSessionIdSnap 保存旧会话附件"
+        }
+      ]
+    },
+    {
       "version": "2.1.4",
       "date": "2026-08-05",
       "highlights": [
