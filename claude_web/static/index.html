@@ -17471,10 +17471,11 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let doneEvent = null;
 
   const perm = buildPermissionPayload();
-  const cwd = Object.prototype.hasOwnProperty.call(options, 'cwd')
-    ? options.cwd
-    : mobileCwdOrStop();
-  if (cwd === null) {
+  // Only mobileCwdOrStop() returning null means "validation failed, abort".
+  // An explicit cwd: null from the caller is normal for chat mode.
+  const cwdExplicit = Object.prototype.hasOwnProperty.call(options, 'cwd');
+  const cwd = cwdExplicit ? options.cwd : mobileCwdOrStop();
+  if (!cwdExplicit && cwd === null) {
     hideThinking(container, { force: true });
     sendBtn.disabled = false;
     clearCodeSessionRun(turnRun);
@@ -17752,7 +17753,10 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     updateSidebarRunningIndicators();
     if (turnIsCode) {
       syncActiveCodeRunControls();
-    } else if (turnViewIsActive()) {
+    } else if (conversationViewEpoch === turnViewEpoch && !codeMode) {
+      // Re-enable sendBtn for chat turns. Can't use turnViewIsActive() here because
+      // turnSessionId starts as null for new sessions and stays null even after the
+      // meta event sets sessionId — causing turnViewIsActive() to wrongly return false.
       sendBtn.disabled = agentLoopRunning || contextCompactionRunning;
       if (currentController === turnController) {
         stopBtn.classList.add('hidden');
@@ -18655,8 +18659,8 @@ async function loadSession(id, options = {}) {
     hideTodoPanel();
     clearArtifacts();
     // Save current session's attachments before switching, restore new session's
-    if (sessionId) {
-      sessionAttachmentSnapshots.set(sessionId, { images: [...pendingImages], keys: new Set(pendingImageKeys), activeKeys: new Set(activeImageUploadKeys) });
+    if (prevSessionIdSnap) {
+      sessionAttachmentSnapshots.set(prevSessionIdSnap, { images: [...pendingImages], keys: new Set(pendingImageKeys), activeKeys: new Set(activeImageUploadKeys) });
     }
     clearPendingImages();
     const savedAttachments = sessionAttachmentSnapshots.get(data.id);
