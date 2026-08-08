@@ -3976,6 +3976,16 @@
     min-width: 0;
     overflow: visible;
   }
+  .cw-time-divider {
+    padding: 6px 8px 2px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+    opacity: 0.7;
+    user-select: none;
+  }
   .cw-general-session-list {
     display: grid;
     gap: 1px;
@@ -18164,13 +18174,52 @@ function currentCwdKey() {
   return codeProjectKey(cwdInput?.value || '');
 }
 
-function renderCodeSessionRow(s) {
+function sessionTimeGroup(ts) {
+  if (!ts) return 4;
+  const d = new Date(ts * 1000), now = new Date();
+  const diffDays = (now - d) / 86400000;
+  if (d.toDateString() === now.toDateString()) return 0;
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 1;
+  if (diffDays < 7) return 2;
+  return 3;
+}
+
+const SESSION_TIME_GROUP_LABELS = ['今天', '昨天', '本周', '更早', '未知'];
+
+function sortSessionsWithRunningFirst(sessions) {
+  return [...sessions].sort((a, b) => {
+    const aRunning = !!(sessionStates.get(a.id)?.controller);
+    const bRunning = !!(sessionStates.get(b.id)?.controller);
+    if (aRunning !== bRunning) return aRunning ? -1 : 1;
+    return (b.updated_at || 0) - (a.updated_at || 0);
+  });
+}
+
+function renderCodeSessionRows(sessions) {
+  const sorted = sortSessionsWithRunningFirst(sessions);
+  let lastGroup = -1;
+  return sorted.map(s => {
+    const g = sessionTimeGroup(s.updated_at);
+    const isRunning = !!(sessionStates.get(s.id)?.controller);
+    let divider = '';
+    if (!isRunning && g !== lastGroup) {
+      lastGroup = g;
+      divider = `<div class="cw-time-divider">${SESSION_TIME_GROUP_LABELS[g]}</div>`;
+    }
+    return divider + renderCodeSessionRow(s, isRunning);
+  }).join('');
+}
+
+function renderCodeSessionRow(s, isRunning) {
   const title = escapeHtml(s.title || '新会话');
   const id = escapeHtml(s.id);
+  const runningDot = isRunning ? '<span class="running-indicator"></span>' : '';
   return `
     <div class="cw-project-session-shell">
       <button type="button" class="cw-project-session ${s.id === sessionId ? 'active' : ''}" data-id="${id}" title="${title}">
         <span class="cw-session-title truncate">${title}</span>
+        ${runningDot}
         <span class="cw-session-time">${escapeHtml(formatTime(s.updated_at))}</span>
       </button>
       <button type="button" class="cw-session-menu-btn" data-session-menu="${id}" aria-label="会话操作" aria-expanded="false">
@@ -18334,7 +18383,7 @@ function renderProjectGroup(group, options = {}) {
         </span>
       </button>
       <div class="cw-project-session-list ${collapsed ? 'hidden' : ''}">
-        ${visible.length ? visible.map(renderCodeSessionRow).join('') : `<div class="px-2 py-2 text-[12px]" style="color:var(--text-subtle);">${emptyText}</div>`}
+        ${visible.length ? renderCodeSessionRows(visible) : `<div class="px-2 py-2 text-[12px]" style="color:var(--text-subtle);">${emptyText}</div>`}
         ${hiddenCount > 0 || expanded && sessions.length > limit ? `<button type="button" class="cw-show-more" data-project-toggle="${escapeHtml(key)}">${expanded ? '收起' : `展开 ${hiddenCount} 条`}</button>` : ''}
       </div>
     </div>
@@ -18351,7 +18400,7 @@ function renderCodeGeneralChatSection(sessions = []) {
     <section class="cw-code-chat-section">
       <div class="cw-sidebar-section-title">对话</div>
       <div class="cw-general-session-list">
-        ${visible.length ? visible.map(renderCodeSessionRow).join('') : '<div class="px-2 py-2 text-[12px]" style="color:var(--text-subtle);">暂无普通对话</div>'}
+        ${visible.length ? renderCodeSessionRows(visible) : '<div class="px-2 py-2 text-[12px]" style="color:var(--text-subtle);">暂无普通对话</div>'}
         ${hiddenCount > 0 ? `<button type="button" class="cw-general-more" data-general-more>… 查看更多 ${nextCount} 条 · 剩余 ${hiddenCount}</button>` : ''}
       </div>
     </section>
