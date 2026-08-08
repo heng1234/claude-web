@@ -9520,6 +9520,7 @@ let milestoneView = false;
 let codeMode = false;
 let conversationViewEpoch = 0;
 let sessionLoadRequestId = 0;
+let sessionLoadAbortController = null;
 let gitStatusRequestId = 0;
 const LAST_CHAT_SESSION_KEY = 'cw_last_chat_session_v1';
 const LAST_CODE_SESSION_KEY = 'cw_last_code_session_v1';
@@ -18400,7 +18401,8 @@ function renderCodeProjectSessionList(list) {
   sessionItems.querySelectorAll('.cw-project-session').forEach(btn => {
     btn.addEventListener('click', () => {
       const target = (list || []).find(item => item.id === btn.dataset.id);
-      openSessionInWorkspace(target);
+      clearTimeout(btn._switchTimer);
+      btn._switchTimer = setTimeout(() => openSessionInWorkspace(target), 150);
     });
   });
   bindSessionMenuToggles(sessionItems);
@@ -18497,7 +18499,9 @@ async function refreshSessions() {
     sessionItems.querySelectorAll('.session-item').forEach(el => {
       el.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
-        loadSession(el.dataset.id);
+        const id = el.dataset.id;
+        clearTimeout(el._switchTimer);
+        el._switchTimer = setTimeout(() => loadSession(id), 150);
       });
     });
     bindSessionMenuToggles(sessionItems);
@@ -18624,6 +18628,10 @@ function highlightActiveSession() {
 
 async function loadSession(id, options = {}) {
   const requestId = ++sessionLoadRequestId;
+  // Abort any in-flight session fetch from a previous loadSession call
+  if (sessionLoadAbortController) sessionLoadAbortController.abort();
+  const myAbortController = new AbortController();
+  sessionLoadAbortController = myAbortController;
   const expectedWorkspaceMode = options.expectedWorkspaceMode || (codeMode ? 'code' : 'chat');
   const expectedCodeMode = expectedWorkspaceMode === 'code';
   if (!options.historyExpansion) conversationViewEpoch += 1;
@@ -18636,7 +18644,7 @@ async function loadSession(id, options = {}) {
     stopNativeTurnRecovery();
     hidePicker();
     const historyQuery = historyTurns ? `?history_turns=${historyTurns}` : '';
-    const r = await fetch('/api/sessions/' + id + historyQuery);
+    const r = await fetch('/api/sessions/' + id + historyQuery, { signal: myAbortController.signal });
     if (!r.ok) return false;
     const data = await r.json();
     const loadedWorkspaceMode = data.workspace_mode === 'code' ? 'code' : 'chat';
@@ -18814,6 +18822,7 @@ async function loadSession(id, options = {}) {
     }
     return true;
   } catch (e) {
+    if (e.name === 'AbortError') return false;
     console.warn(e);
     return false;
   }
