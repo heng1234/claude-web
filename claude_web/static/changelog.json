@@ -2,6 +2,24 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.1.7",
+      "date": "2026-08-08",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "疯狂切换会话后 UI 卡死：loadSession 新增 AbortController，新切换请求立即取消上一次还在进行的 fetch，浏览器连接不再被堆积请求打满"
+        },
+        {
+          "type": "fix",
+          "text": "会话列表点击无防抖：chat 和 code 两种模式的会话列表点击均加入 150ms 防抖，快速连点只触发最后一次切换"
+        },
+        {
+          "type": "ui",
+          "text": "Code 模式会话列表排序优化：运行中的会话始终置顶显示；其余会话按时间分组（今天 / 昨天 / 本周 / 更早），一眼找到最近工作"
+        }
+      ]
+    },
+    {
       "version": "2.1.6",
       "date": "2026-08-07",
       "highlights": [
