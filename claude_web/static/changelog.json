@@ -2,6 +2,36 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.1.6",
+      "date": "2026-08-07",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "自动模式（bypassPermissions）下 Bash/Agent 工具仍弹权限卡片：permission-policy hook 现在对 bypassPermissions 显式返回 allow，双重保险避免 SDK 漏调"
+        },
+        {
+          "type": "fix",
+          "text": "权限请求已结束后点击允许报 409：Python 端不再抛 HTTPException，改为返回 alreadyResolved 优雅降级"
+        },
+        {
+          "type": "fix",
+          "text": "Code 模式 Markdown bold 文本被渲染为粉色 callout 块：删除 p > strong:only-child 的 block 样式规则，bold 恢复为正常内联加粗"
+        },
+        {
+          "type": "fix",
+          "text": "多会话来回切换导致 UI 卡死：loadSession DOM 操作期间抑制 MutationObserver，防止 syncEmptyShellState 重入循环"
+        },
+        {
+          "type": "fix",
+          "text": "sessionStates Map 无限增长：新增 LRU 驱逐（上限 20），联动清理 sessionAttachmentSnapshots；SESSION_PENDING_EVENTS_MAX 从 800 降至 400"
+        },
+        {
+          "type": "feature",
+          "text": "单轮 100 turn 耗尽时，错误卡片新增「继续执行」按钮，可在同一会话中一键续接未完成的任务"
+        }
+      ]
+    },
+    {
       "version": "2.1.5",
       "date": "2026-08-06",
       "highlights": [
