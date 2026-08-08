@@ -9137,7 +9137,9 @@ async def resolve_agent_sdk_permission(
         raise HTTPException(status_code=400, detail="invalid approval id")
     row = _agent_sdk_session_row(session_id)
     if session_id not in _agent_sdk_running_sessions:
-        raise HTTPException(status_code=409, detail="session has no active permission request")
+        # Turn already ended — the permission was likely auto-resolved or cancelled.
+        # Return success with alreadyResolved flag instead of a hard 409 error.
+        return {"ok": True, "alreadyResolved": True, "approvalId": approval_id}
     remembered_rule = None
     if req.allow and req.always_allow:
         try:

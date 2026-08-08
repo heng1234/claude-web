@@ -95,6 +95,13 @@ export function createPreToolUseHook(permissionModeState, cwd) {
       return decision('allow');
     }
 
+    // Bypass mode auto-approves everything. The SDK's allowDangerouslySkipPermissions
+    // usually prevents canUseTool from firing at all, but subagent/Task paths can slip
+    // through — returning allow here keeps the UI from showing a permission card.
+    if (mode === 'bypassPermissions') {
+      return decision('allow');
+    }
+
     if (mode === 'plan') {
       if (toolName === 'ExitPlanMode') {
         return decision('ask', 'Plan mode: leaving the plan requires explicit Web approval.');
