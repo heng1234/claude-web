@@ -11777,7 +11777,15 @@ function routeEventToSubagent(parentId, obj) {
   card.events.push(obj);
   const summary = summarizeEventForActivity(obj);
   if (summary) card.latestActivity = summary;
-  renderSubagentPanel();
+  // When the subagent emits its own terminal result, mark it complete
+  // immediately. This prevents the chip from being stuck if the top-level
+  // tool_result user event is lost (e.g. due to queue overflow or SSE drop).
+  if (obj.type === 'result' && card.status === 'running') {
+    const failed = !!obj.is_error;
+    markSubagentComplete(parentId, failed, failed ? 'error' : 'success');
+  } else {
+    renderSubagentPanel();
+  }
   return true;
 }
 

@@ -34,6 +34,30 @@ MIN_MAX_FRAME_SIZE = 1024 * 1024
 MAX_MAX_FRAME_SIZE = 256 * 1024 * 1024
 
 
+DEFAULT_EVENT_QUEUE_SIZE = 4096
+
+
+def _shed_stream_events(queue: "asyncio.Queue[dict]") -> bool:
+    """Drop replaceable stream_event frames to free queue space.
+
+    Returns True if at least one slot was freed, False otherwise.
+    """
+    items: list[dict] = []
+    freed = 0
+    while not queue.empty():
+        try:
+            items.append(queue.get_nowait())
+        except asyncio.QueueEmpty:
+            break
+    for item in items:
+        evt = item.get("event") if item.get("type") == "event" else None
+        if evt and evt.get("type") == "stream_event":
+            freed += 1
+        else:
+            queue.put_nowait(item)
+    return freed > 0
+
+
 class AgentSdkBridgeError(RuntimeError):
     pass
 
@@ -217,21 +241,23 @@ class AgentSdkBridge:
                     try:
                         queue.put_nowait(payload)
                     except asyncio.QueueFull:
-                        self._queues.pop(request_id, None)
-                        session_key = self._turn_sessions.pop(request_id, "")
-                        while not queue.empty():
-                            try:
-                                queue.get_nowait()
-                            except asyncio.QueueEmpty:
-                                break
-                        queue.put_nowait({
-                            "type": "error",
-                            "message": "Claude Agent SDK event buffer overflowed; the stalled turn was interrupted",
-                        })
-                        queue.put_nowait({"type": "done", "success": False})
-                        if session_key:
-                            asyncio.create_task(self._best_effort_interrupt(session_key))
-                        continue
+                        # Subagents emit one frame per nested message, so a deep
+                        # Task tree can outrun a slow browser. Shed replaceable
+                        # token deltas first: dropping them keeps the turn alive
+                        # so the terminal tool_result still reaches the client,
+                        # which is what clears a Task chip's running state.
+                        if _shed_stream_events(queue):
+                            queue.put_nowait(payload)
+                        else:
+                            self._queues.pop(request_id, None)
+                            session_key = self._turn_sessions.pop(request_id, "")
+                            self._force_fail_queue(
+                                queue,
+                                "Claude Agent SDK event buffer overflowed; the stalled turn was interrupted",
+                            )
+                            if session_key:
+                                asyncio.create_task(self._best_effort_interrupt(session_key))
+                            continue
                     if payload_type == "done":
                         self._queues.pop(request_id, None)
                         self._turn_sessions.pop(request_id, None)
@@ -321,7 +347,7 @@ class AgentSdkBridge:
         request_id = str(uuid.uuid4())
         # Bound native streaming events so a disconnected/slow browser applies
         # backpressure to the bridge instead of growing Python memory forever.
-        queue: "asyncio.Queue[dict]" = asyncio.Queue(maxsize=1024)
+        queue: "asyncio.Queue[dict]" = asyncio.Queue(maxsize=DEFAULT_EVENT_QUEUE_SIZE)
         self._queues[request_id] = queue
         self._turn_sessions[request_id] = session_key
         try:
