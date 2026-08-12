@@ -3976,6 +3976,16 @@
     min-width: 0;
     overflow: visible;
   }
+  .cw-time-divider {
+    padding: 6px 8px 2px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+    opacity: 0.7;
+    user-select: none;
+  }
   .cw-general-session-list {
     display: grid;
     gap: 1px;
@@ -5125,19 +5135,6 @@
   }
   body.code-mode .prose-custom strong { font-weight: 620; color: #1f1d1b; }
   :root.dark body.code-mode .prose-custom strong { color: #f4f1ed; }
-  body.code-mode .prose-custom p > strong:only-child {
-    display: block;
-    padding: 12px 16px;
-    border-left: 3px solid var(--accent);
-    border-radius: 0 10px 10px 0;
-    background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-    color: var(--text);
-    font-weight: 560;
-    line-height: 1.7;
-  }
-  :root.dark body.code-mode .prose-custom p > strong:only-child {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-  }
   .cw-context-compaction-status {
     display: none;
     align-items: center;
@@ -7766,7 +7763,7 @@
   .cw-code-form-row button:hover { background:var(--cw-control-primary-hover); box-shadow:0 2px 5px rgba(31,27,24,.14); }
   .cw-code-form-row button:focus-visible { outline:0; box-shadow:0 0 0 3px var(--cw-control-ring); }
 
-  @media (max-width:900px) {
+  @media (max-width:640px) {
     .composer-btn { width:40px !important; height:40px !important; }
     .composer-send,.composer-btn-stop { width:44px !important; height:44px !important; border-radius:13px !important; }
     #cwComposerSettingsBtn { min-height:40px !important; }
@@ -8285,6 +8282,10 @@
                     </button>
                     <button type="button" class="cw-mode-option" data-model="haiku" role="menuitemradio" aria-checked="false">
                       <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Haiku</span></span>
+                      <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
+                    <button type="button" class="cw-mode-option" data-model="fable" role="menuitemradio" aria-checked="false">
+                      <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Fable</span></span>
                       <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
                     </button>
                   </span>
@@ -9522,6 +9523,7 @@ let activeImageUploadKeys = new Set();
 let activeImageUploadPromises = new Set();
 const activeDocUploadPromises = new Set();
 let pendingImageGeneration = 0;
+const sessionAttachmentSnapshots = new Map();
 let currentController = null;
 let currentControllerQueueOwner = '';
 let pendingPermissionAutoRetry = null;
@@ -9532,6 +9534,7 @@ let milestoneView = false;
 let codeMode = false;
 let conversationViewEpoch = 0;
 let sessionLoadRequestId = 0;
+let sessionLoadAbortController = null;
 let gitStatusRequestId = 0;
 const LAST_CHAT_SESSION_KEY = 'cw_last_chat_session_v1';
 const LAST_CODE_SESSION_KEY = 'cw_last_code_session_v1';
@@ -9609,8 +9612,10 @@ const sessionPermissionOverrides = LS.get(SESSION_PERMISSION_OVERRIDES_KEY, {});
 
 // ===== Multi-session parallel state =====
 const SESSION_DOM_CACHE_MAX = 5;
-const SESSION_PENDING_EVENTS_MAX = 800;
+const SESSION_PENDING_EVENTS_MAX = 400;
+const SESSION_STATE_MAX = 20;
 const sessionDomCacheOrder = []; // LRU order: most recent at end
+let observerSuppressed = 0;
 
 class SessionState {
   constructor(id) {
@@ -9630,10 +9635,29 @@ class SessionState {
 }
 
 const sessionStates = new Map();
+const sessionStatesOrder = []; // LRU order for eviction
 
 function getOrCreateSessionState(id) {
   if (!id) return null;
-  if (!sessionStates.has(id)) sessionStates.set(id, new SessionState(id));
+  if (!sessionStates.has(id)) {
+    sessionStates.set(id, new SessionState(id));
+    sessionStatesOrder.push(id);
+    // Evict oldest non-active states when exceeding cap
+    while (sessionStatesOrder.length > SESSION_STATE_MAX) {
+      const evictIdx = sessionStatesOrder.findIndex(eid => {
+        const st = sessionStates.get(eid);
+        return st && !st.controller && eid !== sessionId;
+      });
+      if (evictIdx === -1) break;
+      const evictId = sessionStatesOrder.splice(evictIdx, 1)[0];
+      sessionStates.delete(evictId);
+      sessionAttachmentSnapshots.delete(evictId);
+    }
+  } else {
+    const idx = sessionStatesOrder.indexOf(id);
+    if (idx !== -1) sessionStatesOrder.splice(idx, 1);
+    sessionStatesOrder.push(id);
+  }
   return sessionStates.get(id);
 }
 
@@ -9994,8 +10018,45 @@ function removeWelcome() {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+const TABLE_DELIMITER_ROW = /^\|(?:\s*:?-+:?\s*\|)+\s*$/;
+
+// Models often glue a GFM table onto surrounding prose, e.g.
+// "改成：|字段 | 当前 |" followed by "|---|---|". marked needs the header to
+// start its own block, so without repair the whole thing stays a paragraph.
 function repairTableNewlines(md) {
-  return md.replace(/(\|(?:\s*:?-+:?\s*\|)+)(\|)/g, '$1\n$2');
+  const source = String(md || '');
+  if (!source.includes('|')) return source;
+  const lines = source.split('\n');
+  const out = [];
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      inFence = !inFence;
+      out.push(line);
+      continue;
+    }
+    if (inFence) {
+      out.push(line);
+      continue;
+    }
+    // Un-glue a delimiter row that runs straight into the first body row.
+    let working = line.replace(/(\|(?:\s*:?-+:?\s*\|)+)(?=\|)/g, '$1\n');
+    // Prose glued to a header row: split only when the next line proves a table.
+    // Find the first pipe NOT inside an inline code span.
+    if (TABLE_DELIMITER_ROW.test((lines[i + 1] || '').trim())) {
+      const masked = working.replace(/`[^`]*`/g, m => ' '.repeat(m.length));
+      const firstPipe = masked.indexOf('|');
+      if (firstPipe > 0) {
+        const prose = working.slice(0, firstPipe).trimEnd();
+        if (prose && !prose.endsWith('|')) {
+          working = `${prose}\n\n${working.slice(firstPipe)}`;
+        }
+      }
+    }
+    out.push(working);
+  }
+  return out.join('\n');
 }
 
 function renderMarkdown(text) {
@@ -11757,7 +11818,15 @@ function routeEventToSubagent(parentId, obj) {
   card.events.push(obj);
   const summary = summarizeEventForActivity(obj);
   if (summary) card.latestActivity = summary;
-  renderSubagentPanel();
+  // When the subagent emits its own terminal result, mark it complete
+  // immediately. This prevents the chip from being stuck if the top-level
+  // tool_result user event is lost (e.g. due to queue overflow or SSE drop).
+  if (obj.type === 'result' && card.status === 'running') {
+    const failed = !!obj.is_error;
+    markSubagentComplete(parentId, failed, failed ? 'error' : 'success');
+  } else {
+    renderSubagentPanel();
+  }
   return true;
 }
 
@@ -12756,22 +12825,16 @@ async function applyPlanDecision(toolId, decision, editedPlan) {
     return;
   }
 
-  let targetMode = 'acceptEdits';
+  const targetMode = prePlanPermissionMode || permSelect.value || 'acceptEdits';
   try {
-    // Restore pre-plan permission mode if saved, otherwise default to acceptEdits
-    targetMode = prePlanPermissionMode || 'acceptEdits';
-    if (!setPermissionMode(targetMode, { syncRuntime: false })) {
-      throw new Error('无法恢复计划前的运行模式');
+    if (setPermissionMode(targetMode) !== false) {
+      prePlanPermissionMode = null;
     }
-    if (!await syncNativeRuntimePermissionMode(targetMode)) {
-      throw new Error('SDK 未接受运行模式切换');
-    }
-    prePlanPermissionMode = null; // Clear after use
   } catch (error) {
-    entry.actionsEl?.querySelectorAll?.('button').forEach(button => { button.disabled = false; });
-    toast('切换运行模式失败：' + (error?.message || error), { timeout: 5200 });
-    return;
+    console.warn('setPermissionMode failed during plan approval:', error);
   }
+  // Best-effort runtime sync — failure does not block the approval
+  syncNativeRuntimePermissionMode(targetMode).catch(() => {});
 
   entry.status = 'approved';
   entry.decision = decision;
@@ -12951,6 +13014,8 @@ let latestContextExact = false;
 let contextUsageRefreshTimer = null;
 let contextUsageRequestSerial = 0;
 let contextCompactionRunning = false;
+let lastCompactionTime = 0;
+let lastCompactionPostTokens = 0;
 let selectedModel = LS.get('model', '');
 let selectedEffort = LS.get('effort', '');
 const DEFAULT_CHAT_CONTEXT_LIMIT = 200_000;
@@ -13024,6 +13089,8 @@ function resetSessionTokens() {
   latestContextLimit = 0;
   latestContextExact = false;
   latestNativeContextUsage = null;
+  lastCompactionTime = 0;
+  lastCompactionPostTokens = 0;
   const cached = sessionId ? nativeContextUsageBySession.get(sessionId) : null;
   if (cached) applyNativeContextUsage(cached, sessionId);
   renderSessionTokens();
@@ -13054,6 +13121,14 @@ function applyNativeContextUsage(data, targetSessionId = sessionId) {
   const sid = String(targetSessionId || '').trim();
   if (sid) nativeContextUsageBySession.set(sid, { ...data, maxTokens:max });
   if (sid && sid !== sessionId) return true;
+  // Skip stale pre-compaction value: if a compaction completed recently and the
+  // incoming total is much larger than the post-compact count, the API hasn't
+  // updated yet — don't overwrite the correct low value with the stale high one.
+  if (lastCompactionPostTokens > 0 && Date.now() - lastCompactionTime < 15000
+      && total > lastCompactionPostTokens * 3
+      && total - lastCompactionPostTokens > 5000) {
+    return false;
+  }
   latestContextTokens = total;
   latestContextLimit = max;
   latestContextExact = true;
@@ -13376,6 +13451,7 @@ function addErrorBlock(message) {
   else if (lower.includes('separator is not found') || lower.includes('chunk exceed') || lower.includes('frame')) diagnostic = ['流式数据帧过大或边界丢失','常见于旧 SDK、超大单段工具输出或附件。升级 SDK 后重试；超大输出应由工具写入文件再读取必要片段。','sdk'];
   else if (lower.includes('context') && (lower.includes('limit') || lower.includes('maximum') || lower.includes('too long'))) diagnostic = ['上下文接近或超过模型窗口','查看占用明细并执行 Claude Code 原生 compact，然后继续当前任务。','context'];
   else if (lower.includes('permission') || lower.includes('not allowed')) diagnostic = ['工具权限阻止了当前操作','检查当前运行模式和本会话授权规则；只对需要的工具放行。','permissions'];
+  else if (lower.includes('maximum number of turns') || lower.includes('max_turns') || lower.includes('max turns')) diagnostic = ['已达到单轮最大回合数','Claude 已完成当前预算内的工作。点击下方按钮可在同一会话中继续未完成的任务。','max-turns'];
   else if (lower.includes('auth') || lower.includes('unauthorized') || lower.includes('login')) diagnostic = ['Claude 认证不可用','确认运行服务的本机 Claude Code 认证仍有效，然后重试。','auth'];
   if (!diagnostic) return el;
   const card = document.createElement('section');
@@ -13389,6 +13465,10 @@ function addErrorBlock(message) {
     addAction('打开 SDK 设置', () => { openModal(settingsModal); refreshAgentSdkStatus(false); });
   }
   if (diagnostic[2] === 'permissions') addAction('查看授权规则', openPermissionRulesModal);
+  if (diagnostic[2] === 'max-turns') {
+    const capturedSessionId = sessionId;
+    addAction('继续执行', () => { send('请继续完成上次未完成的任务', { sessionId: capturedSessionId }); });
+  }
   addAction('复制错误', () => navigator.clipboard?.writeText(raw));
   if (sessionId && lastUserIndex >= 0 && diagnostic[2] !== 'sdk-idle') {
     addAction('重试这一轮', () => retryTurnWithCurrentPermissions(sessionId,lastUserIndex));
@@ -13488,7 +13568,11 @@ async function renderPrewritePermissionPreview(card, toolName, input, targetSess
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ tool_name:toolName, input }),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    if (!response.ok) {
+      const detail = data.detail;
+      const msg = typeof detail === 'string' ? detail : (detail ? JSON.stringify(detail) : `HTTP ${response.status}`);
+      throw new Error(msg);
+    }
     if (!data.supported) {
       preview.innerHTML = `<div class="cw-prewrite-head"><span>写入前检查</span><span>无法生成 Diff</span></div><div class="cw-prewrite-note">${escapeHtml(data.reason || '当前工具不支持预览')}</div>`;
       return;
@@ -14733,7 +14817,11 @@ function handleEvent(obj, container, options = {}) {
     const compact = obj.compact_metadata || {};
     const before = Number(compact.pre_tokens || 0);
     const after = Number(compact.post_tokens || 0);
-    if (after > 0) latestContextTokens = after;
+    if (after > 0) {
+      latestContextTokens = after;
+      lastCompactionTime = Date.now();
+      lastCompactionPostTokens = after;
+    }
     renderSessionTokens();
     updateTokenCount();
     if (!replay && (before > 0 || after > 0)) {
@@ -15410,6 +15498,7 @@ function clearPendingImages() {
   pendingImages = [];
   pendingImageKeys.clear();
   activeImageUploadKeys.clear();
+  activeImageUploadPromises.clear();
   renderAttachments();
 }
 
@@ -16078,19 +16167,28 @@ async function runNativeCompact(targetSessionId = sessionId) {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
     const compact = data.compact || {};
+    const after = Number(compact.post_tokens || 0);
+    // Always arm the stale-value guard when we have post_tokens, regardless of whether
+    // applyNativeContextUsage succeeded (compact_boundary event may arrive late or not at all).
+    if (after > 0 && sessionId === targetSessionId) {
+      lastCompactionTime = Date.now();
+      lastCompactionPostTokens = after;
+    }
     if (!applyNativeContextUsage(data.context_usage || {}, targetSessionId) && sessionId === targetSessionId) {
-      const after = Number(compact.post_tokens || 0);
-      if (after > 0) latestContextTokens = after;
+      if (after > 0) {
+        latestContextTokens = after;
+      }
       renderSessionTokens();
       updateTokenCount();
     }
     const before = Number(compact.pre_tokens || 0);
-    const after = Number(compact.post_tokens || data.context_usage?.totalTokens || 0);
+    const afterDisplay = after || Number(data.context_usage?.totalTokens || 0);
     if (sessionId === targetSessionId) {
-      addSystemInfo(before || after
-        ? `Claude Code 原生压缩 · ${_fmtTokens(before)} → ${_fmtTokens(after)}`
+      addSystemInfo(before || afterDisplay
+        ? `Claude Code 原生压缩 · ${_fmtTokens(before)} → ${_fmtTokens(afterDisplay)}`
         : 'Claude Code 原生压缩完成');
-      if (!data.context_usage || !Object.keys(data.context_usage).length) scheduleNativeContextUsageRefresh(0);
+      // Only refresh from API if we have no post_tokens (avoid stale value overwriting correct count)
+      if (!afterDisplay) scheduleNativeContextUsageRefresh(0);
     }
     return { ok: true, data };
   } catch (error) {
@@ -16839,6 +16937,7 @@ async function captureCodeComposerEntry(text, owner, slashPayload = null, compos
   };
   if (ownerStillActive) {
     clearPendingImages();
+    sessionAttachmentSnapshots.delete(sessionId);
     clearUrlContext();
     clearDocs();
     clearDraft();
@@ -17395,6 +17494,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     }
     if (!composerSnapshot) {
       clearPendingImages();
+      sessionAttachmentSnapshots.delete(sessionId);
       clearDraft();
       clearUrlContext();
       clearDocs();
@@ -17444,10 +17544,11 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let doneEvent = null;
 
   const perm = buildPermissionPayload();
-  const cwd = Object.prototype.hasOwnProperty.call(options, 'cwd')
-    ? options.cwd
-    : mobileCwdOrStop();
-  if (cwd === null) {
+  // Only mobileCwdOrStop() returning null means "validation failed, abort".
+  // An explicit cwd: null from the caller is normal for chat mode.
+  const cwdExplicit = Object.prototype.hasOwnProperty.call(options, 'cwd');
+  const cwd = cwdExplicit ? options.cwd : mobileCwdOrStop();
+  if (!cwdExplicit && cwd === null) {
     hideThinking(container, { force: true });
     sendBtn.disabled = false;
     clearCodeSessionRun(turnRun);
@@ -17604,7 +17705,9 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
             const result = handleEvent(obj, asstContainer, { queueOwner });
             if (result) asstContainer = result;
           } else if (targetSessionState) {
-            const isCritical = obj.type === 'permission_request' || obj.type === 'result' || obj.type === 'error' || obj.type === 'permission_error';
+            const isCritical = obj.type === 'permission_request' || obj.type === 'result' || obj.type === 'error' || obj.type === 'permission_error'
+              || (obj.type === 'system' && obj.subtype === 'task_notification')
+              || (obj.type === 'user' && Array.isArray((obj.message || {}).content) && obj.message.content.some(b => b && b.type === 'tool_result'));
             if (targetSessionState.pendingEvents.length >= SESSION_PENDING_EVENTS_MAX) {
               targetSessionState.pendingOverflow = true;
               if (isCritical) targetSessionState.pendingEvents.push(obj);
@@ -17725,7 +17828,10 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     updateSidebarRunningIndicators();
     if (turnIsCode) {
       syncActiveCodeRunControls();
-    } else if (turnViewIsActive()) {
+    } else if (conversationViewEpoch === turnViewEpoch && !codeMode) {
+      // Re-enable sendBtn for chat turns. Can't use turnViewIsActive() here because
+      // turnSessionId starts as null for new sessions and stays null even after the
+      // meta event sets sessionId — causing turnViewIsActive() to wrongly return false.
       sendBtn.disabled = agentLoopRunning || contextCompactionRunning;
       if (currentController === turnController) {
         stopBtn.classList.add('hidden');
@@ -18119,13 +18225,52 @@ function currentCwdKey() {
   return codeProjectKey(cwdInput?.value || '');
 }
 
-function renderCodeSessionRow(s) {
+function sessionTimeGroup(ts) {
+  if (!ts) return 4;
+  const d = new Date(ts * 1000), now = new Date();
+  const diffDays = (now - d) / 86400000;
+  if (d.toDateString() === now.toDateString()) return 0;
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 1;
+  if (diffDays < 7) return 2;
+  return 3;
+}
+
+const SESSION_TIME_GROUP_LABELS = ['今天', '昨天', '本周', '更早', '未知'];
+
+function sortSessionsWithRunningFirst(sessions) {
+  return [...sessions].sort((a, b) => {
+    const aRunning = !!(sessionStates.get(a.id)?.controller);
+    const bRunning = !!(sessionStates.get(b.id)?.controller);
+    if (aRunning !== bRunning) return aRunning ? -1 : 1;
+    return (b.updated_at || 0) - (a.updated_at || 0);
+  });
+}
+
+function renderCodeSessionRows(sessions) {
+  const sorted = sortSessionsWithRunningFirst(sessions);
+  let lastGroup = -1;
+  return sorted.map(s => {
+    const g = sessionTimeGroup(s.updated_at);
+    const isRunning = !!(sessionStates.get(s.id)?.controller);
+    let divider = '';
+    if (!isRunning && g !== lastGroup) {
+      lastGroup = g;
+      divider = `<div class="cw-time-divider">${SESSION_TIME_GROUP_LABELS[g]}</div>`;
+    }
+    return divider + renderCodeSessionRow(s, isRunning);
+  }).join('');
+}
+
+function renderCodeSessionRow(s, isRunning) {
   const title = escapeHtml(s.title || '新会话');
   const id = escapeHtml(s.id);
+  const runningDot = isRunning ? '<span class="running-indicator"></span>' : '';
   return `
     <div class="cw-project-session-shell">
       <button type="button" class="cw-project-session ${s.id === sessionId ? 'active' : ''}" data-id="${id}" title="${title}">
         <span class="cw-session-title truncate">${title}</span>
+        ${runningDot}
         <span class="cw-session-time">${escapeHtml(formatTime(s.updated_at))}</span>
       </button>
       <button type="button" class="cw-session-menu-btn" data-session-menu="${id}" aria-label="会话操作" aria-expanded="false">
@@ -18289,7 +18434,7 @@ function renderProjectGroup(group, options = {}) {
         </span>
       </button>
       <div class="cw-project-session-list ${collapsed ? 'hidden' : ''}">
-        ${visible.length ? visible.map(renderCodeSessionRow).join('') : `<div class="px-2 py-2 text-[12px]" style="color:var(--text-subtle);">${emptyText}</div>`}
+        ${visible.length ? renderCodeSessionRows(visible) : `<div class="px-2 py-2 text-[12px]" style="color:var(--text-subtle);">${emptyText}</div>`}
         ${hiddenCount > 0 || expanded && sessions.length > limit ? `<button type="button" class="cw-show-more" data-project-toggle="${escapeHtml(key)}">${expanded ? '收起' : `展开 ${hiddenCount} 条`}</button>` : ''}
       </div>
     </div>
@@ -18306,7 +18451,7 @@ function renderCodeGeneralChatSection(sessions = []) {
     <section class="cw-code-chat-section">
       <div class="cw-sidebar-section-title">对话</div>
       <div class="cw-general-session-list">
-        ${visible.length ? visible.map(renderCodeSessionRow).join('') : '<div class="px-2 py-2 text-[12px]" style="color:var(--text-subtle);">暂无普通对话</div>'}
+        ${visible.length ? renderCodeSessionRows(visible) : '<div class="px-2 py-2 text-[12px]" style="color:var(--text-subtle);">暂无普通对话</div>'}
         ${hiddenCount > 0 ? `<button type="button" class="cw-general-more" data-general-more>… 查看更多 ${nextCount} 条 · 剩余 ${hiddenCount}</button>` : ''}
       </div>
     </section>
@@ -18356,7 +18501,8 @@ function renderCodeProjectSessionList(list) {
   sessionItems.querySelectorAll('.cw-project-session').forEach(btn => {
     btn.addEventListener('click', () => {
       const target = (list || []).find(item => item.id === btn.dataset.id);
-      openSessionInWorkspace(target);
+      clearTimeout(btn._switchTimer);
+      btn._switchTimer = setTimeout(() => openSessionInWorkspace(target), 150);
     });
   });
   bindSessionMenuToggles(sessionItems);
@@ -18453,7 +18599,9 @@ async function refreshSessions() {
     sessionItems.querySelectorAll('.session-item').forEach(el => {
       el.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
-        loadSession(el.dataset.id);
+        const id = el.dataset.id;
+        clearTimeout(el._switchTimer);
+        el._switchTimer = setTimeout(() => loadSession(id), 150);
       });
     });
     bindSessionMenuToggles(sessionItems);
@@ -18580,6 +18728,10 @@ function highlightActiveSession() {
 
 async function loadSession(id, options = {}) {
   const requestId = ++sessionLoadRequestId;
+  // Abort any in-flight session fetch from a previous loadSession call
+  if (sessionLoadAbortController) sessionLoadAbortController.abort();
+  const myAbortController = new AbortController();
+  sessionLoadAbortController = myAbortController;
   const expectedWorkspaceMode = options.expectedWorkspaceMode || (codeMode ? 'code' : 'chat');
   const expectedCodeMode = expectedWorkspaceMode === 'code';
   if (!options.historyExpansion) conversationViewEpoch += 1;
@@ -18592,7 +18744,7 @@ async function loadSession(id, options = {}) {
     stopNativeTurnRecovery();
     hidePicker();
     const historyQuery = historyTurns ? `?history_turns=${historyTurns}` : '';
-    const r = await fetch('/api/sessions/' + id + historyQuery);
+    const r = await fetch('/api/sessions/' + id + historyQuery, { signal: myAbortController.signal });
     if (!r.ok) return false;
     const data = await r.json();
     const loadedWorkspaceMode = data.workspace_mode === 'code' ? 'code' : 'chat';
@@ -18627,6 +18779,19 @@ async function loadSession(id, options = {}) {
     resetToolUseRuntimeState();
     hideTodoPanel();
     clearArtifacts();
+    // Save current session's attachments before switching, restore new session's
+    if (prevSessionIdSnap) {
+      sessionAttachmentSnapshots.set(prevSessionIdSnap, { images: [...pendingImages], keys: new Set(pendingImageKeys), activeKeys: new Set(activeImageUploadKeys) });
+    }
+    clearPendingImages();
+    const savedAttachments = sessionAttachmentSnapshots.get(data.id);
+    if (savedAttachments && savedAttachments.images.length > 0) {
+      pendingImages = savedAttachments.images;
+      pendingImageKeys = new Set(savedAttachments.keys);
+      activeImageUploadKeys = new Set(savedAttachments.activeKeys || []);
+      renderAttachments();
+    }
+    clearDocs();
     currentUserIndex = Number(data.user_offset || 0);
     lastUserIndex = currentUserIndex - 1;
     resetSessionTokens();
@@ -18663,64 +18828,74 @@ async function loadSession(id, options = {}) {
 
     const hasDomCache = codeMode && targetState.dom && !options.historyExpansion;
     if (hasDomCache) {
-      chatInner.innerHTML = '';
-      chatInner.appendChild(targetState.dom);
-      targetState.dom = null;
-      touchSessionDomCache(data.id);
-      if (targetState.pendingEvents.length > 0) {
-        let asstContainer = chatInner.querySelector('.asst-wrap:last-child > div.flex-1') || null;
-        targetState.pendingEvents.forEach(ev => {
-          const c = handleEvent(ev, asstContainer, { replay: false });
-          if (c) asstContainer = c;
-        });
-        targetState.pendingEvents = [];
+      observerSuppressed++;
+      try {
+        chatInner.innerHTML = '';
+        chatInner.appendChild(targetState.dom);
+        targetState.dom = null;
+        touchSessionDomCache(data.id);
+        if (targetState.pendingEvents.length > 0) {
+          let asstContainer = chatInner.querySelector('.asst-wrap:last-child > div.flex-1') || null;
+          targetState.pendingEvents.forEach(ev => {
+            const c = handleEvent(ev, asstContainer, { replay: false });
+            if (c) asstContainer = c;
+          });
+          targetState.pendingEvents = [];
+        }
+      } finally {
+        observerSuppressed--;
       }
+      syncEmptyShellState();
       recoveryContainer = chatInner.querySelector('.asst-wrap:last-child > div.flex-1') || null;
       targetState.needsPermission = false;
       restoreDraft();
       refreshGitStatus();
-      syncEmptyShellState();
       forceScrollBottom();
     } else {
-      chatInner.innerHTML = '';
-      restoreDraft();
-      refreshGitStatus();
-      syncEmptyShellState();
+      observerSuppressed++;
+      try {
+        chatInner.innerHTML = '';
+        restoreDraft();
+        refreshGitStatus();
 
-      if (data.has_more) {
-        const loader = document.createElement('div');
-        loader.className = 'cw-history-loader';
-        loader.innerHTML = `<button type="button">加载更早消息 · 当前显示最近 ${historyTurns} 轮</button>`;
-        loader.querySelector('button').addEventListener('click', () => {
-          sessionHistoryTurns.set(data.id, Math.min(500, historyTurns + DEFAULT_HISTORY_TURNS));
-          loadSession(data.id, { historyExpansion: true });
-        });
-        chatInner.appendChild(loader);
-      }
-      let asstContainer = null;
-      const eventOffset = Number(data.event_offset || 0);
-      data.events.forEach((ev, localEventIndex) => {
-        const eventIndex = eventOffset + localEventIndex;
-        if (ev.type === 'user_input') {
-          addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '', compacted: !!ev.compacted, eventIndex });
-          asstContainer = null;
-        } else if (ev.type === 'assistant' || ev.type === 'user') {
-          const c = handleEvent(ev, asstContainer, { replay: true, eventIndex });
-          if (c) asstContainer = c;
-        } else {
-          handleEvent(ev, asstContainer, { replay: true, eventIndex });
+        if (data.has_more) {
+          const loader = document.createElement('div');
+          loader.className = 'cw-history-loader';
+          loader.innerHTML = `<button type="button">加载更早消息 · 当前显示最近 ${historyTurns} 轮</button>`;
+          loader.querySelector('button').addEventListener('click', () => {
+            sessionHistoryTurns.set(data.id, Math.min(500, historyTurns + DEFAULT_HISTORY_TURNS));
+            loadSession(data.id, { historyExpansion: true });
+          });
+          chatInner.appendChild(loader);
         }
-      });
-      if (!data.events.length) chatInner.appendChild(welcome);
-      recoveryContainer = asstContainer;
-      if (targetState.pendingEvents.length > 0) {
-        let lastContainer = chatInner.querySelector('.asst-wrap:last-child > div.flex-1') || null;
-        targetState.pendingEvents.forEach(ev => {
-          const c = handleEvent(ev, lastContainer, { replay: false });
-          if (c) lastContainer = c;
+        let asstContainer = null;
+        const eventOffset = Number(data.event_offset || 0);
+        data.events.forEach((ev, localEventIndex) => {
+          const eventIndex = eventOffset + localEventIndex;
+          if (ev.type === 'user_input') {
+            addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '', compacted: !!ev.compacted, eventIndex });
+            asstContainer = null;
+          } else if (ev.type === 'assistant' || ev.type === 'user') {
+            const c = handleEvent(ev, asstContainer, { replay: true, eventIndex });
+            if (c) asstContainer = c;
+          } else {
+            handleEvent(ev, asstContainer, { replay: true, eventIndex });
+          }
         });
-        targetState.pendingEvents = [];
+        if (!data.events.length) chatInner.appendChild(welcome);
+        recoveryContainer = asstContainer;
+        if (targetState.pendingEvents.length > 0) {
+          let lastContainer = chatInner.querySelector('.asst-wrap:last-child > div.flex-1') || null;
+          targetState.pendingEvents.forEach(ev => {
+            const c = handleEvent(ev, lastContainer, { replay: false });
+            if (c) lastContainer = c;
+          });
+          targetState.pendingEvents = [];
+        }
+      } finally {
+        observerSuppressed--;
       }
+      syncEmptyShellState();
       targetState.needsPermission = false;
       if (options.historyExpansion) {
         requestAnimationFrame(() => { chatEl.scrollTop = Math.max(0, chatEl.scrollHeight - previousHeight + previousTop); });
@@ -18747,6 +18922,7 @@ async function loadSession(id, options = {}) {
     }
     return true;
   } catch (e) {
+    if (e.name === 'AbortError') return false;
     console.warn(e);
     return false;
   }
@@ -21676,7 +21852,7 @@ function updateSettingsLabel() {
   const label = $('cwComposerSettingsLabel');
   const modelValue = $('cwSettingsModelValue');
   const effortValue = $('cwSettingsEffortValue');
-  const modelNames = { '': '默认模型', opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' };
+  const modelNames = { '': '默认模型', opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku', fable: 'Fable' };
   const effortNames = { low: '低', medium: '中', high: '高', max: '极高' };
   const modelText = modelNames[selectedModel] || selectedModel || '默认模型';
   if (label) label.textContent = modelText;
@@ -24394,7 +24570,9 @@ if (sidebar) {
 }
 
 if (chatInner && window.MutationObserver) {
-  new MutationObserver(syncEmptyShellState).observe(chatInner, { childList: true });
+  new MutationObserver(() => {
+    if (observerSuppressed <= 0) syncEmptyShellState();
+  }).observe(chatInner, { childList: true });
 }
 
 headerMoreBtn.addEventListener('click', () => {

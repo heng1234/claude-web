@@ -7127,8 +7127,11 @@ def _agent_sdk_streaming_response(
         }
         try:
             yield f"data: {json.dumps(meta, ensure_ascii=False)}\n\n"
-            async for envelope in turn.events():
+            async for envelope in turn.events(idle_heartbeat=15.0):
                 envelope_type = envelope.get("type")
+                if envelope_type == "heartbeat":
+                    yield ": heartbeat\n\n"
+                    continue
                 if envelope_type == "done":
                     daemon_done = True
                     discovered = str(envelope.get("sessionId") or "").strip()
@@ -9107,7 +9110,7 @@ def _agent_sdk_context_model_hint(requested_model: Optional[str]) -> str:
         configured = str(settings.get("model") or "").strip()
     env = settings.get("env") if isinstance(settings.get("env"), dict) else {}
     lowered = configured.lower()
-    for family in ("opus", "sonnet", "haiku"):
+    for family in ("opus", "sonnet", "haiku", "fable"):
         prefix = f"ANTHROPIC_DEFAULT_{family.upper()}_MODEL"
         target = str(env.get(prefix) or "").strip()
         public_name = str(env.get(f"{prefix}_NAME") or "").strip()

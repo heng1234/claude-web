@@ -8284,6 +8284,10 @@
                       <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Haiku</span></span>
                       <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
                     </button>
+                    <button type="button" class="cw-mode-option" data-model="fable" role="menuitemradio" aria-checked="false">
+                      <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Fable</span></span>
+                      <svg class="cw-mode-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                    </button>
                   </span>
                   <span class="cw-settings-submenu hidden" data-settings-submenu="effort" role="menu" aria-label="选择推理强度">
                     <span class="cw-settings-submenu-title">推理强度</span>
@@ -10014,8 +10018,45 @@ function removeWelcome() {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+const TABLE_DELIMITER_ROW = /^\|(?:\s*:?-+:?\s*\|)+\s*$/;
+
+// Models often glue a GFM table onto surrounding prose, e.g.
+// "改成：|字段 | 当前 |" followed by "|---|---|". marked needs the header to
+// start its own block, so without repair the whole thing stays a paragraph.
 function repairTableNewlines(md) {
-  return md.replace(/(\|(?:\s*:?-+:?\s*\|)+)(\|)/g, '$1\n$2');
+  const source = String(md || '');
+  if (!source.includes('|')) return source;
+  const lines = source.split('\n');
+  const out = [];
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      inFence = !inFence;
+      out.push(line);
+      continue;
+    }
+    if (inFence) {
+      out.push(line);
+      continue;
+    }
+    // Un-glue a delimiter row that runs straight into the first body row.
+    let working = line.replace(/(\|(?:\s*:?-+:?\s*\|)+)(?=\|)/g, '$1\n');
+    // Prose glued to a header row: split only when the next line proves a table.
+    // Find the first pipe NOT inside an inline code span.
+    if (TABLE_DELIMITER_ROW.test((lines[i + 1] || '').trim())) {
+      const masked = working.replace(/`[^`]*`/g, m => ' '.repeat(m.length));
+      const firstPipe = masked.indexOf('|');
+      if (firstPipe > 0) {
+        const prose = working.slice(0, firstPipe).trimEnd();
+        if (prose && !prose.endsWith('|')) {
+          working = `${prose}\n\n${working.slice(firstPipe)}`;
+        }
+      }
+    }
+    out.push(working);
+  }
+  return out.join('\n');
 }
 
 function renderMarkdown(text) {
@@ -17664,7 +17705,9 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
             const result = handleEvent(obj, asstContainer, { queueOwner });
             if (result) asstContainer = result;
           } else if (targetSessionState) {
-            const isCritical = obj.type === 'permission_request' || obj.type === 'result' || obj.type === 'error' || obj.type === 'permission_error';
+            const isCritical = obj.type === 'permission_request' || obj.type === 'result' || obj.type === 'error' || obj.type === 'permission_error'
+              || (obj.type === 'system' && obj.subtype === 'task_notification')
+              || (obj.type === 'user' && Array.isArray((obj.message || {}).content) && obj.message.content.some(b => b && b.type === 'tool_result'));
             if (targetSessionState.pendingEvents.length >= SESSION_PENDING_EVENTS_MAX) {
               targetSessionState.pendingOverflow = true;
               if (isCritical) targetSessionState.pendingEvents.push(obj);
@@ -21809,7 +21852,7 @@ function updateSettingsLabel() {
   const label = $('cwComposerSettingsLabel');
   const modelValue = $('cwSettingsModelValue');
   const effortValue = $('cwSettingsEffortValue');
-  const modelNames = { '': '默认模型', opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' };
+  const modelNames = { '': '默认模型', opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku', fable: 'Fable' };
   const effortNames = { low: '低', medium: '中', high: '高', max: '极高' };
   const modelText = modelNames[selectedModel] || selectedModel || '默认模型';
   if (label) label.textContent = modelText;

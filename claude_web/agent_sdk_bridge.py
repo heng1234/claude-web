@@ -68,9 +68,23 @@ class AgentSdkTurn:
     session_key: str
     queue: "asyncio.Queue[dict]"
 
-    async def events(self) -> AsyncIterator[dict]:
+    async def events(self, idle_heartbeat: float = 0.0) -> AsyncIterator[dict]:
+        """Yield daemon envelopes, optionally emitting idle heartbeats.
+
+        A long subagent can run for minutes without producing any event. With
+        idle_heartbeat set, a {"type": "heartbeat"} envelope is yielded whenever
+        the queue stays idle that long, so callers can keep a client connection
+        from being reaped by an idle timeout.
+        """
         while True:
-            item = await self.queue.get()
+            if idle_heartbeat > 0:
+                try:
+                    item = await asyncio.wait_for(self.queue.get(), timeout=idle_heartbeat)
+                except asyncio.TimeoutError:
+                    yield {"type": "heartbeat"}
+                    continue
+            else:
+                item = await self.queue.get()
             yield item
             if item.get("type") == "done":
                 return
