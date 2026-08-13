@@ -14647,7 +14647,7 @@ function nativeResultErrorMessage(result) {
   const message = details.join('\n')
     || String(result.error || result.message || '').trim()
     || `Claude Agent SDK 执行失败${safeSubtype ? `（${safeSubtype}）` : ''}`;
-  if (/connection closed mid-response/i.test(message)) {
+  if (/connection (?:closed|lost|ended) mid-response/i.test(message)) {
     return '连接在响应中途断开，以上内容可能不完整；系统正在自动恢复当前会话连接。';
   }
   return message;
