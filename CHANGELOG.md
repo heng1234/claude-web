@@ -2,7 +2,17 @@
 
 所有重要变更按版本记录。应用内的 What's New 和帮助面板使用 `static/changelog.json`，这里是给 GitHub / Git diff 浏览的 Markdown 版本。
 
-当前稳定版本：`2.1.2`。
+当前稳定版本：`2.2.0`。
+
+## v2.2.0 - 2026-08-13
+
+- **FIX** 异步子代理执行完毕后主进程感知不到：SDK bridge 事件队列从 1024 扩到 4096，溢出时优先丢弃可重放的 stream_event 而非终止整轮，子代理的 tool_result 完成信号不再丢失
+- **FIX** 长时间无输出的子代理被空闲超时回收：SSE 流每 15 秒发送心跳注释帧，防止浏览器或中间代理断开连接
+- **FIX** 子代理完成信号自愈：子代理自身的终端 result 事件直接标记卡片完成，即使上层 tool_result 丢失也不会永久停在运行状态
+- **FIX** 切换会话时子代理完成状态丢失：pendingEvents 溢出白名单补入 task_notification 与 tool_result
+- **FIX** Markdown 表格未格式化：模型把表头粘在正文后面时自动补换行，拆分时跳过行内代码中的竖线并保留代码块
+- **FIX** 连接中断提示显示英文原文：前端正则覆盖 closed/lost/ended 三种写法，改为中文提示
+- **FEATURE** 模型选择器新增 Fable，配合 `ANTHROPIC_DEFAULT_FABLE_MODEL` 环境变量可切换自定义模型别名
 
 ## Unreleased
 
