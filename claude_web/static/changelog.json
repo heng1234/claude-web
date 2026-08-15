@@ -2,6 +2,60 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.2.1",
+      "date": "2026-08-15",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "断线恢复扩展到普通聊天和 CLI 运行时：之前只有 Code 模式能从历史补发缺失事件，Chat / CLI 断线后直接报「连接中断，响应可能不完整」；现在所有模式都会从 JSONL 历史恢复本轮内容"
+        },
+        {
+          "type": "fix",
+          "text": "daemon 异常不再连带杀死全部会话：新增 uncaughtException / unhandledRejection 兜底，拦截 SDK 内部的 process.exit()，并通过 PPID 监控在主进程崩溃后自动清理孤儿进程"
+        },
+        {
+          "type": "fix",
+          "text": "修复停止生成时的竞态：abandon_turn 改为先 interrupt 再 drain 再清空队列，写入路径新增 interruptRequested 标记，避免中断与写入互相打断"
+        },
+        {
+          "type": "fix",
+          "text": "长会话卡顿修复：事件读写改为异步，项目文件树搜索的目录遍历移出事件循环，大项目搜索不再阻塞其他请求"
+        },
+        {
+          "type": "fix",
+          "text": "图片上传自动压缩：长边超过 1568px 等比缩放，大 PNG 转 JPEG（q=85），小 PNG 保持无损，压缩后反而更大则跳过；避免会话累积图片触发 32MB 请求上限"
+        },
+        {
+          "type": "fix",
+          "text": "触发 32MB 上限时显示中文提示并说明原生压缩不会移除已发送的图片，不再显示英文 Request too large 原文"
+        },
+        {
+          "type": "fix",
+          "text": "任务未完成提示：本轮正常结束但 TodoWrite 仍有未完成项时，显示「继续执行」诊断卡片，避免以为任务已经做完"
+        },
+        {
+          "type": "security",
+          "text": "CSRF Origin 校验现在对移动访问模式真正生效（此前为死代码路径）"
+        },
+        {
+          "type": "security",
+          "text": "Mermaid 图表渲染的 securityLevel 从 loose 改为 strict，阻断通过图表定义注入脚本的 XSS 路径"
+        },
+        {
+          "type": "security",
+          "text": "访问码限速改用直连 peer IP 并增加全局总限速，无法再通过伪造 X-Forwarded-For 绕过"
+        },
+        {
+          "type": "ui",
+          "text": "首条消息冷启动消除：daemon 新增预热连接；滚动到底部改用 requestAnimationFrame 节流，长会话滚动更顺滑"
+        },
+        {
+          "type": "fix",
+          "text": "新增后台定期清理（任务记录 / 缓存 / 登录失败计数），并为会话工作目录建立索引，长期运行的实例内存和查询开销更稳定"
+        }
+      ]
+    },
+    {
       "version": "2.2.0",
       "date": "2026-08-13",
       "highlights": [

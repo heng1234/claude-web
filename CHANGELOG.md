@@ -2,7 +2,22 @@
 
 所有重要变更按版本记录。应用内的 What's New 和帮助面板使用 `static/changelog.json`，这里是给 GitHub / Git diff 浏览的 Markdown 版本。
 
-当前稳定版本：`2.2.0`。
+当前稳定版本：`2.2.1`。
+
+## v2.2.1 - 2026-08-15
+
+- **FIX** SSE 断线恢复扩展覆盖 Chat 模式和 CLI 运行时：移除 `startNativeTurnRecovery` 的 codeMode / runtime 门控，断线后所有模式均可从 JSONL 历史补发缺失事件，不再直接报"连接中断，响应可能不完整"
+- **FIX** daemon 鲁棒性加固：新增 uncaughtException / unhandledRejection 兜底防止 SDK 异常杀死全部会话，拦截内部 `process.exit()`，PPID 孤儿监控在 Python 主进程崩溃后自动清理
+- **FIX** 修复 abandon_turn 与 interrupt/write 竞态：先 interrupt 再 drain 再清 queue，新增 interruptRequested flag 与 reader InvalidStateError 防护
+- **FIX** 事件循环阻塞：新增 async_load_events / async_append_event，`_code_tree_search` 的 os.walk 移入 run_in_executor
+- **FIX** 图片上传自动压缩：长边 >1568px 等比缩放，大 PNG 转 JPEG q=85，小 PNG 保持无损，结果比原图大则跳过，避免会话累积图片触发 32MB 限制
+- **FIX** 后端新增 Request too large 错误检测并附到终端 result 事件，前端显示中文提示说明原生压缩不移除图片
+- **FIX** turn 成功结束但 TodoWrite 仍有未完成任务时显示"继续执行"诊断卡片
+- **SECURITY** CSRF Origin 校验对移动访问模式生效（修复死代码路径）
+- **SECURITY** mermaid securityLevel 从 loose 改为 strict，防止 XSS
+- **SECURITY** OTP 限速改用直连 peer IP 加全局总限速，防止 XFF 伪造绕过
+- **PERF** daemon 新增 preconnect 预热命令消除首条消息冷启动；scrollBottom 改用 requestAnimationFrame 节流
+- **PERF** 新增 `_periodic_housekeeping` 后台清理（jobs / cache / login failures），启动时创建 sessions.cwd 索引
 
 ## v2.2.0 - 2026-08-13
 
