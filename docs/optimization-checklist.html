@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>claude-web 优化清单</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;background:#fff;color:#1f2328;line-height:1.65;padding:2.5rem 2rem;}
+.container{max-width:1100px;margin:0 auto;}
+h1{font-size:1.7rem;font-weight:700;margin-bottom:0.3rem;}
+.subtitle{color:#59636e;font-size:0.88rem;margin-bottom:2rem;}
+h2{font-size:1.2rem;font-weight:650;margin:2.5rem 0 0.5rem;padding-bottom:0.4rem;border-bottom:1px solid #d1d9e0;}
+.summary{background:#f6f8fa;border-radius:8px;padding:1.1rem 1.3rem;margin-bottom:2rem;font-size:0.9rem;}
+.summary b{color:#0969da;}
+
+table{width:100%;border-collapse:collapse;font-size:0.84rem;margin-bottom:1.5rem;}
+thead th{background:#f6f8fa;padding:0.65rem 0.75rem;text-align:left;font-weight:650;border:1px solid #d1d9e0;}
+tbody td{padding:0.6rem 0.75rem;border:1px solid #d1d9e0;vertical-align:top;}
+tbody tr:hover{background:#f6f8fa;}
+.sev{display:inline-block;padding:1px 7px;border-radius:10px;font-size:0.72rem;font-weight:600;white-space:nowrap;}
+.sev-c{background:#ffebe9;color:#cf222e;}
+.sev-h{background:#fff8c5;color:#7d4e00;}
+.sev-m{background:#ddf4ff;color:#0550ae;}
+.sev-l{background:#f6f8fa;color:#59636e;}
+.loc{font-family:ui-monospace,SFMono-Regular,monospace;font-size:0.78rem;color:#59636e;}
+.fix{font-size:0.82rem;color:#1a7f37;font-weight:500;}
+.cat-row td{background:#eaeef2;font-weight:700;font-size:0.72rem;color:#59636e;text-transform:uppercase;letter-spacing:0.04em;}
+.footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid #d1d9e0;font-size:0.75rem;color:#818b98;}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>claude-web 优化清单</h1>
+<p class="subtitle">基于代码审计（daemon、server、frontend、安全），按严重度排序，标注位置和修复方案</p>
+
+<div class="summary">
+  <b>统计：</b>共 28 项问题。CRITICAL 4 项 / HIGH 7 项 / MEDIUM 10 项 / LOW 7 项<br>
+  <b>重点区域：</b>daemon 进程鲁棒性、server.py 事件循环阻塞、前端 DOM 无限增长、移动访问模式下的 CSRF<br>
+  <b>原则：</b>我们的架构（持久 Node 守护进程 + 8 并发 runtime + 4字节帧协议）比竞品好。问题在细节打磨。
+</div>
+
+<!-- DAEMON -->
+<h2>一、Node 守护进程 (daemon.mjs + agent_sdk_bridge.py)</h2>
+<table>
+<thead><tr><th style="width:60px;">严重度</th><th style="width:240px;">问题</th><th>位置</th><th>影响 / 用户感知</th><th>修复方案</th></tr></thead>
+<tbody>
+
+<tr class="cat-row"><td colspan="5">进程鲁棒性</td></tr>
+<tr>
+  <td><span class="sev sev-c">CRITICAL</span></td>
+  <td>无 uncaughtException / unhandledRejection 兜底</td>
+  <td class="loc">daemon.mjs 全文</td>
+  <td>SDK 任何未捕获异常直接杀死 daemon，所有 8 个活跃会话全挂</td>
+  <td class="fix">加 process.on('uncaughtException/unhandledRejection')：终止当前 turn + 写 error+done，daemon 继续存活</td>
+</tr>
+<tr>
+  <td><span class="sev sev-c">CRITICAL</span></td>
+  <td>无 process.exit() 拦截</td>
+  <td class="loc">daemon.mjs 全文</td>
+  <td>如果 SDK 内部或依赖包调 process.exit()，daemon 无预警死亡</td>
+  <td class="fix">覆盖 process.exit = (code) => { throw new DaemonExitInterrupt(code) }，在 handle() 外层 catch</td>
+</tr>
+<tr>
+  <td><span class="sev sev-h">HIGH</span></td>
+  <td>无 PPID 孤儿监控</td>
+  <td class="loc">daemon.mjs 全文</td>
+  <td>Python 被 kill -9 / OOM 后，daemon 变僵尸永不退出，占端口和内存</td>
+  <td class="fix">setInterval 每 5 秒检查 process.ppid，变为 1 或 ESRCH 就 graceful shutdown</td>
+</tr>
+
+<tr class="cat-row"><td colspan="5">并发与竞态</td></tr>
+<tr>
+  <td><span class="sev sev-c">CRITICAL</span></td>
+  <td>abandon_turn 先删 queue 再发 interrupt，done 帧被丢弃</td>
+  <td class="loc">agent_sdk_bridge.py:390-394</td>
+  <td>后续该 session 所有 turn 失败："A Code turn is already running"，持续 30 分钟直到 idle 回收</td>
+  <td class="fix">先发 interrupt → 等 done 到达（带超时）→ 再删 queue</td>
+</tr>
+<tr>
+  <td><span class="sev sev-c">CRITICAL</span></td>
+  <td>interrupt 和 readRuntime write() 竞态</td>
+  <td class="loc">daemon.mjs:417-448, 613</td>
+  <td>interrupt 返回 ok 但 turn 不出 done 帧，session 挂起</td>
+  <td class="fix">interrupt 时先设 aborted flag → readRuntime 循环检查 flag → 确保 done 一定发出</td>
+</tr>
+<tr>
+  <td><span class="sev sev-h">HIGH</span></td>
+  <td>preflightSend 和 handleSend 之间有时间窗口可被并发 send 穿越</td>
+  <td class="loc">daemon.mjs:586-604, 869</td>
+  <td>同 session 两个 turn 都收到 accepted，事件互串，session 损坏</td>
+  <td class="fix">将 preflightSend + accepted + handleSend 合为单个原子操作，在同一个 withRuntimeMutation 内完成</td>
+</tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>idle 扫描 disposeRuntime 未 await，旧 reader 可能写已被复用的 requestId</td>
+  <td class="loc">daemon.mjs:888-893</td>
+  <td>极低概率下新 turn 收到旧 runtime 的事件</td>
+  <td class="fix">await disposeRuntime 或在 dispose 前先 detach activeRequestId</td>
+</tr>
+
+<tr class="cat-row"><td colspan="5">资源泄漏</td></tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>permissionWaiters 在 queue overflow 时泄漏（30 分钟 timer）</td>
+  <td class="loc">daemon.mjs:269-270</td>
+  <td>内存缓慢增长 + 可能 double-resolve</td>
+  <td class="fix">queue overflow 时同步清理该 session 所有 pendingApprovals + permissionWaiters</td>
+</tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>_responses future 超时后 reader 调 set_result 抛 InvalidStateError 杀死整个 reader</td>
+  <td class="loc">agent_sdk_bridge.py:396-406, 280</td>
+  <td>极低概率但致命：reader 死后所有 session 无法收到事件</td>
+  <td class="fix">reader 内 set_result 包 try/except InvalidStateError</td>
+</tr>
+
+<tr class="cat-row"><td colspan="5">延迟优化</td></tr>
+<tr>
+  <td><span class="sev sev-h">HIGH</span></td>
+  <td>无 preconnect 预热，首条消息承受 2-5 秒 SDK 冷启动</td>
+  <td class="loc">daemon.mjs handle()</td>
+  <td>用户创建 Code 会话后发第一条消息要等很久</td>
+  <td class="fix">新增 method:'preconnect'，Python 在创建会话时即调用，提前创建 runtime</td>
+</tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>无 turn 间事件监听（perpetual reader）</td>
+  <td class="loc">daemon.mjs readRuntime()</td>
+  <td>子 agent 后台完成后用户无通知，要等下次交互才看到结果</td>
+  <td class="fix">turn 结束后保持 query.next() 循环，收到事件通过新消息类型 push 给 Python</td>
+</tr>
+<tr>
+  <td><span class="sev sev-l">LOW</span></td>
+  <td>shutdown 2 秒超时经常不够，graceful close 被跳过</td>
+  <td class="loc">agent_sdk_bridge.py:611-617</td>
+  <td>进程重启时 SDK 连接被粗暴断开</td>
+  <td class="fix">增大超时到 5 秒，或按 runtime 数量动态调整</td>
+</tr>
+</tbody>
+</table>
+
+<!-- SERVER -->
+<h2>二、后端 Server (server.py)</h2>
+<table>
+<thead><tr><th style="width:60px;">严重度</th><th style="width:240px;">问题</th><th>位置</th><th>影响 / 用户感知</th><th>修复方案</th></tr></thead>
+<tbody>
+
+<tr class="cat-row"><td colspan="5">事件循环阻塞（最高优先）</td></tr>
+<tr>
+  <td><span class="sev sev-h">HIGH</span></td>
+  <td>subprocess.run 阻塞事件循环最多 5 秒</td>
+  <td class="loc">server.py:362</td>
+  <td>首次 streaming 请求时所有并发 SSE 流和 HTTP 响应卡死 5 秒</td>
+  <td class="fix">改为 asyncio.to_thread(subprocess.run, ...) + 缓存结果（已有缓存逻辑但首次调用仍阻塞）</td>
+</tr>
+<tr>
+  <td><span class="sev sev-h">HIGH</span></td>
+  <td>append_event() 同步文件写 + SQLite insert，每个 SSE 事件都调</td>
+  <td class="loc">server.py:1560-1569</td>
+  <td>200 事件 = 200 次阻塞 I/O；SSE 流抖动，移动端感知明显</td>
+  <td class="fix">asyncio.to_thread() 包裹，或批量写入（攒 N 条后一次 flush）</td>
+</tr>
+<tr>
+  <td><span class="sev sev-h">HIGH</span></td>
+  <td>load_events() 同步读整个 JSONL 文件</td>
+  <td class="loc">server.py:1739-1753</td>
+  <td>长会话 JSONL 几十 MB，stop_chat / 会话恢复时阻塞事件循环秒级</td>
+  <td class="fix">await asyncio.to_thread(load_events, path)</td>
+</tr>
+<tr>
+  <td><span class="sev sev-h">HIGH</span></td>
+  <td>os.walk() 在 file-tree 端点中同步调用</td>
+  <td class="loc">server.py:9896, 9729</td>
+  <td>大型 repo（万级文件）扫描阻塞数百 ms，期间所有 SSE 停推</td>
+  <td class="fix">asyncio.to_thread() 包裹</td>
+</tr>
+
+<tr class="cat-row"><td colspan="5">内存泄漏</td></tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>_agent_loop_jobs 字典不自动清理</td>
+  <td class="loc">server.py:245</td>
+  <td>每个 job 持有 4000 条事件列表，长时间运行后内存持续增长</td>
+  <td class="fix">后台定时任务每 5 分钟调 _agent_loop_prune_jobs()</td>
+</tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>_agent_sdk_context_usage_cache 无上限</td>
+  <td class="loc">server.py:164</td>
+  <td>每 session 一条缓存，永不删除</td>
+  <td class="fix">改用 LRU (maxsize=500) 或定时清理</td>
+</tr>
+<tr>
+  <td><span class="sev sev-l">LOW</span></td>
+  <td>_mobile_login_failures 不清理唯一 IP</td>
+  <td class="loc">server.py:117</td>
+  <td>端口扫描场景下 dict 无限增长</td>
+  <td class="fix">后台 sweep，清理 >窗口期的条目</td>
+</tr>
+
+<tr class="cat-row"><td colspan="5">数据库</td></tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>sessions.cwd 无索引，全表扫描</td>
+  <td class="loc">server.py:5101</td>
+  <td>cwd picker 端点随会话增多越来越慢</td>
+  <td class="fix">CREATE INDEX idx_sessions_cwd ON sessions(cwd)</td>
+</tr>
+</tbody>
+</table>
+
+<!-- FRONTEND -->
+<h2>三、前端 (index.html)</h2>
+<table>
+<thead><tr><th style="width:60px;">严重度</th><th style="width:240px;">问题</th><th>位置</th><th>影响 / 用户感知</th><th>修复方案</th></tr></thead>
+<tbody>
+
+<tr>
+  <td><span class="sev sev-h">HIGH</span></td>
+  <td>DOM 节点无限增长，无虚拟化/裁剪</td>
+  <td class="loc">index.html:11056</td>
+  <td>长会话（1000+ 消息）页面逐渐卡顿，内存飙升</td>
+  <td class="fix">对超出视口的旧消息做 DOM detach（保留数据），或 IntersectionObserver 懒恢复</td>
+</tr>
+<tr>
+  <td><span class="sev sev-h">HIGH</span></td>
+  <td>每个流式 token 都触发 scrollTop = scrollHeight（强制同步布局）</td>
+  <td class="loc">index.html:10003, 15071</td>
+  <td>高速输出时 CPU 100%，页面卡顿掉帧</td>
+  <td class="fix">scrollBottom() 改用 requestAnimationFrame 节流，每帧最多一次</td>
+</tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>content_block_stop 时全量替换 innerHTML + 遍历 querySelectorAll</td>
+  <td class="loc">index.html:15106</td>
+  <td>超长消息（大代码块）停止时瞬间卡顿</td>
+  <td class="fix">可接受，但对超大块考虑增量替换或 Web Worker 中 parse</td>
+</tr>
+<tr>
+  <td><span class="sev sev-l">LOW</span></td>
+  <td>主题切换 mermaid.run() 重新渲染全部图表 O(n)</td>
+  <td class="loc">index.html:10837</td>
+  <td>有大量 mermaid 图时切换主题卡顿</td>
+  <td class="fix">只渲染可见区域的 mermaid，或 debounce</td>
+</tr>
+<tr>
+  <td><span class="sev sev-l">LOW</span></td>
+  <td>两个全局 setInterval 永不清除</td>
+  <td class="loc">index.html:25652-25653</td>
+  <td>轻量级，不影响体验</td>
+  <td class="fix">可忽略</td>
+</tr>
+</tbody>
+</table>
+
+<!-- SECURITY -->
+<h2>四、安全</h2>
+<table>
+<thead><tr><th style="width:60px;">严重度</th><th style="width:240px;">问题</th><th>位置</th><th>影响 / 用户感知</th><th>修复方案</th></tr></thead>
+<tbody>
+
+<tr>
+  <td><span class="sev sev-h">HIGH</span></td>
+  <td>CSRF 保护函数是死代码（第 4996 行直接 return）</td>
+  <td class="loc">server.py:4991-4996</td>
+  <td><b>移动访问模式开启时</b>，恶意页面可对 /api/chat、/api/exec-code 等发跨站请求</td>
+  <td class="fix">对非 GET 请求校验 Origin 或加 CSRF token（注释说明为何之前禁用：兼容反向代理）</td>
+</tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>mermaid securityLevel: 'loose' 允许 SVG 内执行 JS</td>
+  <td class="loc">index.html:9468, 10786</td>
+  <td>恶意 mermaid 代码块可执行任意 JS（XSS）</td>
+  <td class="fix">改为 securityLevel: 'strict'</td>
+</tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>/api/files cwd 参数无根路径限制（本地请求）</td>
+  <td class="loc">server.py:14329-14357</td>
+  <td>CSRF 场景下可列出 / 下任意目录</td>
+  <td class="fix">本地请求也限制在已注册项目路径内，或仅返回当前 session 的 cwd</td>
+</tr>
+<tr>
+  <td><span class="sev sev-m">MEDIUM</span></td>
+  <td>OTP 限速靠 IP，X-Forwarded-For 可伪造绕过</td>
+  <td class="loc">server.py:4743-4748, 4485-4491</td>
+  <td>反向代理后 OTP 可被暴力破解（6 位 = 100 万种）</td>
+  <td class="fix">不信任 XFF 做限速 key，改用直连 peer IP；或加全局尝试次数上限</td>
+</tr>
+<tr>
+  <td><span class="sev sev-l">LOW</span></td>
+  <td>Extension token 无 replay 保护</td>
+  <td class="loc">server.py:4982-4988</td>
+  <td>截获 token 后可永久重放。CORS 限制 chrome-extension:// origin 缓解了部分风险</td>
+  <td class="fix">可接受（localhost 工具）。若需加固：加 timestamp + nonce</td>
+</tr>
+<tr>
+  <td><span class="sev sev-l">LOW</span></td>
+  <td>/api/exec-code 无沙箱，移动访问已正确阻断</td>
+  <td class="loc">server.py:11751-11782</td>
+  <td>本地可执行任意代码（预期行为），移动端已阻断</td>
+  <td class="fix">当前可接受</td>
+</tr>
+</tbody>
+</table>
+
+<!-- PRIORITY -->
+<h2>五、建议修复顺序</h2>
+<table>
+<thead><tr><th>批次</th><th>范围</th><th>包含项</th><th>估时</th></tr></thead>
+<tbody>
+<tr>
+  <td><b>P0 立即</b></td>
+  <td>进程可靠性</td>
+  <td>uncaughtException 兜底 + process.exit 拦截 + PPID 监控 + abandon_turn 竞态修复</td>
+  <td>1 天</td>
+</tr>
+<tr>
+  <td><b>P1 本周</b></td>
+  <td>事件循环阻塞</td>
+  <td>subprocess.run → to_thread + append_event → to_thread + load_events → to_thread + os.walk → to_thread</td>
+  <td>1 天</td>
+</tr>
+<tr>
+  <td><b>P2 本周</b></td>
+  <td>安全</td>
+  <td>CSRF Origin 校验（移动模式）+ mermaid strict + OTP 限速修复</td>
+  <td>半天</td>
+</tr>
+<tr>
+  <td><b>P3 v2.3</b></td>
+  <td>延迟 / 体验</td>
+  <td>preconnect 预热 + scrollBottom rAF 节流 + SSE 断线重连 (seq)</td>
+  <td>2 天</td>
+</tr>
+<tr>
+  <td><b>P4 v2.3</b></td>
+  <td>内存 / 长期</td>
+  <td>DOM 裁剪 + _agent_loop_jobs 清理 + context_usage_cache LRU + sessions.cwd 索引</td>
+  <td>2 天</td>
+</tr>
+<tr>
+  <td><b>P5 远期</b></td>
+  <td>增强</td>
+  <td>perpetual reader + preflightSend 原子化 + permissionWaiters 清理</td>
+  <td>2 天</td>
+</tr>
+</tbody>
+</table>
+
+<div class="footer">
+  生成于 2026-08-15 &nbsp;|&nbsp; 审计范围：daemon.mjs (902行) + agent_sdk_bridge.py (617行) + server.py (15119行) + index.html (26009行)<br>
+  参考对比：jetbrains-cc-gui 的 daemon 实现（上述 P0 中三项加固直接参考其做法）
+</div>
+
+</div>
+</body>
+</html>

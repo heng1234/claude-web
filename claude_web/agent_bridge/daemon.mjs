@@ -16,6 +16,7 @@ const ALLOW_UNSUPPORTED_SDK = process.env.CLAUDE_WEB_ALLOW_UNSUPPORTED_SDK === '
 const IDLE_RUNTIME_MS = 30 * 60 * 1000;
 const MAX_RUNTIMES = 8;
 const BRIDGE_PROTOCOL_VERSION = 2;
+const ORPHAN_CHECK_MS = 5_000;
 const DEFAULT_MAX_FRAME_SIZE = 64 * 1024 * 1024;
 const configuredMaxFrameSize = Number.parseInt(process.env.CLAUDE_WEB_AGENT_BRIDGE_MAX_FRAME_SIZE || '', 10);
 const MAX_FRAME_SIZE = Number.isFinite(configuredMaxFrameSize)
@@ -426,12 +427,14 @@ async function readRuntime(runtime) {
       if (isTurnResult(message)) {
         await write({ id: requestId, type: 'done', success: !message.is_error, sessionId: runtime.sessionId });
         runtime.activeRequestId = null;
+        runtime.interruptRequested = false;
       }
     }
     if (runtime.activeRequestId) {
       await write({ id: runtime.activeRequestId, type: 'error', message: 'Claude Agent SDK runtime ended unexpectedly' });
       await write({ id: runtime.activeRequestId, type: 'done', success: false, sessionId: runtime.sessionId });
       runtime.activeRequestId = null;
+      runtime.interruptRequested = false;
     }
   } catch (error) {
     const requestId = runtime.activeRequestId;
@@ -439,6 +442,7 @@ async function readRuntime(runtime) {
       await write({ id: requestId, type: 'error', message: errorText(error) });
       await write({ id: requestId, type: 'done', success: false, sessionId: runtime.sessionId });
       runtime.activeRequestId = null;
+      runtime.interruptRequested = false;
     }
     log(`runtime ${runtime.key} failed:`, errorText(error));
   } finally {
@@ -608,10 +612,31 @@ async function handleInterrupt(command) {
   const key = String(command.params?.sessionKey || '').trim();
   const runtime = runtimes.get(key);
   if (!runtime || !runtime.activeRequestId) throw new Error('No active Claude Agent SDK turn for this session');
+  runtime.interruptRequested = true;
   cancelRuntimePermissions(runtime, 'User interrupted the turn');
   if (typeof runtime.query?.interrupt !== 'function') throw new Error('SDK interrupt is unavailable');
   await runtime.query.interrupt();
   await write({ id: command.id, type: 'response', ok: true, sessionId: runtime.sessionId });
+}
+
+async function handlePreconnect(command) {
+  // Warm up the SDK runtime before the user sends their first message so the
+  // 2-5s cold start is absorbed while they are still typing.
+  const params = command.params || {};
+  const key = String(params.sessionKey || '').trim();
+  if (!key) throw new Error('sessionKey is required');
+  const signature = runtimeSignature(params);
+  const result = await withRuntimeMutation(async () => {
+    const existing = runtimes.get(key);
+    if (existing && existing.signature === signature) {
+      existing.lastUsed = Date.now();
+      return { created: false, sessionId: existing.sessionId };
+    }
+    if (existing) return { created: false, sessionId: existing.sessionId, skipped: 'signature-mismatch' };
+    const runtime = await createRuntime(key, params, signature);
+    return { created: true, sessionId: runtime.sessionId };
+  });
+  await write({ id: command.id, type: 'response', ok: true, ...result, runtimes: runtimes.size });
 }
 
 async function handleContext(command) {
@@ -833,6 +858,7 @@ async function handle(command) {
   switch (command.method) {
     case 'send': return handleSend(command);
     case 'interrupt': return handleInterrupt(command);
+    case 'preconnect': return handlePreconnect(command);
     case 'context': return handleContext(command);
     case 'reconnect_session': return handleReconnect(command);
     case 'set_model': return handleSetModel(command);
@@ -895,7 +921,56 @@ async function main() {
 
 process.on('SIGTERM', () => shutdown(null));
 process.on('SIGINT', () => shutdown(null));
+
+// --- P0: Process robustness hardening (ref: jetbrains-cc-gui daemon.js) ---
+
+// Prevent SDK uncaught exceptions from killing all active sessions.
+// Terminate only the active turn (if any) and keep the daemon alive.
+process.on('uncaughtException', async (error) => {
+  log('uncaughtException (daemon survives):', errorText(error));
+  for (const runtime of runtimes.values()) {
+    if (runtime.activeRequestId) {
+      try {
+        await write({ id: runtime.activeRequestId, type: 'error', message: `Uncaught exception: ${errorText(error)}` });
+        await write({ id: runtime.activeRequestId, type: 'done', success: false, sessionId: runtime.sessionId });
+      } catch (_) { /* best effort */ }
+      runtime.activeRequestId = null;
+    }
+  }
+});
+
+process.on('unhandledRejection', (reason) => {
+  log('unhandledRejection (daemon survives):', errorText(reason));
+});
+
+// Intercept process.exit() calls from SDK internals or dependencies.
+// Throw instead of exiting so the daemon stays alive.
+const _originalExit = process.exit;
+process.exit = function daemonExitIntercept(code) {
+  if (shuttingDown) {
+    _originalExit.call(process, code);
+    return;
+  }
+  log(`process.exit(${code}) intercepted — daemon stays alive`);
+  throw new Error(`Intercepted process.exit(${code})`);
+};
+
+// PPID orphan monitor: if Python host dies (kill -9, OOM), stdin may not close
+// cleanly. Poll ppid and self-terminate if reparented to init (pid 1).
+const _startPpid = process.ppid;
+setInterval(() => {
+  try {
+    const currentPpid = process.ppid;
+    if (currentPpid === 1 || (currentPpid !== _startPpid && _startPpid !== 1)) {
+      log(`Parent process gone (was ${_startPpid}, now ${currentPpid}) — orphan exit`);
+      _originalExit.call(process, 0);
+    }
+  } catch (_) {
+    _originalExit.call(process, 0);
+  }
+}, ORPHAN_CHECK_MS).unref();
+
 main().catch(async (error) => {
   await write({ type: 'fatal', message: errorText(error) });
-  process.exit(1);
+  _originalExit.call(process, 1);
 });

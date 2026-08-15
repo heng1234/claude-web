@@ -347,7 +347,8 @@ def claude_cli_argv(*args: str, allow_batch_shim: bool = False) -> List[str]:
 
 
 def _claude_cli_supports_chrome_flags() -> bool:
-    """Probe once per resolved command so older Chat-only CLIs remain usable."""
+    """Probe once per resolved command so older Chat-only CLIs remain usable.
+    Result is cached after first invocation per command path."""
 
     try:
         help_argv = claude_cli_argv("--help", allow_batch_shim=True)
@@ -375,6 +376,22 @@ def _claude_cli_supports_chrome_flags() -> bool:
         supported = False
     _claude_cli_chrome_flag_support[command_key] = supported
     return supported
+
+
+async def _async_cli_supports_chrome_flags() -> bool:
+    """Non-blocking version: offloads the subprocess probe to a thread."""
+    return await asyncio.get_running_loop().run_in_executor(None, _claude_cli_supports_chrome_flags)
+
+
+async def _async_append_browser_cli_arg(args: List[str], browser_enabled: bool) -> None:
+    if await _async_cli_supports_chrome_flags():
+        args.append("--chrome" if browser_enabled else "--no-chrome")
+        return
+    if browser_enabled:
+        raise ClaudeCliResolutionError(
+            "当前 Claude CLI 不支持官方 Claude in Chrome；请升级 Claude Code 后重试，"
+            "或关闭 Code 浏览器开关。"
+        )
 
 
 def _append_browser_cli_arg(args: List[str], browser_enabled: bool) -> None:
@@ -970,6 +987,36 @@ def _prune_old_uploads(retention_seconds: int = _UPLOAD_RETENTION_SECONDS) -> in
     return removed
 
 
+_HOUSEKEEPING_INTERVAL_SECONDS = 300
+_CONTEXT_USAGE_CACHE_MAX = 500
+
+
+async def _periodic_housekeeping() -> None:
+    """Background task: prune stale agent loop jobs, cap context usage cache,
+    and sweep expired mobile login failure entries every 5 minutes."""
+    while True:
+        try:
+            await asyncio.sleep(_HOUSEKEEPING_INTERVAL_SECONDS)
+            _agent_loop_prune_jobs()
+            # Cap context usage cache to prevent unbounded growth
+            if len(_agent_sdk_context_usage_cache) > _CONTEXT_USAGE_CACHE_MAX:
+                keys = list(_agent_sdk_context_usage_cache.keys())
+                for key in keys[:len(keys) - _CONTEXT_USAGE_CACHE_MAX]:
+                    _agent_sdk_context_usage_cache.pop(key, None)
+            # Sweep stale mobile login failure entries
+            now = time.time()
+            stale_keys = [
+                k for k, v in _mobile_login_failures.items()
+                if not v or all(now - ts > _MOBILE_ACCESS_LOGIN_WINDOW_SECONDS for ts in v)
+            ]
+            for k in stale_keys:
+                _mobile_login_failures.pop(k, None)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            pass
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     # Prune stale uploads in a background thread so startup isn't blocked on disk IO.
@@ -979,7 +1026,14 @@ async def _lifespan(app: FastAPI):
     await _project_map_service.startup()
     reaper_task = asyncio.create_task(_warm_reaper())
     terminal_reaper_task = asyncio.create_task(_code_terminal_reaper())
+    housekeeping_task = asyncio.create_task(_periodic_housekeeping())
     bridge_start_task = asyncio.create_task(_claude_agent_bridge.ensure_started())
+    # Ensure sessions.cwd index exists for fast lookups
+    try:
+        with db_connect() as conn:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON sessions(cwd)")
+    except Exception:
+        pass
     try:
         yield
     finally:
@@ -993,12 +1047,17 @@ async def _lifespan(app: FastAPI):
         await _claude_agent_bridge.shutdown()
         reaper_task.cancel()
         terminal_reaper_task.cancel()
+        housekeeping_task.cancel()
         try:
             await reaper_task
         except asyncio.CancelledError:
             pass
         try:
             await terminal_reaper_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await housekeeping_task
         except asyncio.CancelledError:
             pass
         await _shutdown_code_terminals()
@@ -1751,6 +1810,16 @@ def load_events(session_id: str) -> List[dict]:
             except json.JSONDecodeError:
                 continue
     return events
+
+
+async def async_load_events(session_id: str) -> List[dict]:
+    """Non-blocking wrapper for load_events (offloads file I/O to a thread)."""
+    return await asyncio.get_running_loop().run_in_executor(None, load_events, session_id)
+
+
+async def async_append_event(session_id: str, event: dict) -> None:
+    """Non-blocking wrapper for append_event (offloads file I/O + SQLite to a thread)."""
+    await asyncio.get_running_loop().run_in_executor(None, append_event, session_id, event)
 
 
 def session_event_page(events: List[dict], limit_turns: int = 0) -> dict:
@@ -4737,21 +4806,34 @@ def _mobile_access_generate_code(request: Request, ttl_seconds: Optional[int]) -
 
 
 def _mobile_login_failure_key(request: Request) -> str:
-    return _request_client_host(request) or "unknown"
+    # Use direct peer IP for rate limiting (not XFF) to prevent header spoofing bypass.
+    direct = _normalize_client_host(request.client.host if request.client else "")
+    return direct or "unknown"
+
+
+_mobile_login_failures_global: List[float] = []
+_MOBILE_ACCESS_MAX_GLOBAL_FAILURES = 20
 
 
 def _mobile_access_check_rate_limit(request: Request) -> None:
     now = time.time()
+    # Per-IP rate limit
     key = _mobile_login_failure_key(request)
     recent = [ts for ts in _mobile_login_failures.get(key, []) if now - ts < _MOBILE_ACCESS_LOGIN_WINDOW_SECONDS]
     _mobile_login_failures[key] = recent
     if len(recent) >= _MOBILE_ACCESS_MAX_LOGIN_FAILURES:
+        raise HTTPException(status_code=429, detail="too many login attempts, try again later")
+    # Global rate limit (prevents distributed brute-force via XFF spoofing)
+    global _mobile_login_failures_global
+    _mobile_login_failures_global = [ts for ts in _mobile_login_failures_global if now - ts < _MOBILE_ACCESS_LOGIN_WINDOW_SECONDS]
+    if len(_mobile_login_failures_global) >= _MOBILE_ACCESS_MAX_GLOBAL_FAILURES:
         raise HTTPException(status_code=429, detail="too many login attempts, try again later")
 
 
 def _mobile_access_record_failure(request: Request) -> None:
     key = _mobile_login_failure_key(request)
     _mobile_login_failures.setdefault(key, []).append(time.time())
+    _mobile_login_failures_global.append(time.time())
 
 
 def _mobile_access_clear_failures(request: Request) -> None:
@@ -4989,13 +5071,20 @@ def _require_extension_token(token: Optional[str]) -> None:
 
 
 def _require_local_same_origin(request: Request) -> None:
-    # Access is already gated by local/private-network detection, mobile access
-    # code/TOTP, or extension token checks at the route/middleware layer. Strict
-    # Origin matching breaks NAS / reverse-proxy / mobile browser shells, so do
-    # not use it as an extra blocker for in-app actions such as permission retry.
-    return
+    # For local requests: access is gated by local/private-network detection.
+    # Strict Origin matching breaks NAS / reverse-proxy / mobile browser shells,
+    # so skip for genuinely local clients where the browser's SOP already protects.
+    if _is_local_request(request):
+        return
+    # For mobile/remote access: enforce Origin check to prevent CSRF attacks
+    # from malicious pages that could reach the server on a non-loopback interface.
     origin = request.headers.get("origin")
     if not origin:
+        # No Origin header: allow for non-browser API clients (curl, etc.)
+        # but block form submissions which always send Origin.
+        content_type = (request.headers.get("content-type") or "").lower()
+        if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+            raise HTTPException(status_code=403, detail="same-origin request required")
         return
     try:
         origin_url = urlparse(origin)
@@ -9774,6 +9863,11 @@ def _resolve_code_file_target(cwd: str, raw_path: str) -> Tuple[Path, List[Path]
     return matches[0], matches
 
 
+async def _async_resolve_code_file_target(cwd: str, raw_path: str) -> Tuple[Path, List[Path]]:
+    """Non-blocking wrapper (os.walk inside is expensive on large repos)."""
+    return await asyncio.get_running_loop().run_in_executor(None, _resolve_code_file_target, cwd, raw_path)
+
+
 def _code_file_etag(path: Path, stat: os.stat_result) -> str:
     raw = f"{path}:{stat.st_mtime_ns}:{stat.st_size}".encode("utf-8", errors="replace")
     return hashlib.sha256(raw).hexdigest()[:24]
@@ -9891,35 +9985,40 @@ async def _code_tree_search(root: Path, query: str, show_hidden: bool) -> List[d
     needle = query.strip().lower()
     if not needle:
         return await _code_tree_children(root, "", show_hidden)
-    matches: List[Path] = []
-    try:
-        for current_root, dirs, files in os.walk(root):
-            current = Path(current_root)
-            try:
-                depth = len(current.relative_to(root).parts)
-            except ValueError:
-                continue
-            if depth >= _CODE_TREE_MAX_DEPTH:
-                dirs[:] = []
-            else:
-                dirs[:] = [name for name in dirs if not _code_tree_should_skip(name, show_hidden)]
-            for name in [*dirs, *files]:
-                if _code_tree_should_skip(name, show_hidden):
-                    continue
-                target = current / name
+
+    def _walk_sync() -> List[Path]:
+        results: List[Path] = []
+        try:
+            for current_root, dirs, files in os.walk(root):
+                current = Path(current_root)
                 try:
-                    relative = target.relative_to(root).as_posix()
+                    depth = len(current.relative_to(root).parts)
                 except ValueError:
                     continue
-                if needle not in name.lower() and needle not in relative.lower():
-                    continue
-                matches.append(target)
-                if len(matches) >= _CODE_TREE_SEARCH_LIMIT * 2:
+                if depth >= _CODE_TREE_MAX_DEPTH:
+                    dirs[:] = []
+                else:
+                    dirs[:] = [name for name in dirs if not _code_tree_should_skip(name, show_hidden)]
+                for name in [*dirs, *files]:
+                    if _code_tree_should_skip(name, show_hidden):
+                        continue
+                    target = current / name
+                    try:
+                        relative = target.relative_to(root).as_posix()
+                    except ValueError:
+                        continue
+                    if needle not in name.lower() and needle not in relative.lower():
+                        continue
+                    results.append(target)
+                    if len(results) >= _CODE_TREE_SEARCH_LIMIT * 2:
+                        break
+                if len(results) >= _CODE_TREE_SEARCH_LIMIT * 2:
                     break
-            if len(matches) >= _CODE_TREE_SEARCH_LIMIT * 2:
-                break
-    except OSError:
-        return []
+        except OSError:
+            pass
+        return results
+
+    matches = await asyncio.get_running_loop().run_in_executor(None, _walk_sync)
     relative_matches = [item.relative_to(root).as_posix() for item in matches]
     ignored = await _code_tree_ignored_paths(root, relative_matches)
     statuses = await _code_tree_git_statuses(root)

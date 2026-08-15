@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code GUI 竞品对比与排期</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', Roboto, sans-serif;
+  background:#ffffff; color:#1f2328; line-height:1.65; padding:2.5rem 2rem;
+}
+.container { max-width:1360px; margin:0 auto; }
+h1 { font-size:1.85rem; font-weight:700; color:#1f2328; margin-bottom:0.4rem; }
+.subtitle { color:#59636e; font-size:0.92rem; margin-bottom:0.5rem; }
+.thesis {
+  background:#f6f8fa; border-left:3px solid #0969da; border-radius:0 6px 6px 0;
+  padding:0.9rem 1.2rem; margin:1.5rem 0 2.5rem; font-size:0.9rem; color:#1f2328;
+}
+.thesis strong { color:#0969da; }
+h2.section {
+  font-size:1.25rem; font-weight:650; margin:2.75rem 0 0.4rem;
+  padding-bottom:0.5rem; border-bottom:1px solid #d1d9e0; color:#1f2328;
+}
+.section-note { color:#59636e; font-size:0.85rem; margin-bottom:1.25rem; }
+
+/* project cards */
+.projects { display:grid; grid-template-columns:repeat(4,1fr); gap:0.9rem; margin-bottom:2rem; }
+.pcard { border:1px solid #d1d9e0; border-radius:8px; padding:1rem; background:#fff; }
+.pcard .pn { font-weight:700; font-size:0.95rem; margin-bottom:0.35rem; }
+.pcard .ps { font-size:0.76rem; color:#59636e; line-height:1.5; }
+.pcard .pm { font-size:0.76rem; color:#1f2328; margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid #eaeef2; }
+.pc1 { border-top:3px solid #0969da; } .pc1 .pn { color:#0969da; }
+.pc2 { border-top:3px solid #bc4c00; } .pc2 .pn { color:#bc4c00; }
+.pc3 { border-top:3px solid #1a7f37; } .pc3 .pn { color:#1a7f37; }
+.pc4 { border-top:3px solid #8250df; } .pc4 .pn { color:#8250df; }
+
+/* table */
+table { width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1rem; }
+thead th {
+  background:#f6f8fa; padding:0.7rem 0.75rem; text-align:center; font-weight:650;
+  border:1px solid #d1d9e0; position:sticky; top:0; z-index:5;
+}
+thead th:first-child { text-align:left; min-width:190px; }
+thead th:nth-child(2){ color:#0969da; } thead th:nth-child(3){ color:#bc4c00; }
+thead th:nth-child(4){ color:#1a7f37; } thead th:nth-child(5){ color:#8250df; }
+tbody td { padding:0.55rem 0.75rem; border:1px solid #d1d9e0; text-align:center; }
+tbody td:first-child { text-align:left; font-weight:500; }
+tbody tr:hover { background:#f6f8fa; }
+tr.cat td {
+  background:#eaeef2; font-weight:700; font-size:0.72rem; color:#59636e;
+  letter-spacing:0.04em; text-transform:uppercase; padding:0.4rem 0.75rem; text-align:left;
+}
+.b { display:inline-block; padding:1px 7px; border-radius:10px; font-size:0.73rem; font-weight:500; white-space:nowrap; }
+.b-y { background:#dafbe1; color:#1a7f37; }
+.b-p { background:#fff8c5; color:#7d4e00; }
+.b-n { background:#f6f8fa; color:#818b98; }
+.b-u { background:#fbefff; color:#8250df; }
+.b-s { background:#ffeff0; color:#cf222e; font-weight:600; }
+.gap-row td:first-child::after { content:' ← 缺口'; color:#cf222e; font-size:0.72rem; font-weight:600; }
+
+/* schedule items */
+.sched { margin-bottom:2rem; }
+.rel {
+  border:1px solid #d1d9e0; border-radius:8px; margin-bottom:1.25rem; overflow:hidden;
+}
+.rel-head {
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;
+  padding:0.85rem 1.15rem; border-bottom:1px solid #d1d9e0;
+}
+.rel-head .rh-left { display:flex; align-items:center; gap:0.85rem; }
+.rel-head .ver { font-weight:700; font-size:1.05rem; }
+.rel-head .goal { font-size:0.85rem; color:#59636e; }
+.rel-head .eta {
+  font-size:0.78rem; font-weight:600; padding:2px 10px; border-radius:12px; white-space:nowrap;
+}
+.r1 .rel-head { background:#fff8f0; } .r1 .ver { color:#bc4c00; } .r1 .eta { background:#bc4c00; color:#fff; }
+.r2 .rel-head { background:#f0f6ff; } .r2 .ver { color:#0969da; } .r2 .eta { background:#0969da; color:#fff; }
+.r3 .rel-head { background:#faf5ff; } .r3 .ver { color:#8250df; } .r3 .eta { background:#8250df; color:#fff; }
+
+.item { padding:1.15rem; border-bottom:1px solid #eaeef2; }
+.item:last-child { border-bottom:none; }
+.item-top { display:flex; align-items:baseline; gap:0.7rem; flex-wrap:wrap; margin-bottom:0.5rem; }
+.item-name { font-weight:650; font-size:0.98rem; }
+.src { font-size:0.68rem; padding:1px 7px; border-radius:5px; font-weight:500; }
+.src-jb { background:#fbefff; color:#8250df; }
+.src-op { background:#fff1e5; color:#bc4c00; }
+.src-cc { background:#dafbe1; color:#1a7f37; }
+.est { font-size:0.72rem; color:#59636e; margin-left:auto; white-space:nowrap; }
+.item-why { font-size:0.87rem; color:#1f2328; margin-bottom:0.65rem; }
+.item-how {
+  background:#f6f8fa; border-radius:6px; padding:0.7rem 0.95rem;
+  font-size:0.82rem; color:#424a53; font-family:ui-monospace,SFMono-Regular,monospace;
+}
+.item-how b { color:#1f2328; font-family:inherit; }
+.item-how ul { margin:0.35rem 0 0 1.1rem; }
+.item-how li { margin-bottom:0.15rem; }
+
+/* dropped */
+.dropped { border:1px solid #d1d9e0; border-radius:8px; overflow:hidden; }
+.dropped table { margin:0; font-size:0.83rem; }
+.dropped thead th { background:#f6f8fa; }
+.dropped td { text-align:left !important; }
+.dropped td:first-child { font-weight:600; width:190px; }
+.dropped td:nth-child(2) { width:110px; text-align:center !important; }
+
+/* moat */
+.moat { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:0.75rem; }
+.moat-item { border:1px solid #d1d9e0; border-left:3px solid #1a7f37; border-radius:0 6px 6px 0; padding:0.85rem 1rem; }
+.moat-item .mn { font-weight:650; font-size:0.88rem; margin-bottom:0.2rem; }
+.moat-item .md { font-size:0.78rem; color:#59636e; }
+
+.footer { margin-top:3rem; padding-top:1.25rem; border-top:1px solid #d1d9e0; font-size:0.76rem; color:#818b98; }
+
+@media (max-width:900px){
+  body{padding:1.25rem 1rem;}
+  .projects{grid-template-columns:1fr 1fr;}
+  table{font-size:0.75rem;}
+  .est{margin-left:0;}
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Claude Code GUI 竞品对比与排期</h1>
+<p class="subtitle">claude-web &middot; opcode &middot; claudecodeui &middot; jetbrains-cc-gui</p>
+
+<div class="thesis">
+  <strong>核心判断：</strong>三个竞品中只有 jetbrains-cc-gui 有真正的模式创新——它把「每条消息自动携带用户正在看的代码」做成默认行为，回复质量的提升是肉眼可见的。
+  opcode 和 claudecodeui 本质是功能清单型项目（会话浏览器、用量面板、配置编辑器），能抄但抄了不改变产品档次。
+  <br><br>
+  因此排期原则：<strong>上下文自动注入 &gt; 配置面板堆叠</strong>。已砍掉 Hooks 编辑器、Command Palette、时间线可视化、多 Provider、插件系统、语音输入等 6 项低 ROI 需求。
+</div>
+
+<!-- projects -->
+<div class="projects">
+  <div class="pcard pc1">
+    <div class="pn">claude-web（我们）</div>
+    <div class="ps">Python/FastAPI + 原生 JS<br>Agent SDK（Node 守护进程）+ CLI 回退<br>SSE 流式推送</div>
+    <div class="pm">server.py 15k 行 · index.html 26k 行</div>
+  </div>
+  <div class="pcard pc2">
+    <div class="pn">opcode</div>
+    <div class="ps">Rust/Tauri + React<br>spawn `claude` CLI，stream-json<br>Tauri Events</div>
+    <div class="pm">桌面端 · 功能清单型</div>
+  </div>
+  <div class="pcard pc3">
+    <div class="pn">claudecodeui</div>
+    <div class="ps">Node/Express + React + Electron<br>Agent SDK<br>WebSocket 流式</div>
+    <div class="pm">1837 commits · 4 Provider · 8 语言</div>
+  </div>
+  <div class="pcard pc4">
+    <div class="pn">jetbrains-cc-gui</div>
+    <div class="ps">Kotlin/Java 插件 + React Webview<br>Agent SDK（NDJSON 守护进程）<br>JCEF 内嵌浏览器</div>
+    <div class="pm">328 Java 文件 · 6 Provider · <b>成熟度最高</b></div>
+  </div>
+</div>
+
+<!-- comparison -->
+<h2 class="section">功能全面对比</h2>
+<p class="section-note">标 <span class="b b-s" style="font-size:0.73rem;">红色</span> 的是我们没有、且竞品证明有价值的缺口。<span class="b b-u" style="font-size:0.73rem;">紫色</span> 表示平台独有、无法直接复刻。</p>
+<table>
+<thead><tr>
+  <th>能力</th><th>claude-web</th><th>opcode</th><th>claudecodeui</th><th>jetbrains-cc-gui</th>
+</tr></thead>
+<tbody>
+
+<tr class="cat"><td colspan="5">核心交互</td></tr>
+<tr>
+  <td>Agent 编码模式</td>
+  <td><span class="b b-y">SDK + CLI</span></td><td><span class="b b-y">CLI</span></td><td><span class="b b-y">SDK</span></td><td><span class="b b-y">SDK 守护进程</span></td>
+</tr>
+<tr>
+  <td>非 Agent 聊天模式</td>
+  <td><span class="b b-p">CLI 聊天</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>直连 API 纯对话</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>Plan Mode 审批</td>
+  <td><span class="b b-y">完整</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">完整</span></td><td><span class="b b-y">完整</span></td>
+</tr>
+<tr>
+  <td>权限逐条审批 + 规则</td>
+  <td><span class="b b-y">完整</span></td><td><span class="b b-n">全跳过</span></td><td><span class="b b-y">规则化</span></td><td><span class="b b-y">IPC 硬化</span></td>
+</tr>
+<tr>
+  <td>工具调用渲染</td>
+  <td><span class="b b-y">完整</span></td><td><span class="b b-y">StreamMessage</span></td><td><span class="b b-y">Diff/Bash/Todo</span></td><td><span class="b b-y">Webview</span></td>
+</tr>
+<tr>
+  <td>子 Agent 显示</td>
+  <td><span class="b b-y">芯片式</span></td><td><span class="b b-p">进程列表</span></td><td><span class="b b-y">分组容器</span></td><td><span class="b b-y">历史加载</span></td>
+</tr>
+
+<tr class="cat"><td colspan="5">上下文组装 —— 差异最大的区域</td></tr>
+<tr class="gap-row">
+  <td>当前文件/光标/选区自动注入</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+  <td><span class="b b-s">每条消息自动</span></td>
+</tr>
+<tr class="gap-row">
+  <td>@ 文件提及自动补全</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+  <td><span class="b b-y">文件树</span></td><td><span class="b b-s">文件+终端+进程</span></td>
+</tr>
+<tr class="gap-row">
+  <td>运行时上下文（终端输出/运行进程）</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+  <td><span class="b b-s">可 @ 引用</span></td>
+</tr>
+<tr>
+  <td>语义索引（类层次/引用查找）</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+  <td><span class="b b-u">PSI（IDE 独有）</span></td>
+</tr>
+<tr>
+  <td>Memories / Pinned Docs</td>
+  <td><span class="b b-y">全局+会话级</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>Prompt Enhancer（发前优化）</td>
+  <td><span class="b b-p">独立优化器</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">输入框内嵌</span></td>
+</tr>
+
+<tr class="cat"><td colspan="5">编辑审批</td></tr>
+<tr class="gap-row">
+  <td>Diff 可编辑后再接受</td>
+  <td><span class="b b-n">只读</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">只读</span></td>
+  <td><span class="b b-s">右侧可编辑</span></td>
+</tr>
+<tr>
+  <td>Plan Mode</td>
+  <td><span class="b b-y">完整</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">完整</span></td><td><span class="b b-y">完整</span></td>
+</tr>
+<tr>
+  <td>回滚 / Undo</td>
+  <td><span class="b b-y">git rewind</span></td><td><span class="b b-y">全量快照</span></td><td><span class="b b-n">无</span></td>
+  <td><span class="b b-u">IDE undo 栈</span></td>
+</tr>
+<tr>
+  <td>Quick Fix（光标处快修）</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+  <td><span class="b b-u">Cmd+Shift+Q</span></td>
+</tr>
+
+<tr class="cat"><td colspan="5">会话管理</td></tr>
+<tr>
+  <td>会话恢复/续传</td>
+  <td><span class="b b-y">resume + fork</span></td><td><span class="b b-y">resume</span></td><td><span class="b b-y">ID 解耦</span></td><td><span class="b b-y">持久守护进程</span></td>
+</tr>
+<tr>
+  <td>会话分支（Fork）</td>
+  <td><span class="b b-y">prepare-fork</span></td><td><span class="b b-y">fork_from_checkpoint</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr class="gap-row">
+  <td>断线重连事件重放</td>
+  <td><span class="b b-n">断即丢</span></td><td><span class="b b-n">无</span></td>
+  <td><span class="b b-s">seq 重放</span></td><td><span class="b b-p">内存缓冲</span></td>
+</tr>
+<tr>
+  <td>服务端消息队列</td>
+  <td><span class="b b-y">DB 队列</span></td><td><span class="b b-n">无</span></td><td><span class="b b-p">localStorage</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>CLI 原生会话导入</td>
+  <td><span class="b b-y">扫描导入</span></td><td><span class="b b-y">项目浏览器</span></td><td><span class="b b-y">Synchronizer</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>会话导出</td>
+  <td><span class="b b-y">JSON/Markdown</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">多格式</span></td><td><span class="b b-n">无</span></td>
+</tr>
+
+<tr class="cat"><td colspan="5">工作流复用与配置</td></tr>
+<tr class="gap-row">
+  <td>自定义 Agent 库（可导出分享）</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-s">SQLite + .json</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr class="gap-row">
+  <td>Session Templates（配置模板）</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+  <td><span class="b b-s">模型+权限+cwd</span></td>
+</tr>
+<tr class="gap-row">
+  <td>CLAUDE.md / Slash Commands 管理</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-y">完整 CRUD</span></td><td><span class="b b-y">自定义+历史</span></td><td><span class="b b-p">部分</span></td>
+</tr>
+<tr>
+  <td>Hooks 可视化编辑</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-y">5事件+模板</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>MCP 服务器管理</td>
+  <td><span class="b b-y">CRUD+健康检查</span></td><td><span class="b b-y">完整</span></td><td><span class="b b-y">读写 json</span></td><td><span class="b b-p">基础</span></td>
+</tr>
+<tr>
+  <td>Settings 编辑</td>
+  <td><span class="b b-y">读写 settings</span></td><td><span class="b b-p">Hooks 部分</span></td><td><span class="b b-y">多 Tab 面板</span></td><td><span class="b b-p">基础</span></td>
+</tr>
+
+<tr class="cat"><td colspan="5">开发工具</td></tr>
+<tr>
+  <td>文件树浏览</td>
+  <td><span class="b b-y">code-tree API</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">树+上传+图片</span></td><td><span class="b b-u">IDE 原生</span></td>
+</tr>
+<tr>
+  <td>集成终端</td>
+  <td><span class="b b-y">PTY + xterm.js</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">node-pty + WS</span></td><td><span class="b b-u">IDE 终端</span></td>
+</tr>
+<tr>
+  <td>代码在线执行 (Run)</td>
+  <td><span class="b b-y">Python/JS</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>Checkpoint 检查点</td>
+  <td><span class="b b-y">git 快照</span></td><td><span class="b b-y">树形+4策略</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+
+<tr class="cat"><td colspan="5">数据与分析</td></tr>
+<tr>
+  <td>用量/费用 - 单会话</td>
+  <td><span class="b b-y">per-turn DB</span></td><td><span class="b b-y">JSONL 重算</span></td><td><span class="b b-y">TokenUsageSummary</span></td><td><span class="b b-y">分 Provider</span></td>
+</tr>
+<tr class="gap-row">
+  <td>全局用量/成本仪表盘</td>
+  <td><span class="b b-p">仅 /api/stats</span></td><td><span class="b b-s">模型/日期/项目聚合</span></td><td><span class="b b-n">无</span></td><td><span class="b b-p">基础</span></td>
+</tr>
+
+<tr class="cat"><td colspan="5">Git</td></tr>
+<tr class="gap-row">
+  <td>AI 生成 Commit Message</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+  <td><span class="b b-s">读 staged，流式写入</span></td>
+</tr>
+<tr>
+  <td>Diff / 分支 / Worktree</td>
+  <td><span class="b b-y">完整</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">完整面板</span></td><td><span class="b b-y">IDE 原生</span></td>
+</tr>
+<tr>
+  <td>Git Checkpoint（自动快照）</td>
+  <td><span class="b b-y">每轮自动</span></td><td><span class="b b-y">4策略选择</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+
+<tr class="cat"><td colspan="5">UX 与平台</td></tr>
+<tr>
+  <td>图片上传/粘贴</td>
+  <td><span class="b b-y">完整</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">拖放+粘贴</span></td><td><span class="b b-p">部分</span></td>
+</tr>
+<tr>
+  <td>Command Palette（Cmd+K）</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">多页搜索</span></td><td><span class="b b-u">IDE 自有</span></td>
+</tr>
+<tr>
+  <td>语音输入 / TTS</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">Whisper+TTS</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>Todo 面板</td>
+  <td><span class="b b-y">进度条+高亮</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">工具渲染</span></td><td><span class="b b-y">有</span></td>
+</tr>
+<tr>
+  <td>跟进建议</td>
+  <td><span class="b b-y">suggest-followups</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>多 Provider 支持</td>
+  <td><span class="b b-n">仅 Claude</span></td><td><span class="b b-n">仅 Claude</span></td><td><span class="b b-y">4 Provider</span></td><td><span class="b b-y">6 Provider</span></td>
+</tr>
+<tr>
+  <td>i18n 多语言</td>
+  <td><span class="b b-n">中文固定</span></td><td><span class="b b-n">英文</span></td><td><span class="b b-y">8 语言</span></td><td><span class="b b-y">8 语言</span></td>
+</tr>
+<tr>
+  <td>移动端</td>
+  <td><span class="b b-y">响应式+OTP</span></td><td><span class="b b-n">桌面</span></td><td><span class="b b-p">Electron</span></td><td><span class="b b-n">IDE</span></td>
+</tr>
+<tr>
+  <td>桌面端</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-y">Tauri</span></td><td><span class="b b-y">Electron</span></td><td><span class="b b-u">IDE 插件</span></td>
+</tr>
+<tr>
+  <td>浏览器扩展</td>
+  <td><span class="b b-y">Chrome 侧栏</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>插件系统</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">Tab+路由+WS</span></td><td><span class="b b-u">IDE 扩展点</span></td>
+</tr>
+<tr>
+  <td>Agent Loop（自动多轮）</td>
+  <td><span class="b b-y">20轮+Token预算</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td>
+</tr>
+<tr>
+  <td>Docker 沙箱</td>
+  <td><span class="b b-n">无</span></td><td><span class="b b-n">无</span></td><td><span class="b b-y">sbx CLI</span></td><td><span class="b b-n">无</span></td>
+</tr>
+</tbody>
+</table>
+
+<!-- Chat Mode Visual -->
+<h2 class="section">普通聊天模式对比</h2>
+<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem; margin-bottom:1.5rem;">
+  <div style="background:#f0f6ff; border:1px solid #b6d0f7; border-radius:8px; padding:1rem; text-align:center;">
+    <div style="font-weight:700; color:#0969da; margin-bottom:0.4rem;">claude-web</div>
+    <div style="font-size:0.85rem; color:#1a7f37; font-weight:600;">&#10003; 有</div>
+    <div style="font-size:0.78rem; color:#59636e; margin-top:0.3rem;">workspace_mode="chat"<br>走 CLI 子进程<br>注入 memories + 系统提示</div>
+  </div>
+  <div style="background:#fff8f0; border:1px solid #edd5b8; border-radius:8px; padding:1rem; text-align:center;">
+    <div style="font-weight:700; color:#bc4c00; margin-bottom:0.4rem;">opcode</div>
+    <div style="font-size:0.85rem; color:#cf222e; font-weight:600;">&#10007; 无</div>
+    <div style="font-size:0.78rem; color:#59636e; margin-top:0.3rem;">所有交互都是 Agent 模式<br>--dangerously-skip-permissions</div>
+  </div>
+  <div style="background:#f0fff4; border:1px solid #b4dfbf; border-radius:8px; padding:1rem; text-align:center;">
+    <div style="font-weight:700; color:#1a7f37; margin-bottom:0.4rem;">claudecodeui</div>
+    <div style="font-size:0.85rem; color:#cf222e; font-weight:600;">&#10007; 无</div>
+    <div style="font-size:0.78rem; color:#59636e; margin-top:0.3rem;">所有交互经 Agent SDK<br>最接近的是 Plan Mode</div>
+  </div>
+  <div style="background:#faf5ff; border:1px solid #d4bfea; border-radius:8px; padding:1rem; text-align:center;">
+    <div style="font-weight:700; color:#8250df; margin-bottom:0.4rem;">jetbrains-cc-gui</div>
+    <div style="font-size:0.85rem; color:#cf222e; font-weight:600;">&#10007; 无</div>
+    <div style="font-size:0.78rem; color:#59636e; margin-top:0.3rem;">仅有一次性 commit msg 生成<br>（maxTurns=1，无会话）</div>
+  </div>
+</div>
+<div style="background:#f6f8fa; border:1px solid #d1d9e0; border-radius:8px; padding:1rem 1.25rem; margin-bottom:2rem; font-size:0.87rem;">
+  <strong>结论：</strong>四个项目中只有我们有非 Agent 聊天模式。没有任何项目做了直连 Anthropic API 的纯对话。<br>
+  <strong>判断：</strong>短期不急。现有 CLI 聊天够用，"纯对话"不是 Claude Code GUI 核心场景。留到 v3.0 作为差异化亮点。
+</div>
+
+<!-- SCHEDULE -->
+<h2 class="section">排期</h2>
+<p class="section-note">7 项，按「改变产品档次的程度」而非「工程量」排序。周数为单人开发估算。</p>
+
+<div class="sched">
+
+<div class="rel r1">
+  <div class="rel-head">
+    <div class="rh-left">
+      <span class="ver">v2.3</span>
+      <span class="goal">上下文自动化 —— 让用户不再手动粘贴代码</span>
+    </div>
+    <span class="eta">2 周</span>
+  </div>
+
+  <div class="item">
+    <div class="item-top">
+      <span class="item-name">1. @ 提及系统（文件 / 终端 / 运行进程）</span>
+      <span class="src src-jb">jetbrains</span><span class="src src-cc">claudecodeui</span>
+      <span class="est">约 3 天</span>
+    </div>
+    <div class="item-why">
+      输入 @ 弹出候选列表，可引用项目文件、当前终端最近输出、正在运行的进程。jetbrains 把终端和 Run 配置也做成可 @ 引用的伪文件，这是两个 web 竞品都没有的思路——「把当前正在发生的事附加给 AI」。
+    </div>
+    <div class="item-how">
+      <b>实现</b>
+      <ul>
+        <li>前端：输入框 @ 触发 popup + 模糊过滤（复用现有 code-tree 接口）</li>
+        <li>后端：新增 <code>GET /api/sessions/{id}/mentionable</code>，返回文件树 + 活跃终端 + 运行进程</li>
+        <li>选中后插入 <code>@path/to/file</code> 标记，发送前后端展开为真实内容</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-top">
+      <span class="item-name">2. 当前文件自动注入（可开关）</span>
+      <span class="src src-jb">jetbrains</span>
+      <span class="est">约 2 天</span>
+    </div>
+    <div class="item-why">
+      代码检查器里打开的文件、选中的行号范围，默认作为上下文附加到每条消息。这是 jetbrains 插件回复质量高的根本原因，不是模型差异。做成可开关避免长文件浪费 token。
+    </div>
+    <div class="item-how">
+      <b>实现</b>
+      <ul>
+        <li>前端记录检查器当前文件 + 选中行范围，随 ChatRequest 一起发送</li>
+        <li>后端构造 <code>&lt;ide_context&gt;</code> 段落，附加到 system prompt（复用 memories 注入路径）</li>
+        <li>输入框旁放开关 + token 预估提示；超过阈值只注入选中片段</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-top">
+      <span class="item-name">3. SSE 断线重连重放</span>
+      <span class="src src-cc">claudecodeui</span>
+      <span class="est">约 2 天</span>
+    </div>
+    <div class="item-why">
+      移动端 OTP 远程访问是我们的独有能力，但网络一断 SSE 就丢事件，长任务等于白跑。SSE 协议原生支持 <code>Last-Event-ID</code> 重连，不必换 WebSocket。这是可靠性欠债，不是新功能。
+    </div>
+    <div class="item-how">
+      <b>实现</b>
+      <ul>
+        <li>每个 SSE 事件加自增 <code>id:</code> 字段</li>
+        <li>服务端每会话维护 <code>deque(maxlen=5000)</code> 环形缓冲，5 分钟过期</li>
+        <li>重连时读 <code>Last-Event-ID</code> 请求头，补发缺失区间</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="rel r2">
+  <div class="rel-head">
+    <div class="rh-left">
+      <span class="ver">v2.4</span>
+      <span class="goal">工作流复用与审批体验</span>
+    </div>
+    <span class="eta">3 周</span>
+  </div>
+
+  <div class="item">
+    <div class="item-top">
+      <span class="item-name">4. 自定义 Agent 库 + 会话模板</span>
+      <span class="src src-op">opcode</span><span class="src src-jb">jetbrains</span>
+      <span class="est">约 1 周</span>
+    </div>
+    <div class="item-why">
+      opcode 的 Agent 定义（名称/图标/系统提示/模型/权限/hooks，导出 .json 分享）+ jetbrains 的会话模板（模型/权限模式/cwd 存成命名快照）合起来就是用户自定义的可复用工作流。CLI 做不到，且是团队版 Agent 市场的地基。
+    </div>
+    <div class="item-how">
+      <b>实现</b>
+      <ul>
+        <li>表 <code>agent_templates</code>：name / icon / system_prompt / model / permission_mode / default_task / cwd</li>
+        <li>CRUD + 克隆 + 导出导入 .json</li>
+        <li>新建会话时「从模板创建」一键填充；system_prompt 走现有 append-system-prompt 通道</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-top">
+      <span class="item-name">5. Diff 可编辑后接受</span>
+      <span class="src src-jb">jetbrains</span>
+      <span class="est">约 4 天</span>
+    </div>
+    <div class="item-why">
+      现在权限审批只能全盘接受或拒绝。jetbrains 让右侧 diff 可编辑，用户微调 AI 的改动后再应用——消除了「大体对但有一处不对，只能拒绝重来」的困境。三个竞品里只有它做了。
+    </div>
+    <div class="item-how">
+      <b>实现</b>
+      <ul>
+        <li>权限预览接口已有（preview-change），前端右栏换成可编辑编辑器</li>
+        <li>新增「接受修改版」：把编辑后内容作为审批结果回传，覆盖原 tool 入参</li>
+        <li>需在 bridge 层支持带修改内容的 approve</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-top">
+      <span class="item-name">6. AI 生成 Commit Message</span>
+      <span class="src src-jb">jetbrains</span>
+      <span class="est">约 2 天</span>
+    </div>
+    <div class="item-why">
+      读 staged diff，一次性调用（maxTurns=1，不建会话、不留历史），token 流式写入输入框。工程量很小但演示效果好，且天天用得上。三个竞品里只有 jetbrains 有任何 VCS 写入集成。
+    </div>
+    <div class="item-how">
+      <b>实现</b>
+      <ul>
+        <li>Git 面板加按钮 → <code>POST /api/git/commit-message</code></li>
+        <li>后端读 staged diff，走 bridge 一次性 query（不落 session 历史）</li>
+        <li>SSE 流式回传，前端逐 token 写入 message 输入框</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="rel r3">
+  <div class="rel-head">
+    <div class="rh-left">
+      <span class="ver">v2.5</span>
+      <span class="goal">配置可视化与成本透明</span>
+    </div>
+    <span class="eta">1.5 周</span>
+  </div>
+
+  <div class="item">
+    <div class="item-top">
+      <span class="item-name">7. CLAUDE.md 与 Slash Commands 管理</span>
+      <span class="src src-op">opcode</span><span class="src src-cc">claudecodeui</span>
+      <span class="est">约 4 天</span>
+    </div>
+    <div class="item-why">
+      CLAUDE.md 是 Claude Code 用户改得最频繁的文件，现在必须跳编辑器。递归扫描项目内所有 CLAUDE.md + 扫描 <code>.claude/commands/*.md</code>（解析 YAML frontmatter）做成面板即可。
+      <br><span style="color:#59636e;">注：opcode 的 Hooks 可视化编辑器已砍——实际改动频率远低于 CLAUDE.md，投入产出不划算。</span>
+    </div>
+    <div class="item-how">
+      <b>实现</b>
+      <ul>
+        <li>递归查找 CLAUDE.md（user / project 双作用域），markdown 编辑器 + 保存</li>
+        <li>扫描 <code>~/.claude/commands/</code> 与 <code>.claude/commands/</code>，解析 frontmatter 的 description / allowed-tools</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-top">
+      <span class="item-name">8. 全局用量/成本仪表盘</span>
+      <span class="src src-op">opcode</span>
+      <span class="est">约 3 天</span>
+    </div>
+    <div class="item-why">
+      我们已有单轮 usage 记录，缺的是跨会话聚合视图。opcode 的做法可直接照搬：遍历 <code>~/.claude/projects/**/*.jsonl</code>，按 <code>message.id + requestId</code> 去重，按模型/日期/项目聚合，缺 costUSD 时用价格表兜底。团队版预算管控的前置件。
+    </div>
+    <div class="item-how">
+      <b>实现</b>
+      <ul>
+        <li>复用现有 session_usage 表做主数据源，JSONL 扫描补齐 CLI 原生会话</li>
+        <li>去重键 <code>message.id + requestId</code>；价格表作为 costUSD 缺失时的兜底</li>
+        <li>面板：总览 + 按模型 / 按日期 / 按项目，支持日期范围过滤</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- dropped -->
+<h2 class="section">已砍需求</h2>
+<p class="section-note">看过但决定不做，记录原因避免以后重复讨论。</p>
+<div class="dropped">
+<table>
+<thead><tr><th>需求</th><th>来源</th><th>不做的原因</th></tr></thead>
+<tbody>
+<tr><td>Hooks 可视化编辑器</td><td>opcode</td><td>纯配置面板。用户改 hooks 的频率远低于改 CLAUDE.md，同样工程量下优先级明显更低。</td></tr>
+<tr><td>Command Palette（Cmd+K）</td><td>claudecodeui</td><td>nice-to-have 而非痛点。当前侧栏导航已够用，浏览器本身也有搜索。</td></tr>
+<tr><td>时间线可视化 + 分支</td><td>opcode</td><td>已有 git checkpoint + rewind。做树形可视化工程量大，不如先把现有 rewind 的交互打磨顺。</td></tr>
+<tr><td>多 Provider（Codex/Grok/Kimi）</td><td>jetbrains / claudecodeui</td><td>架构改动大，且会模糊「Claude Code 的 GUI」这个定位。</td></tr>
+<tr><td>插件系统</td><td>claudecodeui</td><td>26k 行单文件前端下不现实。要做得先组件化重构，那是独立的大工程。</td></tr>
+<tr><td>语音输入 / TTS</td><td>claudecodeui</td><td>依赖外部 STT 服务。移动端资源应优先投给断线重连这类可靠性问题。</td></tr>
+<tr><td>PSI 语义索引</td><td>jetbrains</td><td>依赖宿主 IDE 的符号索引，web 应用没有等价物。除非未来接 LSP，否则无法复刻。</td></tr>
+<tr><td>直连 API 纯对话模式</td><td>四家都没有</td><td>确实是空白，但不是 Claude Code GUI 的核心场景。现有 CLI 聊天模式够用，留到 v3.0 再评估。</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- moat -->
+<h2 class="section">我们已有的护城河</h2>
+<p class="section-note">三个竞品都没有的能力，做新功能时注意不要削弱这些。</p>
+<div class="moat">
+  <div class="moat-item"><div class="mn">Agent Loop 自动多轮</div><div class="md">20 轮上限 + token 预算 + 测试命令验证。唯一支持无人值守连续执行的 GUI。</div></div>
+  <div class="moat-item"><div class="mn">移动端 OTP 远程访问</div><div class="md">访问码 / TOTP + 路径白名单。其他三家全是本地 only。</div></div>
+  <div class="moat-item"><div class="mn">Chrome 浏览器扩展</div><div class="md">侧栏形态，只读 / 完整双模式。唯一能嵌进浏览器工作流的方案。</div></div>
+  <div class="moat-item"><div class="mn">Memories + Pinned Docs</div><div class="md">跨会话持久记忆 + 会话级固定文档注入。</div></div>
+  <div class="moat-item"><div class="mn">Prompt 优化器</div><div class="md">样本采集 + 规则管理 + 重写。系统化的 prompt engineering 工具。</div></div>
+  <div class="moat-item"><div class="mn">代码块在线执行</div><div class="md">Run 按钮直接跑 Python/JS，不必手动复制到终端。</div></div>
+  <div class="moat-item"><div class="mn">服务端消息队列</div><div class="md">DB 持久化排队 + 顺序派发。claudecodeui 只有客户端 localStorage。</div></div>
+  <div class="moat-item"><div class="mn">浏览器自动化验证</div><div class="md">Recipe 驱动的前端改动验证与证据留存。</div></div>
+</div>
+
+<div class="footer">
+  生成于 2026-08-15 &nbsp;|&nbsp; 排期共 6.5 周（8 项）&nbsp;|&nbsp; 已砍 8 项<br>
+  数据来源：本地代码库静态分析（claude-web / opcode / claudecodeui / jetbrains-cc-gui）
+</div>
+
+</div>
+</body>
+</html>

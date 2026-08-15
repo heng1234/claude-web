@@ -278,10 +278,16 @@ class AgentSdkBridge:
                     continue
                 future = self._responses.pop(request_id, None)
                 if future is not None and not future.done():
-                    if payload_type == "error":
-                        future.set_exception(AgentSdkBridgeError(str(payload.get("message") or "Agent SDK request failed")))
-                    else:
-                        future.set_result(payload)
+                    # A concurrent wait_for timeout may cancel the future between
+                    # the done() check and set_*(), which would raise
+                    # InvalidStateError and kill the reader for every session.
+                    try:
+                        if payload_type == "error":
+                            future.set_exception(AgentSdkBridgeError(str(payload.get("message") or "Agent SDK request failed")))
+                        else:
+                            future.set_result(payload)
+                    except asyncio.InvalidStateError:
+                        pass
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -388,10 +394,28 @@ class AgentSdkBridge:
             pass
 
     async def abandon_turn(self, turn: AgentSdkTurn) -> None:
-        """Detach a cancelled SSE consumer before asking the daemon to stop."""
+        """Detach a cancelled SSE consumer after asking the daemon to stop.
+
+        Order matters: send interrupt FIRST so the daemon emits a done frame,
+        then drain the queue briefly to ensure the done is processed and the
+        daemon clears activeRequestId. Only then remove the queue reference.
+        """
+        await self._best_effort_interrupt(turn.session_key)
+        # Give the daemon a short window to emit the done frame.
+        try:
+            deadline = 2.0
+            while deadline > 0:
+                try:
+                    msg = await asyncio.wait_for(turn.queue.get(), timeout=min(0.5, deadline))
+                    deadline -= 0.5
+                    if msg.get("type") == "done":
+                        break
+                except asyncio.TimeoutError:
+                    break
+        except Exception:
+            pass
         self._queues.pop(turn.request_id, None)
         self._turn_sessions.pop(turn.request_id, None)
-        await self._best_effort_interrupt(turn.session_key)
 
     async def request(self, method: str, params: Optional[dict] = None, timeout: float = 8.0) -> dict:
         if not await self.ensure_started():
@@ -407,6 +431,13 @@ class AgentSdkBridge:
 
     async def interrupt(self, session_key: str) -> None:
         await self.request("interrupt", {"sessionKey": session_key})
+
+    async def preconnect(self, session_key: str, params: Optional[dict] = None) -> None:
+        """Warm up a runtime before the user sends their first message."""
+        try:
+            await self.request("preconnect", {**(params or {}), "sessionKey": session_key}, timeout=15.0)
+        except Exception:
+            pass
 
     async def context_usage(
         self,

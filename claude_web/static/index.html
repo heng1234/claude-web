@@ -9465,7 +9465,7 @@ if (window.marked) {
     }
   });
 }
-if (window.mermaid) mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+if (window.mermaid) mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'strict' });
 
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
@@ -9998,9 +9998,17 @@ let userScrolledUp = false;
 function isNearBottom() {
   return chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 80;
 }
+// Reading scrollHeight forces a synchronous layout. During fast token streaming
+// this fires dozens of times per second, so coalesce to one write per frame.
+let _scrollRafPending = false;
 function scrollBottom() {
   if (!userScrolledUp) {
-    chatEl.scrollTop = chatEl.scrollHeight;
+    if (_scrollRafPending) return;
+    _scrollRafPending = true;
+    requestAnimationFrame(() => {
+      _scrollRafPending = false;
+      if (!userScrolledUp) chatEl.scrollTop = chatEl.scrollHeight;
+    });
   } else if (typeof bumpNewContent === 'function') {
     bumpNewContent();
   }
@@ -10783,7 +10791,7 @@ function applyTheme(theme) {
   $('hljsTheme').href = theme === 'dark'
     ? 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css'
     : 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css';
-  if (window.mermaid) mermaid.initialize({ startOnLoad: false, theme: theme === 'dark' ? 'dark' : 'default', securityLevel: 'loose' });
+  if (window.mermaid) mermaid.initialize({ startOnLoad: false, theme: theme === 'dark' ? 'dark' : 'default', securityLevel: 'strict' });
 }
 applyTheme(settings.theme);
 themeBtn.addEventListener('click', () => applyTheme(settings.theme === 'dark' ? 'light' : 'dark'));
