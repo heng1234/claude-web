@@ -14650,6 +14650,9 @@ function nativeResultErrorMessage(result) {
   if (/connection (?:closed|lost|ended) mid-response/i.test(message)) {
     return '连接在响应中途断开，以上内容可能不完整；系统正在自动恢复当前会话连接。';
   }
+  if (/request too large/i.test(message)) {
+    return '请求体积超过 32MB 上限：会话里累积的图片和附件太多。原生压缩只减少文字 token，不会移除图片，所以重试仍会超限。请新建会话，或移除较早的图片后重试。';
+  }
   return message;
 }
 
@@ -14984,6 +14987,25 @@ function handleEvent(obj, container, options = {}) {
     }
     rememberTerminalRender(terminal.key, 'result', [resultInfoEl]);
     finishPendingToolUses('已结束', 'done');
+    if (
+      !replay && codeMode
+      && sessionStatsState.tasksTotal > 0
+      && sessionStatsState.tasksDone < sessionStatsState.tasksTotal
+    ) {
+      const remaining = sessionStatsState.tasksTotal - sessionStatsState.tasksDone;
+      const hint = document.createElement('div');
+      hint.className = 'cw-code-diagnostic';
+      hint.innerHTML = `<div class="cw-code-diagnostic-title">还有 ${remaining} 个任务未完成</div><div class="cw-code-diagnostic-copy">Claude 已结束当前回合，但任务清单尚有未完成项。可点击下方按钮让 Claude 继续执行。</div><div class="cw-code-diagnostic-actions"></div>`;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '继续执行';
+      btn.addEventListener('click', () => {
+        hint.remove();
+        send('请继续完成上次未完成的任务', { sessionId });
+      });
+      hint.querySelector('.cw-code-diagnostic-actions').appendChild(btn);
+      chatInner.appendChild(hint);
+    }
     return container;
   }
   return container;

@@ -2521,6 +2521,57 @@ def classify_claude_error(message: str) -> dict:
     return {"type": "error", "message": text}
 
 
+_IMAGE_MAX_LONG_SIDE = 1568
+_IMAGE_PNG_JPEG_THRESHOLD = 200 * 1024
+
+
+def _compress_image_for_api(raw: bytes, media_type: str) -> tuple:
+    """Resize and optionally re-encode an image for the Anthropic API.
+
+    Returns (compressed_bytes, media_type).  The API internally resizes images
+    whose longest side exceeds 1568px, so sending larger files wastes request
+    body budget without any quality benefit.  Large PNG screenshots (which are
+    typically UI captures) are re-encoded as JPEG q=85 to cut 60-80% of payload
+    while remaining readable.  GIF and already-small images are passed through.
+    """
+    if media_type == "image/gif":
+        return raw, media_type
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(raw))
+        w, h = img.size
+        long_side = max(w, h)
+        needs_resize = long_side > _IMAGE_MAX_LONG_SIDE
+        is_large_png = media_type == "image/png" and len(raw) > _IMAGE_PNG_JPEG_THRESHOLD
+        if not needs_resize and not is_large_png:
+            return raw, media_type
+        if needs_resize:
+            ratio = _IMAGE_MAX_LONG_SIDE / long_side
+            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+        buf = io.BytesIO()
+        use_jpeg = (
+            is_large_png
+            or media_type in ("image/jpeg", "image/bmp", "image/webp")
+        )
+        if use_jpeg:
+            if img.mode in ("RGBA", "LA", "P"):
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                rgba = img.convert("RGBA")
+                bg.paste(rgba, mask=rgba.split()[-1])
+                img = bg
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+            img.save(buf, format="JPEG", quality=85, optimize=True)
+            result = buf.getvalue()
+            return (result, "image/jpeg") if len(result) < len(raw) else (raw, media_type)
+        img.save(buf, format="PNG", optimize=True)
+        result = buf.getvalue()
+        return (result, "image/png") if len(result) < len(raw) else (raw, media_type)
+    except Exception:
+        return raw, media_type
+
+
 def build_image_input_message(message: str, images: List[str]) -> bytes:
     """Build a stream-json user message. Works with or without images."""
     import base64 as b64mod
@@ -2533,8 +2584,10 @@ def build_image_input_message(message: str, images: List[str]) -> bytes:
         media_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                      ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp"}
         media_type = media_map.get(ext, "image/png")
-        data = b64mod.b64encode(p.read_bytes()).decode()
-        content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}})
+        raw = p.read_bytes()
+        compressed, final_media_type = _compress_image_for_api(raw, media_type)
+        data = b64mod.b64encode(compressed).decode()
+        content.append({"type": "image", "source": {"type": "base64", "media_type": final_media_type, "data": data}})
     content.append({"type": "text", "text": message})
     msg = {"type": "user", "message": {"role": "user", "content": content}}
     return json.dumps(msg, ensure_ascii=False).encode() + b"\n"
@@ -6503,6 +6556,12 @@ def _agent_sdk_reported_api_error(event: dict) -> str:
         if re.search(r"\bAPI Error\s*:", text, re.IGNORECASE):
             return text
         if "stream idle timeout" in text.lower():
+            return text
+        # Oversized request bodies are reported without an "API Error:" prefix.
+        # Native compaction only shrinks tokens, so accumulated image bytes keep
+        # the retry over the limit; surface it on the terminal result instead of
+        # letting it fall back to a bare error_during_execution.
+        if re.search(r"request too large", text, re.IGNORECASE):
             return text
     return ""
 
