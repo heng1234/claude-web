@@ -13807,7 +13807,7 @@ function recoveredPermissionEvent(item) {
 
 function startNativeTurnRecovery(targetSessionId, initialEventCount, initialContainer = null, options = {}) {
   stopNativeTurnRecovery();
-  if (!codeMode || !targetSessionId || currentCodeRuntime !== 'claude_agent_sdk') return;
+  if (!targetSessionId) return;
   const serial = nativeTurnRecoverySerial;
   let eventCount = Number(initialEventCount || 0);
   let asstContainer = initialContainer;
@@ -17760,7 +17760,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     const missingAuthoritativeTerminal = !lastResultEvent
       && !streamErrorEvent
       && String(doneEvent?.turn_state || '') !== 'waiting_plan';
-    if (turnIsCode && missingAuthoritativeTerminal && turnSessionId) {
+    if (missingAuthoritativeTerminal && turnSessionId) {
       if (turnViewIsActive()) {
         startNativeTurnRecovery(
           turnSessionId,
@@ -17812,8 +17812,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     turnSucceeded = true;
     return { ok: true, accepted: serverAccepted, result: lastResultEvent, usage: lastResultEvent?.usage || null, text: collectedAssistantText.trim() };
   } catch (e) {
-    const recoverableDisconnect = turnIsCode
-      && serverAccepted
+    const recoverableDisconnect = serverAccepted
       && !!turnSessionId
       && e.name !== 'AbortError'
       && /(failed to fetch|network|connection|load failed|terminated|socket|fetch)/i.test(String(e.message || e));
