@@ -1111,8 +1111,9 @@ def db_connect() -> Iterator[sqlite3.Connection]:
         conn.row_factory = sqlite3.Row
         if not _DB_INITIALIZED:
             conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA synchronous=NORMAL")
             _DB_INITIALIZED = True
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA cache_size=-8000")
         conn.execute("PRAGMA busy_timeout=5000")
         yield conn
         conn.commit()
@@ -1244,6 +1245,7 @@ def init_db() -> None:
         ensure_column(conn, "sessions", "remote_ready", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(conn, "sessions", "summary_cache", "TEXT")
         ensure_column(conn, "sessions", "workspace_mode", "TEXT NOT NULL DEFAULT 'chat'")
+        ensure_column(conn, "sessions", "permission_mode", "TEXT NOT NULL DEFAULT 'default'")
         ensure_column(conn, "sessions", "runtime_origin", "TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "sessions", "auto_approve", "INTEGER NOT NULL DEFAULT 0")
         # Official Claude in Chrome is a Code-only capability. Existing Code
@@ -1474,6 +1476,7 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_name ON tool_calls(tool_name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, enabled)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_summary_cache ON sessions(summary_cache)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_list ON sessions(archived, pinned DESC, updated_at DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_message_feedback_session ON message_feedback(session_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_message_feedback_rating ON message_feedback(rating)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_message_feedback_starred ON message_feedback(starred)")
@@ -1500,9 +1503,18 @@ _project_map_service = ProjectMapService(
 app.include_router(create_project_map_router(_project_map_service))
 
 
-def upsert_session(session_id: str, title: str, cwd: str, workspace_mode: Optional[str] = None) -> None:
+def upsert_session(
+    session_id: str,
+    title: str,
+    cwd: str,
+    workspace_mode: Optional[str] = None,
+    permission_mode: Optional[str] = None,
+) -> None:
     now = time.time()
     normalized_mode = (workspace_mode or "").strip().lower()
+    requested_permission = (permission_mode or "").strip()
+    if requested_permission not in {"default", "acceptEdits", "bypassPermissions", "plan"}:
+        requested_permission = ""
     project_bound = bool((cwd or "").strip() not in {"", "~", os.path.expanduser("~")})
     if normalized_mode in {"chat", "code"}:
         requested_mode = normalized_mode
@@ -1510,22 +1522,23 @@ def upsert_session(session_id: str, title: str, cwd: str, workspace_mode: Option
         requested_mode = "code" if project_bound else ""
     with db_connect() as conn:
         row = conn.execute(
-            "SELECT title, manual_title, workspace_mode FROM sessions WHERE id = ?", (session_id,)
+            "SELECT title, manual_title, workspace_mode, permission_mode FROM sessions WHERE id = ?", (session_id,)
         ).fetchone()
         if row is None:
             resolved_mode = requested_mode or "chat"
             conn.execute(
-                "INSERT INTO sessions (id, title, cwd, workspace_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, title, cwd, resolved_mode, now, now),
+                "INSERT INTO sessions (id, title, cwd, workspace_mode, permission_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (session_id, title, cwd, resolved_mode, requested_permission or "default", now, now),
             )
         else:
             new_title = row["title"]
             if not row["manual_title"] and not new_title:
                 new_title = title
             resolved_mode = requested_mode or row["workspace_mode"] or "chat"
+            resolved_permission = requested_permission or row["permission_mode"] or "default"
             conn.execute(
-                "UPDATE sessions SET title = ?, cwd = ?, workspace_mode = ?, updated_at = ? WHERE id = ?",
-                (new_title, cwd, resolved_mode, now, session_id),
+                "UPDATE sessions SET title = ?, cwd = ?, workspace_mode = ?, permission_mode = ?, updated_at = ? WHERE id = ?",
+                (new_title, cwd, resolved_mode, resolved_permission, now, session_id),
             )
 
 
@@ -1820,6 +1833,11 @@ async def async_load_events(session_id: str) -> List[dict]:
 async def async_append_event(session_id: str, event: dict) -> None:
     """Non-blocking wrapper for append_event (offloads file I/O + SQLite to a thread)."""
     await asyncio.get_running_loop().run_in_executor(None, append_event, session_id, event)
+
+
+async def async_record_usage(session_id: str, result_event: dict) -> None:
+    """Non-blocking wrapper for record_usage (offloads SQLite write to a thread)."""
+    await asyncio.get_running_loop().run_in_executor(None, record_usage, session_id, result_event)
 
 
 def session_event_page(events: List[dict], limit_turns: int = 0) -> dict:
@@ -7146,9 +7164,9 @@ async def _drain_detached_agent_sdk_turn(
             if event_type != "stream_event" and not (
                 event_type == "system" and str(obj.get("subtype") or "").startswith("hook_")
             ):
-                append_event(session_id, obj)
+                await async_append_event(session_id, obj)
                 if event_type == "result":
-                    record_usage(session_id, obj)
+                    await async_record_usage(session_id, obj)
                     if not obj.get("parent_tool_use_id"):
                         await _maybe_auto_validate_code_changes(
                             session_id,
@@ -7407,9 +7425,9 @@ def _agent_sdk_streaming_response(
                 if event_type != "stream_event" and not (
                     event_type == "system" and str(obj.get("subtype") or "").startswith("hook_")
                 ):
-                    append_event(session_id, obj)
+                    await async_append_event(session_id, obj)
                     if event_type == "result":
-                        record_usage(session_id, obj)
+                        await async_record_usage(session_id, obj)
                 yield f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
                 if event_type == "result" and not obj.get("parent_tool_use_id"):
                     validation_event = await _maybe_auto_validate_code_changes(
@@ -7695,7 +7713,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             )
     if not agent_loop_owner and _session_agent_loop_busy(session_id):
         raise HTTPException(status_code=409, detail="session is owned by a running Agent Loop")
-    existing_events = load_events(session_id) if req.session_id else []
+    existing_events = await async_load_events(session_id) if req.session_id else []
 
     runtime_origin = normalize_runtime_origin(row["runtime_origin"] if row else "")
     remote_session_id, remote_ready = resolve_remote_session_state(session_id, row, existing_events)
@@ -7806,7 +7824,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     # after the upload file is pruned. Only stored when it actually differs.
     if stored_full_message != display_text:
         user_event["full_text"] = stored_full_message
-    upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode)
+    upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode, effective_permission_mode)
     if code_workspace:
         set_session_browser_enabled(session_id, effective_browser_enabled)
     set_session_remote_state(session_id, remote_session_id, remote_ready and not is_new)
@@ -8094,9 +8112,9 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                     obj["change_set_id"] = str(obj.get("change_set_id") or uuid.uuid4().hex)
 
                 if t != "stream_event" and not (t == "system" and obj.get("subtype", "").startswith("hook_")):
-                    append_event(session_id, obj)
+                    await async_append_event(session_id, obj)
                     if t == "result":
-                        record_usage(session_id, obj)
+                        await async_record_usage(session_id, obj)
                 yield f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
                 if t == "result" and not obj.get("parent_tool_use_id"):
@@ -8165,7 +8183,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 _running_write_locks.pop(session_id, None)
             _terminated_processes.discard(process)
 
-            upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode)
+            upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode, effective_permission_mode)
             if remote_became_ready:
                 set_session_remote_state(session_id, remote_session_id, True)
         terminal_state = "waiting_plan" if plan_waiting_before_cleanup else ("completed" if turn_ended else "failed")
@@ -11857,10 +11875,11 @@ async def exec_code(request: Request, req: ExecCodeRequest):
     if not req.code or len(req.code) > 100_000:
         raise HTTPException(status_code=400, detail="code empty or too large")
 
-    timeout = max(1, min(int(req.timeout or 10), 30))
+    timeout = max(1, min(int(req.timeout or 10), 120))
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd, req.code,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(UPLOADS_DIR),
@@ -11869,7 +11888,16 @@ async def exec_code(request: Request, req: ExecCodeRequest):
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
             proc.kill()
-            return {"stdout": "", "stderr": f"execution timed out after {timeout}s", "returncode": -1, "timed_out": True}
+            return {
+                "stdout": "",
+                "stderr": (
+                    f"execution timed out after {timeout}s\n"
+                    "提示：该命令可能在等待交互式输入（stdin 已关闭），"
+                    "请改用非交互参数或在终端中手动运行。"
+                ),
+                "returncode": -1,
+                "timed_out": True,
+            }
     except FileNotFoundError as e:
         raise HTTPException(status_code=500, detail=f"interpreter not found: {e}")
 
@@ -11893,6 +11921,7 @@ def _row_to_session(r: sqlite3.Row) -> dict:
         "archived": bool(r["archived"]),
         "tags": tags,
         "workspace_mode": (r["workspace_mode"] or "chat") if "workspace_mode" in r.keys() else "chat",
+        "permission_mode": (r["permission_mode"] or "default") if "permission_mode" in r.keys() else "default",
         "runtime_origin": normalize_runtime_origin(r["runtime_origin"]) if "runtime_origin" in r.keys() else "",
         "native_user_offset": int(r["native_user_offset"] or 0) if "native_user_offset" in r.keys() else 0,
         "auto_approve": bool(r["auto_approve"]) if "auto_approve" in r.keys() else False,
@@ -14629,6 +14658,7 @@ async def git_checkout(request: Request, payload: GitCheckoutRequest):
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 app.mount("/assets", StaticFiles(directory=str(STATIC_DIR)), name="assets")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 class _TextExtractor(HTMLParser):
