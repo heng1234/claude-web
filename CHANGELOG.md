@@ -2,7 +2,19 @@
 
 所有重要变更按版本记录。应用内的 What's New 和帮助面板使用 `static/changelog.json`，这里是给 GitHub / Git diff 浏览的 Markdown 版本。
 
-当前稳定版本：`2.2.1`。
+当前稳定版本：`2.2.2`。
+
+## v2.2.2 - 2026-08-18
+
+- **FEATURE** 全量国际化：新增中英文切换，侧边栏右上角一键切换 `EN` / `中`，选择持久化到 localStorage，默认中文；覆盖 1300+ 条 UI 文案（按钮、菜单、设置、帮助文档、错误提示、诊断卡片、Toast），中英字典对称无遗漏
+- **FEATURE** i18n 框架：新增 `t()` 取词函数与 `data-i18n` / `data-i18n-placeholder` / `data-i18n-title` / `data-i18n-aria` 声明式属性，字典文件 `static/i18n/{zh,en}.json` 按功能分组，切换语言后触发 `cwLangChanged` 事件自动重渲染动态内容
+- **FIX** 自动模式仍弹权限审批：per-session `permission_mode` 持久化到 DB，`loadSession` 恢复下拉框，刷新或切标签后不再回落默认模式
+- **FIX** 流式输出卡死需刷新：`append_event` / `record_usage` 改用 `asyncio.to_thread` 卸载阻塞 I/O，前端新增 45s 静默看门狗触发自动重连
+- **FIX** exec-code 交互命令超时：stdin 改为 DEVNULL，超时上限 30s→120s
+- **FIX** 停止生成后无法立即编辑历史消息：改为检测 `stopBtn` 可见性加 `controller.signal.aborted`，不再被异步 finally 的清理时机卡住
+- **FIX** `Server error mid-response` 与 `Failed to fetch` 显示英文原文：新增 `translateErrorMessage` 统一把上游错误转成可读提示
+- **PERF** `db_connect` 每次连接都设 `synchronous=NORMAL` 与 `cache_size`；`load_events` 改用 `async_load_events`；新增 sessions 复合索引 `(archived, pinned, updated_at)` 与 `async_record_usage`
+- **CHORE** 新增 `/static` 静态路由，用于提供 i18n 字典文件
 
 ## v2.2.1 - 2026-08-15
 
