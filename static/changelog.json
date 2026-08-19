@@ -2,6 +2,36 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.2.3",
+      "date": "2026-08-19",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "Chat 模式流式输出卡死：看门狗触发后恢复函数因 !codeMode 守卫完全跳过，现在 Chat / Code 模式均可自动从历史补发缺失事件恢复，无需手动刷新"
+        },
+        {
+          "type": "fix",
+          "text": "Code 模式切换慢约 1 分钟：get_session 用同步 load_events 阻塞整个 asyncio 事件循环；现已改为异步，切换立即响应"
+        },
+        {
+          "type": "fix",
+          "text": "AgentLoop 流无看门狗：加 45s 静默看门狗，卡死后从当前事件索引重订阅，服务端 job 不中断"
+        },
+        {
+          "type": "fix",
+          "text": "Chat 模式发送图片后图片残留输入框：composerSnapshot 存在时清理被跳过，现在拿到快照后主动清理"
+        },
+        {
+          "type": "perf",
+          "text": "全面异步化后端 I/O：13 处 load_events、7 处 save_events（含 fsync）、18 处 append_event、1 处 record_usage 全部改为异步，SSE 流写入不再阻塞事件循环"
+        },
+        {
+          "type": "perf",
+          "text": "list_sessions 搜索 N+1 修复：最多 500 个会话的 JSONL 历史读取改为 asyncio.to_thread 整块卸载，搜索不再卡住其他请求"
+        }
+      ]
+    },
+    {
       "version": "2.2.2",
       "date": "2026-08-18",
       "highlights": [

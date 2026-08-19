@@ -2,7 +2,18 @@
 
 所有重要变更按版本记录。应用内的 What's New 和帮助面板使用 `static/changelog.json`，这里是给 GitHub / Git diff 浏览的 Markdown 版本。
 
-当前稳定版本：`2.2.2`。
+当前稳定版本：`2.2.3`。
+
+## v2.2.3 - 2026-08-19
+
+- **FIX** Chat 模式流式输出卡死刷新才完整：看门狗触发后恢复函数有 `!codeMode` 硬守卫，Chat 模式完全跳过恢复；现改为从历史补发缺失事件，Chat / Code 模式均可自动恢复
+- **FIX** Code 模式切换慢约 1 分钟：`get_session` 用同步 `load_events` 阻塞整个 asyncio 事件循环，导致页面卡顿
+- **FIX** AgentLoop 流无看门狗：加 45s 静默看门狗，触发后从当前事件索引重订阅，不中断服务端 job
+- **FIX** Chat 模式发送图片后图片残留在输入框：`composerSnapshot` 存在时 `clearPendingImages` 被跳过，改为在 send 拿到快照后主动清理
+- **FIX** `permissions/pending` 轮询每 700ms 同步 `load_events` 周期性冻结事件循环
+- **PERF** 全面异步化后端阻塞 I/O：13 处 async 路由的同步 `load_events` 全改为 `async_load_events`；新增 `async_save_events` 包装，7 处含 fsync 的 `save_events` 异步化；18 处 SSE 流内同步 `append_event` 改为 `async_append_event`；1 处 `record_usage` 改为 `async_record_usage`
+- **PERF** `list_sessions` 搜索 N+1 同步读：最多 500 个会话循环同步读 JSONL 历史改为整体 `asyncio.to_thread` 卸载，搜索不再阻塞其他请求
+- **PERF** `get_session` 接口新增 `running` 字段（Chat 模式看 `_running_processes`，Code 看 `_agent_sdk_running_sessions`），恢复轮询可正确判断会话是否仍在写入
 
 ## v2.2.2 - 2026-08-18
 
