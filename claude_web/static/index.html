@@ -13946,19 +13946,33 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
     showReconnectStatus(`正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}`);
   }
 
+  // Chat-mode turns have no SDK permission loop, but their events are persisted
+  // the same way, so history replay still recovers a wedged stream. Only the
+  // SDK-specific permission polling is gated on native Code sessions.
+  const nativeOwned = codeMode && currentCodeRuntime === 'claude_agent_sdk';
+
   const poll = async () => {
     if (
       serial !== nativeTurnRecoverySerial
       || sessionId !== targetSessionId
-      || !codeMode
-      || currentCodeRuntime !== 'claude_agent_sdk'
     ) return;
     try {
-      const stateResponse = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/permissions/pending`);
-      if (!stateResponse.ok) {
-        throw new Error(`HTTP ${stateResponse.status}`);
+      let state;
+      if (nativeOwned) {
+        const stateResponse = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/permissions/pending`);
+        if (!stateResponse.ok) {
+          throw new Error(`HTTP ${stateResponse.status}`);
+        }
+        state = await stateResponse.json();
+      } else {
+        const sessionResponse = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}`);
+        if (!sessionResponse.ok) {
+          throw new Error(`HTTP ${sessionResponse.status}`);
+        }
+        const data = await sessionResponse.json();
+        const events = Array.isArray(data.events) ? data.events : [];
+        state = { event_count: events.length, running: !!data.running, turn_state: data.turn_state, pending: [] };
       }
-      const state = await stateResponse.json();
       if (serial !== nativeTurnRecoverySerial || sessionId !== targetSessionId) return;
       markConnectionRestored();
       reconnectAttempt = 0;
@@ -13998,20 +14012,27 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
       const turnState = String(state.turn_state || (state.running ? 'running' : 'idle'));
       if (state.running || turnState === 'running' || turnState === 'stopping') {
         nativeTurnRecoveryRunningSessionId = targetSessionId;
-        syncActiveCodeRunControls();
+        if (nativeOwned) syncActiveCodeRunControls();
         if (!asstContainer) asstContainer = newAssistantBubble();
         if (!asstContainer.querySelector(':scope > [data-role="thinking"]')) {
           showThinking(asstContainer, t('status.thinking'));
         }
-        renderCodeMessageQueue();
+        if (nativeOwned) renderCodeMessageQueue();
         nativeTurnRecoveryTimer = setTimeout(poll, 700);
       } else {
         nativeTurnRecoveryRunningSessionId = null;
-        syncActiveCodeRunControls();
         hideThinking(asstContainer, { force: true });
         const failed = turnState === 'failed' || turnState === 'stopped';
         const incomplete = turnState === 'incomplete';
         finishPendingToolUses(failed || incomplete ? t('ui.error_short') : t('ui.ended'), failed || incomplete ? 'error' : 'done');
+        if (!nativeOwned) {
+          // Chat mode: history replay already flushed the full reply; nothing
+          // more to reconcile (no SDK runtime, no code queue, no git state).
+          markConnectionRestored();
+          refreshSessions();
+          return;
+        }
+        syncActiveCodeRunControls();
         if (expectTerminal && incomplete) {
           addErrorBlock(t('x.sdk_no_final'));
           addSystemAction(t('x.safe_rebuild'), t('code.reconnect'), () => reconnectCurrentCodeSession());
@@ -17224,6 +17245,16 @@ async function send(message, options = {}) {
     return { ok: false, uploadFailed: true };
   }
   if (!await maybeAutoCompactBeforeSend(finalMessage)) return { ok: false, compactFailed: true };
+  // The capture already owns the resolved images/docs, so the composer can be
+  // cleared now. sendCore skips its own cleanup whenever a snapshot is passed,
+  // which previously left sent images stuck in the input box.
+  if (conversationViewEpoch === sendOptions.viewEpoch && codeMode === (sendOptions.workspaceMode === 'code')) {
+    clearPendingImages();
+    sessionAttachmentSnapshots.delete(sendOptions.sessionId || sessionId);
+    clearDraft();
+    clearUrlContext();
+    clearDocs();
+  }
   return sendCore(finalMessage, null, imagePaths, {
     ...sendOptions,
     composerSnapshot: {
@@ -17454,6 +17485,8 @@ async function streamAgentLoop(jobId, goal, fromEvent = 0, owner = {}) {
     stopBtn.classList.remove('hidden');
   }
   let asstContainer = null;
+  let seenLoopEventCount = fromEvent;
+  let loopStalled = false;
   try {
     const query = fromEvent > 0 ? `?from=${encodeURIComponent(fromEvent)}` : '';
     const resp = await fetch(`/api/agent-loop/${encodeURIComponent(jobId)}/stream${query}`, {
@@ -17463,8 +17496,30 @@ async function streamAgentLoop(jobId, goal, fromEvent = 0, owner = {}) {
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
+    // Same read-stall watchdog as native turns: the loop job persists events, so
+    // a wedged socket can be recovered by resubscribing from the last seen index.
+    const STREAM_SILENCE_TIMEOUT_MS = 45000;
+    const readWithWatchdog = () => {
+      let timer = null;
+      const stall = new Promise((resolve) => {
+        timer = setTimeout(() => { loopStalled = true; resolve({ done: true, value: undefined }); }, STREAM_SILENCE_TIMEOUT_MS);
+      });
+      return Promise.race([reader.read(), stall]).finally(() => { if (timer) clearTimeout(timer); });
+    };
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithWatchdog();
+      if (loopStalled) {
+        try { await reader.cancel(); } catch (_) {}
+        if (loopViewIsActive() && !loopController.signal.aborted) {
+          // Resubscribe from the current event index; the job keeps running server-side.
+          nativeTurnRecoveryTimer = setTimeout(() => {
+            streamAgentLoop(jobId, goal, seenLoopEventCount, {
+              targetSessionId, workspaceMode: targetWorkspaceMode, viewEpoch: targetViewEpoch,
+            }).catch(() => {});
+          }, 400);
+        }
+        return;
+      }
       if (done) break;
       buf += decoder.decode(value, { stream: true });
       const parts = buf.split('\n\n');
@@ -17473,6 +17528,8 @@ async function streamAgentLoop(jobId, goal, fromEvent = 0, owner = {}) {
         const line = chunk.split('\n').find(l => l.startsWith('data: '));
         if (!line) continue;
         const obj = JSON.parse(line.slice(6));
+        if (typeof obj.event_index === 'number') seenLoopEventCount = obj.event_index + 1;
+        else seenLoopEventCount += 1;
         if (!loopViewIsActive()) continue;
         const result = handleAgentLoopEvent(obj, asstContainer, goal);
         if (result === null) {
@@ -17483,14 +17540,18 @@ async function streamAgentLoop(jobId, goal, fromEvent = 0, owner = {}) {
       }
     }
   } finally {
-    if (loopViewIsActive()) {
+    // A stalled read hands off to a resubscribing call, so don't tear down the
+    // run indicators or mark tools done — the loop is still alive server-side.
+    if (!loopStalled && loopViewIsActive()) {
       stopBtn.classList.add('hidden');
       if (currentController === loopController) currentController = null;
       finishPendingToolUses(t('status.done'), 'done');
     }
-    refreshSessions();
-    refreshCwds();
-    refreshGitStatus();
+    if (!loopStalled) {
+      refreshSessions();
+      refreshCwds();
+      refreshGitStatus();
+    }
   }
 }
 

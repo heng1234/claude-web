@@ -1980,6 +1980,11 @@ def save_events(session_id: str, events: List[dict]) -> None:
             replace_session_tool_call_rows(conn, session_id, events)
 
 
+async def async_save_events(session_id: str, events: List[dict]) -> None:
+    """Non-blocking wrapper for save_events (offloads fsync file write to a thread)."""
+    await asyncio.get_running_loop().run_in_executor(None, save_events, session_id, events)
+
+
 def summarize_text_from_events(events: List[dict]) -> str:
     parts: List[str] = []
     for ev in events:
@@ -6963,7 +6968,7 @@ async def _auto_recover_corrupted_sdk_session(
         return {"ok": False, "error": f"invalid session_id: {session_id!r}"}
     _compacting_sessions.add(session_id)
     try:
-        events = load_events(session_id)
+        events = await async_load_events(session_id)
         user_indices = [i for i, e in enumerate(events) if e.get("type") == "user_input"]
         if len(user_indices) >= 3:
             split_at = user_indices[-2]
@@ -7027,7 +7032,7 @@ async def _auto_recover_corrupted_sdk_session(
             "sdk_recovered": True,
             "context_strategy": "sdk-recovery-v1",
         }
-        save_events(session_id, [compacted_event] + new_events)
+        await async_save_events(session_id, [compacted_event] + new_events)
         set_session_remote_state(session_id, str(uuid.uuid4()), False)
         set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
         set_session_native_user_offset(session_id, 0)
@@ -7079,7 +7084,7 @@ async def _drain_detached_agent_sdk_turn(
                 reported_api_error = bridge_error
                 err_event = classify_claude_error(bridge_error)
                 err_event["turn_id"] = turn_id
-                append_event(session_id, err_event)
+                await async_append_event(session_id, err_event)
                 _notification_send_chat_error(session_id, work_dir, err_event)
                 continue
             # Pending permission requests live in the bridge and are restored
@@ -7148,7 +7153,7 @@ async def _drain_detached_agent_sdk_turn(
                     turn_id,
                 )
                 if recovered_final is not None:
-                    append_event(session_id, recovered_final)
+                    await async_append_event(session_id, recovered_final)
                     last_assistant_text = str(obj.get("result") or "").strip()
                 saw_top_level_result = True
                 result_subtype = str(obj.get("subtype") or "").lower()
@@ -7184,7 +7189,7 @@ async def _drain_detached_agent_sdk_turn(
                 "Claude Agent SDK runtime ended before returning a final result"
             )
             err_event["turn_id"] = turn_id
-            append_event(session_id, err_event)
+            await async_append_event(session_id, err_event)
             _notification_send_chat_error(session_id, work_dir, err_event)
         if (
             saw_terminal_error
@@ -7214,7 +7219,7 @@ async def _drain_detached_agent_sdk_turn(
             )
             activation_event = _agent_sdk_activation_status_event(activation_state)
             if activation_event is not None:
-                append_event(session_id, activation_event)
+                await async_append_event(session_id, activation_event)
     except asyncio.CancelledError:
         try:
             await _claude_agent_bridge.abandon_turn(turn)
@@ -7227,7 +7232,7 @@ async def _drain_detached_agent_sdk_turn(
         if session_id not in _stopped_sessions:
             err_event = classify_claude_error(str(exc))
             err_event["turn_id"] = turn_id
-            append_event(session_id, err_event)
+            await async_append_event(session_id, err_event)
             _notification_send_chat_error(session_id, work_dir, err_event)
         if session_id not in _plan_waiting_sessions:
             activation_state = await _settle_pending_agent_sdk_activation(
@@ -7237,7 +7242,7 @@ async def _drain_detached_agent_sdk_turn(
             )
             activation_event = _agent_sdk_activation_status_event(activation_state)
             if activation_event is not None:
-                append_event(session_id, activation_event)
+                await async_append_event(session_id, activation_event)
     finally:
         _agent_sdk_running_sessions.discard(session_id)
         _stopped_sessions.discard(session_id)
@@ -7900,7 +7905,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 _release_code_turn(session_id, reserved_turn_id)
                 await discard_git_checkpoint(checkpoint, work_dir)
                 raise HTTPException(status_code=status_code, detail=message) from exc
-            append_event(session_id, user_event)
+            await async_append_event(session_id, user_event)
             _mark_code_turn_accepted(session_id, reserved_turn_id)
             set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
             _plan_waiting_sessions.discard(session_id)
@@ -7930,7 +7935,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
 
     if code_workspace:
         reserved_turn_id = _reserve_code_turn(session_id, req.client_turn_id)
-    append_event(session_id, user_event)
+    await async_append_event(session_id, user_event)
     if code_workspace:
         _mark_code_turn_accepted(session_id, reserved_turn_id)
     if code_workspace:
@@ -8007,7 +8012,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             except ClaudeCliResolutionError as e:
                 err_event = {"type": "error", "message": str(e)}
                 err_event["turn_id"] = turn_id
-                append_event(session_id, err_event)
+                await async_append_event(session_id, err_event)
                 yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
                 return
             try:
@@ -8022,7 +8027,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             except FileNotFoundError:
                 err_event = {"type": "error", "message": "claude CLI not found in PATH"}
                 err_event["turn_id"] = turn_id
-                append_event(session_id, err_event)
+                await async_append_event(session_id, err_event)
                 _notification_send_chat_error(session_id, work_dir, err_event)
                 yield f"data: {json.dumps(err_event)}\n\n"
                 return
@@ -8057,7 +8062,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 except ValueError as e:
                     err_event = {"type": "error", "message": f"stdout line too large: {e}"}
                     err_event["turn_id"] = turn_id
-                    append_event(session_id, err_event)
+                    await async_append_event(session_id, err_event)
                     _notification_send_chat_error(session_id, work_dir, err_event)
                     yield f"data: {json.dumps(err_event)}\n\n"
                     break
@@ -8138,7 +8143,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                     err_text = bytes(stderr_buffer).decode("utf-8", errors="replace")
                     err_event = classify_claude_error(err_text or f"claude exited with code {rc}")
                     err_event["turn_id"] = turn_id
-                    append_event(session_id, err_event)
+                    await async_append_event(session_id, err_event)
                     _notification_send_chat_error(session_id, work_dir, err_event)
                     yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
         finally:
@@ -9141,7 +9146,7 @@ async def stop_chat(session_id: str, reason: Optional[str] = Query(default=None)
                 "ts": time.time(),
             }
         )
-        append_event(session_id, stop_event)
+        await async_append_event(session_id, stop_event)
         return {
             "ok": True,
             "runtime": "claude_agent_sdk",
@@ -9189,7 +9194,7 @@ async def stop_chat(session_id: str, reason: Optional[str] = Query(default=None)
             "ts": time.time(),
         }
     )
-    append_event(session_id, stop_event)
+    await async_append_event(session_id, stop_event)
     return {"ok": True, "reason": "plan_ready" if plan_ready else "user"}
 
 
@@ -9531,7 +9536,7 @@ async def set_agent_sdk_permission_mode(session_id: str, req: NativePermissionCo
 @app.get("/api/sessions/{session_id}/permissions/pending")
 async def pending_agent_sdk_permissions(session_id: str):
     _agent_sdk_session_row(session_id)
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     turn = _agent_sdk_turn_state(session_id, events)
     pending: List[dict] = []
     if _claude_agent_bridge.running:
@@ -9641,7 +9646,7 @@ async def rewind_agent_sdk_files(session_id: str, req: NativeRewindRequest):
             "files_changed": files_changed if isinstance(files_changed, list) else [],
             "ts": time.time(),
         }
-        append_event(session_id, rewind_event)
+        await async_append_event(session_id, rewind_event)
     return {
         "ok": True,
         "runtime": _RUNTIME_ORIGIN_AGENT_SDK,
@@ -10485,7 +10490,7 @@ async def review_code_change(session_id: str, req: CodeChangeReviewRequest):
     if relative is None:
         raise HTTPException(status_code=400, detail="invalid file path")
     rel_path = relative.as_posix()
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     _, item = _find_code_change(events, change_set_id, rel_path)
     if req.hunk_index is None and item.get("review_state") == "reverted" and action == "revert":
         return {"ok": True, "item": item, "already_applied": True}
@@ -10519,7 +10524,7 @@ async def review_code_change(session_id: str, req: CodeChangeReviewRequest):
         item["hunk_review"] = reviews
         _refresh_hunk_review_state(item, hunks)
         item["reviewed_at"] = time.time()
-        save_events(session_id, events)
+        await async_save_events(session_id, events)
         return {"ok": True, "item": item, "hunks": hunks}
 
     if action == "revert":
@@ -10550,7 +10555,7 @@ async def review_code_change(session_id: str, req: CodeChangeReviewRequest):
         }
         _refresh_hunk_review_state(item, hunks)
     item["reviewed_at"] = time.time()
-    save_events(session_id, events)
+    await async_save_events(session_id, events)
     return {"ok": True, "item": item}
 
 
@@ -10564,7 +10569,7 @@ async def review_code_changes_batch(session_id: str, req: CodeBatchReviewRequest
         raise HTTPException(status_code=400, detail="action must be keep or revert")
     if not req.targets or len(req.targets) > 200:
         raise HTTPException(status_code=400, detail="batch targets must contain 1 to 200 files")
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     resolved: List[Tuple[dict, str]] = []
     seen: Set[Tuple[str, str]] = set()
     for target in req.targets:
@@ -10620,7 +10625,7 @@ async def review_code_changes_batch(session_id: str, req: CodeBatchReviewRequest
                 str(hunk["index"]): "reverted" if action == "revert" else "kept"
                 for hunk in hunks
             }
-    save_events(session_id, events)
+    await async_save_events(session_id, events)
     return {"ok": True, "items": [item for item, _ in resolved]}
 
 
@@ -10745,7 +10750,7 @@ async def _execute_code_validation(
         **result,
         "ts": time.time(),
     }
-    append_event(session_id, event)
+    await async_append_event(session_id, event)
     return event
 
 
@@ -10776,7 +10781,7 @@ async def _maybe_auto_validate_code_changes(session_id: str, cwd: str, changed_f
             "duration_ms": 0,
             "ts": time.time(),
         }
-        append_event(session_id, event)
+        await async_append_event(session_id, event)
         return event
 
 
@@ -10858,9 +10863,9 @@ async def compact_agent_sdk_session(session_id: str, req: NativeCompactRequest):
                 compact_metadata = obj.get("compact_metadata") or {}
             if event_type == "result" and not obj.get("parent_tool_use_id"):
                 result_event = obj
-                record_usage(session_id, obj)
+                await async_record_usage(session_id, obj)
             if not (event_type == "system" and str(obj.get("subtype") or "").startswith("hook_")):
-                append_event(session_id, obj)
+                await async_append_event(session_id, obj)
         if not result_event:
             raise AgentSdkBridgeError("Claude Agent SDK compact ended without a final result")
         _normalize_agent_sdk_result(result_event)
@@ -11195,7 +11200,7 @@ async def prepare_fork(request: Request, session_id: str, req: ForkRequest):
     _require_not_mobile_access(request)
     if _session_control_busy(session_id):
         raise HTTPException(status_code=409, detail="session is busy")
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     user_event_positions = [i for i, e in enumerate(events) if e.get("type") == "user_input"]
     if not user_event_positions or req.event_index < 0:
         raise HTTPException(status_code=400, detail="invalid event_index")
@@ -11313,7 +11318,7 @@ async def prepare_inline_edit(request: Request, session_id: str, req: ForkReques
     if _session_control_busy(session_id):
         raise HTTPException(status_code=409, detail="session is busy")
 
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     user_event_positions = [i for i, e in enumerate(events) if e.get("type") == "user_input"]
     if req.event_index < 0 or req.event_index >= len(user_event_positions):
         raise HTTPException(status_code=400, detail="invalid event_index")
@@ -11387,7 +11392,7 @@ async def prepare_inline_edit(request: Request, session_id: str, req: ForkReques
 
     await _discard_session_runtime(session_id)
     await discard_event_checkpoints(events[target_pos:], cwd)
-    save_events(session_id, events_before)
+    await async_save_events(session_id, events_before)
     upsert_session(session_id, derive_title(new_text), cwd, row["workspace_mode"] if row else None)
     if native_fork:
         set_session_remote_state(session_id, native_fork_id, True)
@@ -11428,7 +11433,7 @@ async def restore_checkpoint(request: Request, session_id: str, req: RestoreRequ
     _require_not_mobile_access(request)
     if _session_control_busy(session_id):
         raise HTTPException(status_code=409, detail="session is busy")
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     user_event_positions = [i for i, e in enumerate(events) if e.get("type") == "user_input"]
     if req.event_index < 0 or req.event_index >= len(user_event_positions):
         raise HTTPException(status_code=400, detail="invalid event_index")
@@ -12076,23 +12081,30 @@ async def list_sessions(q: Optional[str] = None, archived: bool = False, tag: Op
 
     if q:
         q_lower = q.lower()
-        filtered: List[dict] = []
-        for item in items:
-            if q_lower in item["title"].lower() or q_lower in ",".join(item["tags"]).lower():
-                filtered.append(item)
-                continue
-            try:
-                content = ensure_session_summary_cache(item["id"], item.get("_summary_cache")).lower()
-                if q_lower in content:
-                    filtered.append(item)
+
+        def _filter_by_content() -> List[dict]:
+            # Content search touches the JSONL history of every candidate session,
+            # so the whole loop runs in a worker thread instead of stalling the
+            # event loop (and any in-flight SSE turn) for up to 500 file reads.
+            matched: List[dict] = []
+            for item in items:
+                if q_lower in item["title"].lower() or q_lower in ",".join(item["tags"]).lower():
+                    matched.append(item)
                     continue
-                if len(content) >= _SUMMARY_CACHE_LIMIT:
-                    full_content = summarize_text_from_events(load_events(item["id"])).lower()
-                    if q_lower in full_content:
-                        filtered.append(item)
-            except Exception:
-                continue
-        items = filtered
+                try:
+                    content = ensure_session_summary_cache(item["id"], item.get("_summary_cache")).lower()
+                    if q_lower in content:
+                        matched.append(item)
+                        continue
+                    if len(content) >= _SUMMARY_CACHE_LIMIT:
+                        full_content = summarize_text_from_events(load_events(item["id"])).lower()
+                        if q_lower in full_content:
+                            matched.append(item)
+                except Exception:
+                    continue
+            return matched
+
+        items = await asyncio.to_thread(_filter_by_content)
 
     for item in items:
         item.pop("_summary_cache", None)
@@ -12543,8 +12555,12 @@ async def get_session(session_id: str, history_turns: int = Query(default=0, ge=
     if row is None:
         raise HTTPException(status_code=404, detail="session not found")
     data = _row_to_session(row)
-    page = session_event_page(load_events(session_id), history_turns)
+    page = session_event_page(await async_load_events(session_id), history_turns)
     data.update(page)
+    data["running"] = (
+        session_id in _running_processes
+        or session_id in _agent_sdk_running_sessions
+    )
     data["feedback"] = load_feedback_map(session_id)
     data["compact_backups"] = [
         {"name": p.name, "created_at": p.stat().st_mtime, "size": p.stat().st_size}
@@ -12700,7 +12716,7 @@ async def delete_session(request: Request, session_id: str, force: Optional[str]
     await _discard_session_runtime(session_id)
     await _terminate_session_code_terminals(session_id)
     _agent_sdk_context_usage_cache.pop(session_id, None)
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     with db_connect() as conn:
         row = conn.execute("SELECT cwd FROM sessions WHERE id = ?", (session_id,)).fetchone()
         conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
@@ -12726,11 +12742,11 @@ async def clear_session(request: Request, session_id: str):
         raise HTTPException(status_code=409, detail="session is busy")
     await _discard_session_runtime(session_id)
     await _terminate_session_code_terminals(session_id)
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     with db_connect() as conn:
         row = conn.execute("SELECT cwd FROM sessions WHERE id = ?", (session_id,)).fetchone()
     await discard_event_checkpoints(events, row["cwd"] if row else "")
-    save_events(session_id, [])
+    await async_save_events(session_id, [])
     with db_connect() as conn:
         conn.execute("DELETE FROM code_message_queue WHERE session_id = ?", (session_id,))
         conn.execute("DELETE FROM code_turn_requests WHERE session_id = ?", (session_id,))
@@ -12762,7 +12778,7 @@ async def compact_session(request: Request, session_id: str, keep_last: int = Qu
         raise HTTPException(status_code=409, detail="session is busy")
     _compacting_sessions.add(session_id)
     try:
-        events = load_events(session_id)
+        events = await async_load_events(session_id)
         if len(events) < 4:
             return {"ok": True, "skipped": True, "reason": "history too short"}
 
@@ -12820,7 +12836,7 @@ async def compact_session(request: Request, session_id: str, keep_last: int = Qu
         with db_connect() as conn:
             session_row = conn.execute("SELECT cwd FROM sessions WHERE id = ?", (session_id,)).fetchone()
         await discard_event_checkpoints(old_events, session_row["cwd"] if session_row else "")
-        save_events(session_id, compacted)
+        await async_save_events(session_id, compacted)
         set_session_remote_state(session_id, str(uuid.uuid4()), False)
         set_session_runtime_origin(session_id, "")
         set_session_native_user_offset(session_id, 0)
@@ -12835,7 +12851,7 @@ async def compact_session(request: Request, session_id: str, keep_last: int = Qu
 
 @app.post("/api/sessions/{session_id}/suggest-title")
 async def suggest_title(session_id: str):
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     if not events:
         raise HTTPException(status_code=404, detail="empty session")
     summary = summarize_text_from_events(events)[:3000]
@@ -12870,7 +12886,7 @@ async def suggest_title(session_id: str):
 
 @app.get("/api/sessions/{session_id}/export")
 async def export_session(session_id: str):
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     if not events:
         raise HTTPException(status_code=404, detail="session not found")
     with db_connect() as conn:
@@ -12947,7 +12963,7 @@ async def get_session_usage(session_id: str, limit: int = Query(default=20, ge=1
 
 @app.get("/api/sessions/{session_id}/mention")
 async def mention_session(session_id: str, max_chars: int = Query(default=5000, ge=500, le=12000)):
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     if not events:
         raise HTTPException(status_code=404, detail="session not found")
     text = summarize_text_from_events(events)
@@ -13232,7 +13248,7 @@ async def delete_prompt(request: Request, prompt_id: str):
 async def suggest_followups(session_id: str = ""):
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
-    events = load_events(session_id)
+    events = await async_load_events(session_id)
     if not events:
         return {"suggestions": []}
     snippet = summarize_text_from_events(events[-20:])[-3000:]
