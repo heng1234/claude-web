@@ -7624,6 +7624,11 @@ async def chat(request: Request, req: ChatRequest):
     return await _chat_response(_authenticated_remote_chat_request(request, req))
 
 
+_CODE_TURN_ALREADY_ACCEPTED_DETAIL = (
+    "this queued turn was already dispatched; not replaying it"
+)
+
+
 def _reserve_code_turn(session_id: str, client_turn_id: Optional[str]) -> str:
     if not client_turn_id:
         return ""
@@ -7640,16 +7645,18 @@ def _reserve_code_turn(session_id: str, client_turn_id: Optional[str]) -> str:
                 (turn_id, session_id, now, now),
             )
     except sqlite3.IntegrityError:
-        # Already accepted — idempotent: return the existing turn_id so the
-        # caller can proceed without replaying the request.
-        with db_connect() as conn:
-            row = conn.execute(
-                "SELECT id FROM code_turn_requests WHERE id = ? AND state = 'accepted'",
-                (turn_id,),
-            ).fetchone()
-        if row:
-            return turn_id
-        raise HTTPException(status_code=409, detail="this queued turn was already accepted; reload the session")
+        # A row for this client_turn_id already exists. True idempotency means
+        # this request must NOT run the turn a second time: a previously
+        # 'accepted' or still 'starting' id has already been dispatched once.
+        # Returning the id here would let open_turn() execute the identical
+        # message again, which is the root cause of the code-mode "same
+        # question re-sends / previous answer disappears" loop. Signal the
+        # caller with a dedicated 409 (see _CODE_TURN_ALREADY_ACCEPTED_DETAIL)
+        # so the frontend drops the queue entry instead of re-draining it.
+        raise HTTPException(
+            status_code=409,
+            detail=_CODE_TURN_ALREADY_ACCEPTED_DETAIL,
+        ) from None
     return turn_id
 
 
@@ -14482,23 +14489,28 @@ async def list_files(request: Request, cwd: str = Query(...), q: str = Query(def
     if git_results is not None:
         return git_results
 
-    results: List[dict] = []
-    for root, dirs, files in os.walk(str(base)):
-        dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith(".")]
-        for f in files:
-            if f.startswith("."):
-                continue
-            full = Path(root) / f
-            try:
-                rel = str(full.relative_to(base))
-            except ValueError:
-                continue
-            if q_lower and q_lower not in rel.lower():
-                continue
-            results.append({"path": str(full), "rel": rel})
-            if len(results) >= limit:
-                return results
-    return results
+    # os.walk on a large repo (10k+ files) can block the event loop for hundreds
+    # of ms, stalling every concurrent SSE stream. Offload the walk to a thread.
+    def _walk_sync() -> List[dict]:
+        results: List[dict] = []
+        for root, dirs, files in os.walk(str(base)):
+            dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith(".")]
+            for f in files:
+                if f.startswith("."):
+                    continue
+                full = Path(root) / f
+                try:
+                    rel = str(full.relative_to(base))
+                except ValueError:
+                    continue
+                if q_lower and q_lower not in rel.lower():
+                    continue
+                results.append({"path": str(full), "rel": rel})
+                if len(results) >= limit:
+                    return results
+        return results
+
+    return await asyncio.to_thread(_walk_sync)
 
 
 @app.get("/api/git")

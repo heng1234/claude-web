@@ -642,7 +642,10 @@ class AgentSdkBridge:
         self._stopping = True
         if self.running:
             try:
-                await self.request("shutdown", timeout=2.0)
+                # 2s was frequently too short for the daemon to close its SDK
+                # runtimes gracefully, so the connections were torn down hard on
+                # every restart. Give the graceful path a realistic window.
+                await self.request("shutdown", timeout=5.0)
             except Exception:
                 pass
         await self._terminate_process()
