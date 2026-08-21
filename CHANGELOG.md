@@ -2,7 +2,17 @@
 
 所有重要变更按版本记录。应用内的 What's New 和帮助面板使用 `static/changelog.json`，这里是给 GitHub / Git diff 浏览的 Markdown 版本。
 
-当前稳定版本：`2.2.3`。
+当前稳定版本：`2.2.4`。
+
+## v2.2.4 - 2026-08-22
+
+- **FIX** Code 模式重复发送消息：`_reserve_code_turn` 对已存在的 `client_turn_id` 原来返回既有 turn_id 导致 `open_turn()` 重跑同一条消息，改为抛出专用 409，由前端出队而非重放
+- **FIX** 流式输出内容丢失：`finishPendingCodeRun` 在流未结束前提前清状态，改为先检查是否有 controller 持有再清理，避免抹掉已收到的回答
+- **FIX** `dispatchCodeQueueEntry` 重发循环：`alreadyDispatched` 检查后直接出队删除，不再回灌队列造成无限重发
+- **FIX** 多次切 tab 后滚动停在中间：新增 `settleScrollBottom()`，rAF 双帧 + 120/360ms 兜底重锚，替换 DOM 缓存分支与新渲染分支的 `forceScrollBottom()`
+- **FIX** `agent_sdk_bridge.shutdown()` 超时 2.0s → 5.0s，避免正常退出被误判为挂起
+- **PERF** 后端 server.py 多处优化：补齐 optimization-checklist 剩余 CRITICAL/HIGH 项，涵盖连接管理、事件分发与并发安全
+- **TEST** 新增 `tests/test_chat_stream_resilience.py`，覆盖 Chat 流断线恢复、看门狗触发与历史补发场景
 
 ## v2.2.3 - 2026-08-19
 

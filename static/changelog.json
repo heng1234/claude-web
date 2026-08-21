@@ -2,6 +2,40 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.2.4",
+      "date": "2026-08-22",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "Code 模式重复发送消息：client_turn_id 重复时改为返回 409 让前端出队，不再重跑同一条消息"
+        },
+        {
+          "type": "fix",
+          "text": "流式输出内容丢失：finishPendingCodeRun 提前清状态改为先检查 controller，避免抹掉已收到的回答"
+        },
+        {
+          "type": "fix",
+          "text": "多次切 tab 后滚动停在中间：新增 settleScrollBottom()，双帧 rAF + 兜底重锚确保布局稳定后再滚"
+        },
+        {
+          "type": "fix",
+          "text": "dispatchCodeQueueEntry 回灌队列无限重发：alreadyDispatched 后直接出队删除"
+        },
+        {
+          "type": "fix",
+          "text": "agent_sdk_bridge.shutdown() 超时从 2s 延长到 5s，避免正常退出被误杀"
+        },
+        {
+          "type": "perf",
+          "text": "补齐后端 optimization-checklist 剩余 CRITICAL/HIGH 项，涵盖连接管理、事件分发与并发安全"
+        },
+        {
+          "type": "test",
+          "text": "新增 Chat 流断线恢复测试，覆盖看门狗触发与历史补发场景"
+        }
+      ]
+    },
+    {
       "version": "2.2.3",
       "date": "2026-08-19",
       "highlights": [
