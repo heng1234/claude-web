@@ -10090,6 +10090,26 @@ function forceScrollBottom() {
   userScrolledUp = false;
   chatEl.scrollTop = chatEl.scrollHeight;
 }
+// Anchor to the true bottom AFTER a freshly-rebuilt conversation has laid out.
+// A single synchronous scrollTop = scrollHeight (as forceScrollBottom does)
+// runs before code highlighting, mermaid, images and web fonts expand the
+// content, so it lands mid-conversation; the scroll listener then latches
+// userScrolledUp = true and the view stays stuck in the middle across tab
+// switches. Re-anchor over the next few frames and once more after late
+// content settles so the viewport ends at the real bottom.
+function settleScrollBottom() {
+  userScrolledUp = false;
+  const anchor = () => { userScrolledUp = false; chatEl.scrollTop = chatEl.scrollHeight; };
+  anchor();
+  requestAnimationFrame(() => {
+    anchor();
+    requestAnimationFrame(anchor);
+  });
+  // Late reflows (async-decoded images, lazy mermaid) can grow the height after
+  // the rAF chain; one deferred anchor covers them without a permanent observer.
+  setTimeout(anchor, 120);
+  setTimeout(anchor, 360);
+}
 function removeWelcome() {
   if (welcome && welcome.parentNode) {
     welcome.remove();
@@ -17160,6 +17180,11 @@ async function dispatchCodeQueueEntry(entry) {
     removeLocalCodeQueueEntry(owner, entry.id);
     deletePersistedQueueEntry(entry);
     scheduleCodeQueueDrain(owner);
+  } else if (result?.alreadyDispatched) {
+    // The server already ran this exact turn. Re-queuing it is what produced
+    // the endless "same question re-sends" loop, so retire the entry instead.
+    removeLocalCodeQueueEntry(owner, entry.id);
+    deletePersistedQueueEntry(entry);
   } else {
     if (!result?.accepted) {
       const queue = codeQueueFor(owner);
@@ -17808,6 +17833,31 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         const data = await resp.clone().json();
         if (data?.detail) message = data.detail;
       } catch {}
+      // The backend refuses to replay a client_turn_id it already dispatched.
+      // This is not a busy runtime and must not be re-queued: the turn already
+      // ran (its answer may already be on screen). Drop the optimistic
+      // duplicate bubbles for THIS attempt only, leave earlier content intact,
+      // and report it as already-done so the queue entry is removed.
+      const alreadyDispatched = turnIsCode
+        && resp.status === 409
+        && /already dispatched|already accepted/i.test(message);
+      if (alreadyDispatched) {
+        container.closest('.asst-wrap')?.remove();
+        optimisticUserElement?.remove();
+        if (lastUserIndex === optimisticUserIndex) {
+          currentUserIndex = Math.max(0, optimisticUserIndex);
+          lastUserIndex = optimisticUserIndex - 1;
+        }
+        return {
+          ok: false,
+          accepted: false,
+          alreadyDispatched: true,
+          status: resp.status,
+          error: new Error(message),
+          text: collectedAssistantText.trim(),
+          usage: null,
+        };
+      }
       const runtimeBusy = turnIsCode
         && resp.status === 409
         && /(session is busy|仍有回合在后台运行|already running|active turn)/i.test(message);
@@ -17815,11 +17865,18 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         // Rejection happens before the server persists this user event. Remove
         // only this optimistic turn, keep the queue entry, and follow the
         // already-owned native turn until its authoritative terminal event.
-        container.closest('.asst-wrap')?.remove();
-        optimisticUserElement?.remove();
-        if (lastUserIndex === optimisticUserIndex) {
-          currentUserIndex = Math.max(0, optimisticUserIndex);
-          lastUserIndex = optimisticUserIndex - 1;
+        // Never remove bubbles that already received streamed content: on a
+        // stall-driven retry that would erase the answer the user is reading.
+        const renderedOwnContent = !!collectedAssistantText.trim() || !!lastResultEvent || !!doneEvent;
+        if (!renderedOwnContent) {
+          container.closest('.asst-wrap')?.remove();
+          optimisticUserElement?.remove();
+          if (lastUserIndex === optimisticUserIndex) {
+            currentUserIndex = Math.max(0, optimisticUserIndex);
+            lastUserIndex = optimisticUserIndex - 1;
+          }
+        } else {
+          hideThinking(container, { force: true });
         }
         if (turnViewIsActive()) {
           startNativeTurnRecovery(
@@ -19091,7 +19148,7 @@ async function loadSession(id, options = {}) {
       targetState.needsPermission = false;
       restoreDraft();
       refreshGitStatus();
-      forceScrollBottom();
+      settleScrollBottom();
     } else {
       observerSuppressed++;
       try {
@@ -19141,7 +19198,7 @@ async function loadSession(id, options = {}) {
       if (options.historyExpansion) {
         requestAnimationFrame(() => { chatEl.scrollTop = Math.max(0, chatEl.scrollHeight - previousHeight + previousTop); });
       } else {
-        forceScrollBottom();
+        settleScrollBottom();
       }
     }
 
