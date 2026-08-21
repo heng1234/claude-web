@@ -198,6 +198,23 @@ _code_terminals: Dict[str, CodeTerminalRuntime] = {}
 WARM_IDLE_TIMEOUT = 90.0  # seconds before an idle warm process is reaped
 MAX_WARM_PROCESSES = 4
 
+# Chat-mode read watchdog. The persistent CLI can stay silent for a long time
+# during model "thinking" or tool execution; without periodic output the
+# frontend stall watchdog (STREAM_SILENCE_TIMEOUT_MS = 45s) would false-fire and
+# report the turn as wedged. We poll stdout in short slices and emit an SSE
+# heartbeat comment between slices to keep the client alive (mirrors the Agent
+# SDK path's idle_heartbeat). If no output at all arrives for the hard ceiling
+# we give up, terminate the process and surface an explicit error rather than
+# parking on the await forever.
+_CHAT_READ_SLICE_SECONDS = 12.0            # emit a heartbeat at least this often
+_CHAT_READ_HARD_CEILING_SECONDS = 600.0    # abandon a fully-silent turn after this
+# Sessions that have reserved ownership of a chat turn before their real
+# process exists yet. A request claims its session_id here *before* the first
+# await, so two concurrent requests for one session can't both pass the
+# ownership check (TOCTOU) and run two CLIs against the same remote
+# conversation. Cleared once the real process is registered or the turn bails.
+_chat_owner_pending: Set[str] = set()
+
 
 @dataclass
 class _WarmEntry:
@@ -403,6 +420,29 @@ def _append_browser_cli_arg(args: List[str], browser_enabled: bool) -> None:
             "当前 Claude CLI 不支持官方 Claude in Chrome；请升级 Claude Code 后重试，"
             "或关闭 Code 浏览器开关。"
         )
+
+
+async def _chat_write_stdin(
+    process: asyncio.subprocess.Process,
+    write_lock: asyncio.Lock,
+    payload: bytes,
+) -> bool:
+    """Write the turn's stdin payload under the process write lock.
+
+    Returns True on success, False if the process is dead / the write fails.
+    A False result on a reused warm process means it was stale and the caller
+    should transparently respawn; on a fresh process it means startup failed.
+    Never swallows the failure silently — the caller decides how to surface it.
+    """
+    if process.stdin is None or process.returncode is not None:
+        return False
+    async with write_lock:
+        try:
+            process.stdin.write(payload)
+            await process.stdin.drain()
+            return True
+        except (BrokenPipeError, ConnectionResetError, RuntimeError):
+            return False
 
 
 async def _terminate_process(process: asyncio.subprocess.Process, grace: float = 3.0) -> None:
@@ -7624,6 +7664,11 @@ async def chat(request: Request, req: ChatRequest):
     return await _chat_response(_authenticated_remote_chat_request(request, req))
 
 
+_CODE_TURN_ALREADY_ACCEPTED_DETAIL = (
+    "this queued turn was already dispatched; not replaying it"
+)
+
+
 def _reserve_code_turn(session_id: str, client_turn_id: Optional[str]) -> str:
     if not client_turn_id:
         return ""
@@ -7640,16 +7685,18 @@ def _reserve_code_turn(session_id: str, client_turn_id: Optional[str]) -> str:
                 (turn_id, session_id, now, now),
             )
     except sqlite3.IntegrityError:
-        # Already accepted — idempotent: return the existing turn_id so the
-        # caller can proceed without replaying the request.
-        with db_connect() as conn:
-            row = conn.execute(
-                "SELECT id FROM code_turn_requests WHERE id = ? AND state = 'accepted'",
-                (turn_id,),
-            ).fetchone()
-        if row:
-            return turn_id
-        raise HTTPException(status_code=409, detail="this queued turn was already accepted; reload the session")
+        # A row for this client_turn_id already exists. True idempotency means
+        # this request must NOT run the turn a second time: a previously
+        # 'accepted' or still 'starting' id has already been dispatched once.
+        # Returning the id here would let open_turn() execute the identical
+        # message again, which is the root cause of the code-mode "same
+        # question re-sends / previous answer disappears" loop. Signal the
+        # caller with a dedicated 409 (see _CODE_TURN_ALREADY_ACCEPTED_DETAIL)
+        # so the frontend drops the queue entry instead of re-draining it.
+        raise HTTPException(
+            status_code=409,
+            detail=_CODE_TURN_ALREADY_ACCEPTED_DETAIL,
+        ) from None
     return turn_id
 
 
@@ -7970,95 +8017,160 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             work_dir, req.allowed_tools, req.disallowed_tools, effective_browser_enabled,
         )
 
-        # ── Reclaim or discard a warm process for this session ──────────────
-        warm = _warm_processes.pop(session_id, None)
-        if warm is not None:
-            if warm.process.returncode is not None:
-                # Process died between turns (crash / OOM); discard silently.
-                warm = None
-            elif warm.signature != current_sig:
-                # Config changed (model / permissions / cwd / …) → restart.
-                _terminated_processes.add(warm.process)
-                await _terminate_process(warm.process)
-                warm = None
-
-        # A duplicate request must never replace a live owner: doing so can mix
-        # events or tool side effects from two runtimes for one local session.
-        existing = _running_processes.get(session_id)
-        if existing is not None:
-            err_event = {"type": "error", "message": "session is already running"}
+        # ── Claim ownership atomically BEFORE any await ─────────────────────
+        # generate() only starts iterating after the handler returns, and the
+        # reclaim/spawn/write steps below all await. A duplicate request must
+        # never replace a live owner (that mixes events / tool side effects from
+        # two runtimes for one local session). Reserve the slot synchronously
+        # here — no await between the check and the claim — so the race can't
+        # slip a second runtime through.
+        if session_id in _running_processes or session_id in _chat_owner_pending:
+            err_event = {"type": "error", "message": "session is already running", "turn_id": turn_id}
             yield f"data: {json.dumps(err_event)}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'turn_id': turn_id, 'success': False, 'turn_state': 'rejected'})}\n\n"
             return
+        _chat_owner_pending.add(session_id)
+        owner_claimed = True
         _stopped_sessions.discard(session_id)
 
-        # ── Build CLI args (only needed when spawning a fresh process) ────────
-        write_lock: asyncio.Lock
-        if warm is not None:
-            process = warm.process
-            write_lock = warm.write_lock
-        else:
-            try:
-                args = build_persistent_args(
-                    remote_session_id,
-                    resume=not is_new,
-                    model=req.model,
-                    system_prompt=effective_system_prompt,
-                    permission_mode=effective_permission_mode,
-                    allowed_tools=req.allowed_tools,
-                    disallowed_tools=req.disallowed_tools,
-                    effort=req.effort or "high",
-                    browser_enabled=effective_browser_enabled,
-                )
-            except ClaudeCliResolutionError as e:
-                err_event = {"type": "error", "message": str(e)}
-                err_event["turn_id"] = turn_id
-                await async_append_event(session_id, err_event)
-                yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
-                return
-            try:
-                process = await asyncio.create_subprocess_exec(
-                    *args,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=work_dir,
-                    limit=16 * 1024 * 1024,
-                )
-            except FileNotFoundError:
-                err_event = {"type": "error", "message": "claude CLI not found in PATH"}
-                err_event["turn_id"] = turn_id
-                await async_append_event(session_id, err_event)
-                _notification_send_chat_error(session_id, work_dir, err_event)
-                yield f"data: {json.dumps(err_event)}\n\n"
-                return
-            write_lock = asyncio.Lock()
-
-        # ── Send the user message via stdin (keep stdin open for future turns) ─
-        stdin_payload = build_image_input_message(full_message, req.images or [])
-        if process.stdin is not None:
-            async with write_lock:
-                try:
-                    process.stdin.write(stdin_payload)
-                    await process.stdin.drain()
-                except (BrokenPipeError, ConnectionResetError):
-                    # Process died right after we checked; stderr will explain why.
-                    pass
-
-        _running_processes[session_id] = process
-        _running_write_locks[session_id] = write_lock
+        process: Optional[asyncio.subprocess.Process] = None
+        write_lock: asyncio.Lock = asyncio.Lock()
         stderr_buffer = bytearray()
         stderr_task: Optional[asyncio.Task] = None
-        if process.stderr is not None:
-            stderr_task = asyncio.create_task(_drain_stream(process.stderr, stderr_buffer))
-
         turn_ended = False  # set True when result event received
         code_write_intent_seen = False
         code_write_targets: Set[str] = set()
+        plan_waiting_before_cleanup = False
         try:
+            # ── Reclaim or discard a warm process for this session ──────────
+            warm = _warm_processes.pop(session_id, None)
+            if warm is not None:
+                if warm.process.returncode is not None:
+                    # Process died between turns (crash / OOM); discard silently.
+                    warm = None
+                elif warm.signature != current_sig:
+                    # Config changed (model / permissions / cwd / …) → restart.
+                    _terminated_processes.add(warm.process)
+                    await _terminate_process(warm.process)
+                    warm = None
+
+            # ── Obtain a live process (reuse warm, else spawn) ──────────────
+            async def _spawn_fresh() -> Optional[asyncio.subprocess.Process]:
+                try:
+                    args = build_persistent_args(
+                        remote_session_id,
+                        resume=not is_new,
+                        model=req.model,
+                        system_prompt=effective_system_prompt,
+                        permission_mode=effective_permission_mode,
+                        allowed_tools=req.allowed_tools,
+                        disallowed_tools=req.disallowed_tools,
+                        effort=req.effort or "high",
+                        browser_enabled=effective_browser_enabled,
+                    )
+                except ClaudeCliResolutionError as e:
+                    err_event = {"type": "error", "message": str(e), "turn_id": turn_id}
+                    await async_append_event(session_id, err_event)
+                    return None
+                try:
+                    return await asyncio.create_subprocess_exec(
+                        *args,
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        cwd=work_dir,
+                        limit=16 * 1024 * 1024,
+                    )
+                except FileNotFoundError:
+                    err_event = {"type": "error", "message": "claude CLI not found in PATH", "turn_id": turn_id}
+                    await async_append_event(session_id, err_event)
+                    _notification_send_chat_error(session_id, work_dir, err_event)
+                    return None
+
+            if warm is not None:
+                process = warm.process
+                write_lock = warm.write_lock
+            else:
+                process = await _spawn_fresh()
+                if process is None:
+                    err_event = {"type": "error", "message": "failed to start claude CLI", "turn_id": turn_id}
+                    yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
+                    return
+                write_lock = asyncio.Lock()
+
+            # ── Send the user message; a stale warm process gets one respawn ──
+            stdin_payload = build_image_input_message(full_message, req.images or [])
+            write_ok = await _chat_write_stdin(process, write_lock, stdin_payload)
+            if not write_ok and warm is not None:
+                # The reused warm process was stale (died between turns). Don't
+                # surface it as a user-visible failure — transparently respawn a
+                # fresh --resume process and retry the write once.
+                _terminated_processes.add(process)
+                await _terminate_process(process)
+                process = await _spawn_fresh()
+                if process is None:
+                    err_event = {"type": "error", "message": "failed to restart claude CLI", "turn_id": turn_id}
+                    yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
+                    return
+                write_lock = asyncio.Lock()
+                warm = None
+                write_ok = await _chat_write_stdin(process, write_lock, stdin_payload)
+            if not write_ok:
+                # Fresh process died on the very first write, or the respawn also
+                # failed. Drain stderr for a real reason and emit an error.
+                rc = await process.wait()
+                await asyncio.sleep(0)
+                if process.stderr is not None:
+                    try:
+                        tail = await asyncio.wait_for(process.stderr.read(), timeout=1.0)
+                        stderr_buffer.extend(tail or b"")
+                    except (asyncio.TimeoutError, Exception):
+                        pass
+                err_text = bytes(stderr_buffer).decode("utf-8", errors="replace")
+                err_event = classify_claude_error(err_text or f"claude exited with code {rc} before accepting input")
+                err_event["turn_id"] = turn_id
+                await async_append_event(session_id, err_event)
+                _notification_send_chat_error(session_id, work_dir, err_event)
+                yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
+                return
+
+            # ── Register real ownership; release the pending sentinel ────────
+            _running_processes[session_id] = process
+            _running_write_locks[session_id] = write_lock
+            _chat_owner_pending.discard(session_id)
+            owner_claimed = False  # ownership is now tracked by _running_processes
+
+            if process.stderr is not None:
+                stderr_task = asyncio.create_task(_drain_stream(process.stderr, stderr_buffer))
+
             assert process.stdout is not None
+            last_output = time.monotonic()
             while True:
                 try:
-                    raw = await process.stdout.readline()
+                    raw = await asyncio.wait_for(
+                        process.stdout.readline(), timeout=_CHAT_READ_SLICE_SECONDS
+                    )
+                except asyncio.TimeoutError:
+                    # No output this slice. Keep the client alive with a heartbeat
+                    # comment (matches the frontend's expected cadence), but bail
+                    # if the process has been fully silent past the hard ceiling —
+                    # a wedged warm process must not park the turn forever.
+                    if process.returncode is not None:
+                        break
+                    if time.monotonic() - last_output > _CHAT_READ_HARD_CEILING_SECONDS:
+                        _terminated_processes.add(process)
+                        await _terminate_process(process)
+                        err_event = {
+                            "type": "error",
+                            "message": "claude produced no output; the turn was aborted",
+                            "turn_id": turn_id,
+                        }
+                        await async_append_event(session_id, err_event)
+                        _notification_send_chat_error(session_id, work_dir, err_event)
+                        yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
+                        break
+                    yield ": heartbeat\n\n"
+                    continue
                 except ValueError as e:
                     err_event = {"type": "error", "message": f"stdout line too large: {e}"}
                     err_event["turn_id"] = turn_id
@@ -8069,6 +8181,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 if not raw:
                     # EOF: process exited unexpectedly
                     break
+                last_output = time.monotonic()
                 line = raw.decode("utf-8", errors="replace").strip()
                 if not line:
                     continue
@@ -8128,7 +8241,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                     turn_ended = True
                     break
 
-            if not turn_ended:
+            if not turn_ended and process is not None:
                 # Process exited (EOF) — either crashed or was SIGTERM'd.
                 rc = await process.wait()
                 if stderr_task is not None:
@@ -8148,6 +8261,10 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                     yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
         finally:
             plan_waiting_before_cleanup = session_id in _plan_waiting_sessions
+            # Release the pre-await ownership sentinel if we bailed before the
+            # real process was ever registered (spawn/write failure early return).
+            if owner_claimed:
+                _chat_owner_pending.discard(session_id)
             if stderr_task is not None and not stderr_task.done():
                 stderr_task.cancel()
                 try:
@@ -8155,29 +8272,31 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 except (asyncio.CancelledError, Exception):
                     pass
 
-            # Park the process back in the warm pool if it's still alive and
-            # wasn't intentionally killed (SIGTERM replacement or /stop).
-            should_park = (
-                turn_ended
-                and process.returncode is None
-                and process not in _terminated_processes
-                and session_id not in _stopped_sessions
-            )
-            if should_park:
-                await _park_warm_session(
-                    session_id,
-                    _WarmEntry(
-                        process=process,
-                        signature=current_sig,
-                        last_used=time.monotonic(),
-                        write_lock=write_lock,
-                    ),
+            if process is not None:
+                # Park the process back in the warm pool if it's still alive and
+                # wasn't intentionally killed (SIGTERM replacement or /stop).
+                should_park = (
+                    turn_ended
+                    and process.returncode is None
+                    and process not in _terminated_processes
+                    and session_id not in _stopped_sessions
                 )
-            else:
-                await _terminate_process(process)
+                if should_park:
+                    await _park_warm_session(
+                        session_id,
+                        _WarmEntry(
+                            process=process,
+                            signature=current_sig,
+                            last_used=time.monotonic(),
+                            write_lock=write_lock,
+                        ),
+                    )
+                else:
+                    await _terminate_process(process)
 
-            if _running_processes.get(session_id) is process:
-                _running_processes.pop(session_id, None)
+                if _running_processes.get(session_id) is process:
+                    _running_processes.pop(session_id, None)
+                _terminated_processes.discard(process)
             # Always discard regardless of identity check: either this turn added
             # the stop marker (and we must clear it), or a newer turn already
             # cleared it (discard is a no-op).  Keeping it inside the identity
@@ -8186,7 +8305,6 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             _plan_waiting_sessions.discard(session_id)
             if _running_write_locks.get(session_id) is write_lock:
                 _running_write_locks.pop(session_id, None)
-            _terminated_processes.discard(process)
 
             upsert_session(session_id, derive_title(display_text), work_dir, workspace_mode, effective_permission_mode)
             if remote_became_ready:
@@ -14482,23 +14600,28 @@ async def list_files(request: Request, cwd: str = Query(...), q: str = Query(def
     if git_results is not None:
         return git_results
 
-    results: List[dict] = []
-    for root, dirs, files in os.walk(str(base)):
-        dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith(".")]
-        for f in files:
-            if f.startswith("."):
-                continue
-            full = Path(root) / f
-            try:
-                rel = str(full.relative_to(base))
-            except ValueError:
-                continue
-            if q_lower and q_lower not in rel.lower():
-                continue
-            results.append({"path": str(full), "rel": rel})
-            if len(results) >= limit:
-                return results
-    return results
+    # os.walk on a large repo (10k+ files) can block the event loop for hundreds
+    # of ms, stalling every concurrent SSE stream. Offload the walk to a thread.
+    def _walk_sync() -> List[dict]:
+        results: List[dict] = []
+        for root, dirs, files in os.walk(str(base)):
+            dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith(".")]
+            for f in files:
+                if f.startswith("."):
+                    continue
+                full = Path(root) / f
+                try:
+                    rel = str(full.relative_to(base))
+                except ValueError:
+                    continue
+                if q_lower and q_lower not in rel.lower():
+                    continue
+                results.append({"path": str(full), "rel": rel})
+                if len(results) >= limit:
+                    return results
+        return results
+
+    return await asyncio.to_thread(_walk_sync)
 
 
 @app.get("/api/git")

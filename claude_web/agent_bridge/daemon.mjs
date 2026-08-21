@@ -428,6 +428,15 @@ async function readRuntime(runtime) {
         await write({ id: requestId, type: 'done', success: !message.is_error, sessionId: runtime.sessionId });
         runtime.activeRequestId = null;
         runtime.interruptRequested = false;
+      } else if (runtime.interruptRequested) {
+        // An interrupted turn is not guaranteed to produce a terminal `result`
+        // message. Without this check the loop would keep waiting and the turn
+        // would never emit `done`, leaving the session wedged as busy ("A Code
+        // turn is already running") until idle reclamation. Close the turn out
+        // as soon as the SDK yields anything after the interrupt.
+        await write({ id: requestId, type: 'done', success: false, sessionId: runtime.sessionId });
+        runtime.activeRequestId = null;
+        runtime.interruptRequested = false;
       }
     }
     if (runtime.activeRequestId) {
@@ -568,23 +577,45 @@ async function runtimeForSend(key, params) {
   return withRuntimeMutation(() => runtimeForSendLocked(key, params));
 }
 
-function preflightSend(command) {
+// Claims held between the atomic send reservation and the moment handleSend()
+// sets runtime.activeRequestId. preflightSend() used to run unlocked, so two
+// concurrent 'send' lines for one session could both pass the check and both
+// receive an 'accepted' frame before either claimed the runtime; Python then
+// treated two turns as acknowledged and their events interleaved. The claim
+// closes that window: check + claim happen inside a single withRuntimeMutation.
+const pendingSendClaims = new Map();
+
+function sessionKeyOf(command) {
   const params = command.params || {};
   const key = String(params.sessionKey || '').trim();
   if (!key) throw new Error('sessionKey is required');
-  const runtime = runtimes.get(key);
-  if (runtime?.activeRequestId) {
-    throw new Error('A Code turn is already running for this session');
-  }
-  if (!runtime && runtimes.size >= MAX_RUNTIMES) {
-    const hasDisposableRuntime = [...runtimes.values()].some(
-      (candidate) => !candidate.activeRequestId && !candidate.controlActive
-    );
-    if (!hasDisposableRuntime) {
-      throw new Error(`Claude Agent SDK runtime limit reached (${MAX_RUNTIMES}); stop an active Code session and retry`);
-    }
-  }
   return { key, params };
+}
+
+function releaseSendClaim(key, commandId) {
+  if (key && pendingSendClaims.get(key) === commandId) pendingSendClaims.delete(key);
+}
+
+// Atomically validate that this session can accept a new turn and claim it.
+// Runs entirely under the runtime mutex so no other send can interleave.
+async function reserveSend(command) {
+  const { key, params } = sessionKeyOf(command);
+  return withRuntimeMutation(async () => {
+    const runtime = runtimes.get(key);
+    if (runtime?.activeRequestId || pendingSendClaims.has(key)) {
+      throw new Error('A Code turn is already running for this session');
+    }
+    if (!runtime && runtimes.size + pendingSendClaims.size >= MAX_RUNTIMES) {
+      const hasDisposableRuntime = [...runtimes.values()].some(
+        (candidate) => !candidate.activeRequestId && !candidate.controlActive
+      );
+      if (!hasDisposableRuntime) {
+        throw new Error(`Claude Agent SDK runtime limit reached (${MAX_RUNTIMES}); stop an active Code session and retry`);
+      }
+    }
+    pendingSendClaims.set(key, command.id);
+    return { key, params };
+  });
 }
 
 async function handleSend(command) {
@@ -605,6 +636,8 @@ async function handleSend(command) {
       runtime.activeRequestId = null;
       throw error;
     }
+    // The runtime now owns the turn, so the pre-claim is no longer needed.
+    releaseSendClaim(key, command.id);
   });
 }
 
@@ -892,7 +925,11 @@ async function main() {
     }
     Promise.resolve((async () => {
       if (command.method === 'send') {
-        const { params } = preflightSend(command);
+        // Reserve atomically BEFORE acknowledging. reserveSend() both validates
+        // and claims the session under the runtime mutex, so a second concurrent
+        // send for the same session is rejected here instead of also receiving
+        // an 'accepted' frame.
+        const { params } = await reserveSend(command);
         // Claim SDK ownership as soon as the daemon has accepted the turn into
         // its in-process dispatch queue.
         // Runtime creation and dynamic controls may be slow, but they must not
@@ -906,16 +943,39 @@ async function main() {
       }
       await handle(command);
     })()).catch(async (error) => {
+      if (command.method === 'send') {
+        // Drop the pre-claim so the session is not wedged after a failed turn.
+        try { releaseSendClaim(sessionKeyOf(command).key, command.id); } catch {}
+      }
       await write({ id: command.id, type: 'error', message: errorText(error) });
       if (command.method === 'send') await write({ id: command.id, type: 'done', success: false });
     });
   });
   reader.on('close', () => shutdown(null));
+  let idleSweepRunning = false;
   setInterval(() => {
-    const cutoff = Date.now() - IDLE_RUNTIME_MS;
-    for (const runtime of runtimes.values()) {
-      if (!runtime.activeRequestId && !runtime.controlActive && runtime.lastUsed < cutoff) disposeRuntime(runtime);
-    }
+    // Guard against overlap: disposeRuntime is async, so a slow SDK close must
+    // not let a second tick start before the first finishes.
+    if (idleSweepRunning) return;
+    idleSweepRunning = true;
+    void (async () => {
+      try {
+        const cutoff = Date.now() - IDLE_RUNTIME_MS;
+        // Snapshot before disposing: disposeRuntime mutates `runtimes`, and
+        // deleting from a Map while iterating its live values is unsafe.
+        const idle = [...runtimes.values()].filter(
+          (runtime) => !runtime.activeRequestId && !runtime.controlActive && runtime.lastUsed < cutoff
+        );
+        for (const runtime of idle) {
+          // Await each dispose so a reclaimed runtime's request id can never be
+          // reused by a new turn before the old reader has fully detached.
+          try { await disposeRuntime(runtime); }
+          catch (error) { log(`idle dispose failed for ${runtime.key}:`, errorText(error)); }
+        }
+      } finally {
+        idleSweepRunning = false;
+      }
+    })();
   }, 60_000).unref();
 }
 
