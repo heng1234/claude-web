@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "note": "Built-in connector catalog. transport: stdio|http|sse; auth: none|api_key|oauth. api_key entries declare secret_fields so the UI collects keys and routes them to the encrypted secret store. Verified 2026-08: the @modelcontextprotocol/server-* reference packages were mostly deprecated 2025-05; only filesystem/fetch/memory survive. Commercial services without a public MCP are listed as http templates for the user to fill in.",
+  "version": 3,
+  "note": "Built-in connector catalog. transport: stdio|http|sse; auth: none|api_key|oauth. Entries may carry a local brand logo (logo: connectors/<id>.svg, from simple-icons CC0) rendered on a brand-color tile (brand); entries without a logo fall back to the emoji icon. api_key entries declare secret_fields so the UI collects keys and routes them to the encrypted secret store. Verified 2026-08: the @modelcontextprotocol/server-* reference packages were mostly deprecated 2025-05; only filesystem/fetch/memory survive. Commercial services without a public MCP are listed as http templates for the user to fill in.",
   "connectors": [
     {
       "id": "filesystem",
@@ -33,6 +33,8 @@
       "transport": "stdio",
       "auth": "none",
       "icon": "🎭",
+      "logo": "connectors/playwright.svg",
+      "brand": "#2EAD33",
       "description": "微软官方浏览器自动化：网页导航、点击、填表、抓取。对应“操作浏览器”。",
       "command": "npx",
       "args": ["@playwright/mcp@latest"],
@@ -45,6 +47,8 @@
       "transport": "http",
       "auth": "oauth",
       "icon": "🐙",
+      "logo": "connectors/github.svg",
+      "brand": "#181717",
       "description": "GitHub 官方远程 MCP：仓库、Issue、PR、代码搜索（OAuth 授权）。",
       "url": "https://api.githubcopilot.com/mcp/",
       "docs": "https://github.com/github/github-mcp-server"
@@ -56,6 +60,8 @@
       "transport": "stdio",
       "auth": "api_key",
       "icon": "🦊",
+      "logo": "connectors/gitlab.svg",
+      "brand": "#FC6D26",
       "description": "GitLab 仓库、MR、Issue（社区维护包 @zereight/mcp-gitlab）。",
       "command": "npx",
       "args": ["-y", "@zereight/mcp-gitlab"],
@@ -72,6 +78,8 @@
       "transport": "http",
       "auth": "oauth",
       "icon": "🛡️",
+      "logo": "connectors/sentry.svg",
+      "brand": "#362D59",
       "description": "查询 Sentry 的错误与性能问题（远程 MCP，OAuth 授权）。",
       "url": "https://mcp.sentry.dev/mcp",
       "docs": "https://docs.sentry.io/product/sentry-mcp/"
@@ -83,6 +91,8 @@
       "transport": "http",
       "auth": "oauth",
       "icon": "📝",
+      "logo": "connectors/notion.svg",
+      "brand": "#000000",
       "description": "在 Notion 中查找、读取和整理页面与数据库（远程 MCP，OAuth）。",
       "url": "https://mcp.notion.com/mcp",
       "docs": "https://developers.notion.com/docs/mcp"
@@ -94,6 +104,8 @@
       "transport": "http",
       "auth": "oauth",
       "icon": "📐",
+      "logo": "connectors/linear.svg",
+      "brand": "#5E6AD2",
       "description": "查询和管理 Linear 的 Issue、项目与周期（远程 MCP，OAuth）。",
       "url": "https://mcp.linear.app/mcp",
       "docs": "https://linear.app/docs/mcp"
@@ -105,6 +117,8 @@
       "transport": "http",
       "auth": "oauth",
       "icon": "🧩",
+      "logo": "connectors/atlassian.svg",
+      "brand": "#0052CC",
       "description": "查询和操作 Jira 工单与 Confluence 页面（官方远程 MCP，OAuth）。",
       "url": "https://mcp.atlassian.com/v1/mcp",
       "docs": "https://www.atlassian.com/platform/remote-mcp-server"
@@ -116,6 +130,8 @@
       "transport": "stdio",
       "auth": "api_key",
       "icon": "💬",
+      "logo": "connectors/slack.svg",
+      "brand": "#4A154B",
       "description": "读取频道消息、发送消息（社区维护包 @zencoderai/slack-mcp-server）。",
       "command": "npx",
       "args": ["-y", "@zencoderai/slack-mcp-server"],

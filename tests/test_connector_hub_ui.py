@@ -36,6 +36,11 @@ class ConnectorHubMarkupTest(unittest.TestCase):
         self.assertIn('id="mcpCatalogCats"', self.source)
         self.assertIn('id="mcpCatalogGrid"', self.source)
 
+    def test_market_container_is_present(self):
+        self.assertIn('id="connectorMarket"', self.source)
+        self.assertIn('id="connectorMarketTabs"', self.source)
+        self.assertIn('id="connectorMarketGrid"', self.source)
+
     def test_encrypt_secrets_is_opt_out_not_opt_in(self):
         self.assertIn('id="mcpEncryptSecrets" type="checkbox" checked', self.source)
 
@@ -84,6 +89,29 @@ class ConnectorHubBehaviourTest(unittest.TestCase):
         self.assertIn("function openConnectorDialog(c, scope)", self.source)
         self.assertIn("function connectorRequestBody(c, values, encrypt)", self.source)
 
+    def test_full_screen_market_is_the_top_bar_entry(self):
+        # The 🔌 top-bar button opens the full-screen market, not the old panel.
+        self.assertIn('id="connectorMarket"', self.source)
+        self.assertIn("function openConnectorMarket()", self.source)
+        self.assertIn("connectorBtn?.addEventListener('click', () => {", self.source)
+        self.assertIn("openConnectorMarket();", self.source)
+        # The old MCP management panel is still reachable via the manage button.
+        self.assertIn("$('connectorMarketManage')?.addEventListener('click'", self.source)
+
+    def test_market_renders_logo_cards_and_opens_detail(self):
+        self.assertIn("function renderConnectorMarket()", self.source)
+        self.assertIn("data-market-open=", self.source)
+        self.assertIn("function openConnectorDetail(id)", self.source)
+        # Cards use the shared brand-logo helper (local SVG on brand tile, emoji fallback).
+        self.assertIn("function connectorLogoHtml(c, cls)", self.source)
+        self.assertIn("/static/${escapeHtml(c.logo)}", self.source)
+
+    def test_logo_falls_back_to_emoji_on_error(self):
+        # A missing/broken SVG must degrade to the emoji icon, never a broken image.
+        self.assertIn("cw-logo-emoji", self.source)
+        self.assertIn("onerror=", self.source)
+
+
     def test_needs_auth_health_result_offers_authorize(self):
         self.assertIn("data.status === 'needs-auth' || data.needs_auth", self.source)
         self.assertIn("/authorize'", self.source)
@@ -125,6 +153,27 @@ class ConnectorCatalogDataTest(unittest.TestCase):
         raw = CATALOG.read_text(encoding="utf-8")
         for needle in ("ghp_", "sk-", "Bearer ey", "password"):
             self.assertNotIn(needle, raw)
+
+    def test_declared_logos_point_to_bundled_svgs(self):
+        # A connector's logo path must resolve to a real bundled SVG so the
+        # market never renders a broken image on first paint.
+        static_dir = INDEX.parent
+        for entry in self.catalog["connectors"]:
+            logo = entry.get("logo")
+            if not logo:
+                continue
+            with self.subTest(entry.get("id"), logo=logo):
+                self.assertTrue(logo.startswith("connectors/"))
+                self.assertTrue(logo.endswith(".svg"))
+                self.assertTrue((static_dir / logo).is_file(), f"missing {logo}")
+
+    def test_branded_entries_carry_a_tile_color(self):
+        # A local logo is a monochrome glyph; without a brand color it renders
+        # invisible on a transparent tile.
+        for entry in self.catalog["connectors"]:
+            if entry.get("logo"):
+                with self.subTest(entry.get("id")):
+                    self.assertTrue(str(entry.get("brand", "")).startswith("#"))
 
 
 if __name__ == "__main__":
