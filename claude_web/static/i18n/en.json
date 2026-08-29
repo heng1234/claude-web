@@ -221,7 +221,11 @@
     "star_milestone": "Mark as Milestone",
     "scroll_bottom": "Scroll to Bottom",
     "new": "New",
-    "pending_items": "Pending Items"
+    "pending_items": "Pending Items",
+    "loading": "Loading…",
+    "view": "View",
+    "clone": "Clone",
+    "export": "Export"
   },
   "diagnostics": {
     "sdk_idle_title": "Claude stream has been idle for too long",
@@ -335,7 +339,9 @@
     "view_all": "View All",
     "confirm_rewind": "Confirm Rewind",
     "not_started": "Not started",
-    "expand_all": "Expand All ▾"
+    "expand_all": "Expand All ▾",
+    "cloned": "Cloned",
+    "deleted": "Deleted"
   },
   "mobile": {
     "only_saved_projects": "Mobile Q&A mode can only switch to saved project directories",
@@ -1393,6 +1399,38 @@
     "worktrees_desc": "Create isolated Code sessions for parallel tasks",
     "write_tests": "Write tests",
     "yolo_mode_desc": "Fully automated, bypassing all permission checks [use with caution]",
-    "zero_active": "0 active"
+    "zero_active": "0 active",
+    "agent_template_title": "Agent Templates",
+    "agent_template_hub": "Agent Templates",
+    "agent_template_hub_full": "Agent Templates · Reusable session presets",
+    "agent_template_desc": "Save a system prompt, model, permission mode and bound connectors as a reusable preset, then start a new session from it in one click.",
+    "agent_template_new": "＋ New template",
+    "agent_template_edit": "Edit template",
+    "agent_template_view": "View template",
+    "agent_template_import": "Import",
+    "agent_template_use": "Use template",
+    "agent_template_builtin": "Built-in",
+    "agent_template_empty": "No templates yet — click “New template” to start.",
+    "agent_template_icon": "Icon",
+    "agent_template_name": "Name",
+    "agent_template_name_ph": "e.g. Code reviewer",
+    "agent_template_name_required": "Please enter a template name",
+    "agent_template_system_prompt": "System prompt (append-system-prompt)",
+    "agent_template_system_prompt_ph": "Define this agent's role, style and constraints…",
+    "agent_template_default_task": "Default task (prefills the composer on new session, optional)",
+    "agent_template_mode": "Applies to",
+    "agent_template_mode_both": "Both (code + chat)",
+    "agent_template_mode_code": "Code mode only",
+    "agent_template_mode_chat": "Chat mode only",
+    "agent_template_permission": "Permission mode",
+    "agent_template_model": "Model (blank = default)",
+    "agent_template_cwd": "Default working dir (optional)",
+    "agent_template_connectors": "Bound connectors (auto-enabled on new session)",
+    "agent_template_no_connectors": "Connector catalog is empty — add some under Connectors first.",
+    "agent_template_confirm_delete": "Delete template",
+    "agent_template_applied": "Applied template: ",
+    "agent_template_connectors_missing": "These connectors need manual auth/keys:",
+    "agent_template_open_market": "Open the connector hub now?",
+    "agent_template_import_failed": "Import failed"
   }
 }

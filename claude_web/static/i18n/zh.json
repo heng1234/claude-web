@@ -221,7 +221,11 @@
     "star_milestone": "标记为里程碑",
     "scroll_bottom": "滚动到底部",
     "new": "新增",
-    "pending_items": "待处理项"
+    "pending_items": "待处理项",
+    "loading": "加载中…",
+    "view": "查看",
+    "clone": "克隆",
+    "export": "导出"
   },
   "diagnostics": {
     "sdk_idle_title": "Claude 数据流长时间没有响应",
@@ -335,7 +339,9 @@
     "view_all": "查看全部",
     "confirm_rewind": "确认回退",
     "not_started": "尚未开始",
-    "expand_all": "展开全部 ▾"
+    "expand_all": "展开全部 ▾",
+    "cloned": "已克隆",
+    "deleted": "已删除"
   },
   "mobile": {
     "only_saved_projects": "手机问答模式只能从已保存项目中切换目录",
@@ -1393,6 +1399,38 @@
     "worktrees_desc": "为并行任务创建隔离的 Code 会话",
     "write_tests": "写测试",
     "yolo_mode_desc": "完全自动化，绕过所有权限检查【谨慎使用】",
-    "zero_active": "0 条生效"
+    "zero_active": "0 条生效",
+    "agent_template_title": "Agent 模板",
+    "agent_template_hub": "Agent 模板",
+    "agent_template_hub_full": "Agent 模板 · 可复用会话预设",
+    "agent_template_desc": "把系统提示、模型、权限、绑定的连接器存成可复用的会话预设，一键从模板开新会话。",
+    "agent_template_new": "＋ 新建模板",
+    "agent_template_edit": "编辑模板",
+    "agent_template_view": "查看模板",
+    "agent_template_import": "导入",
+    "agent_template_use": "用此模板",
+    "agent_template_builtin": "内置",
+    "agent_template_empty": "还没有模板，点右上角「新建模板」开始。",
+    "agent_template_icon": "图标",
+    "agent_template_name": "名称",
+    "agent_template_name_ph": "例如：代码审查员",
+    "agent_template_name_required": "请填写模板名称",
+    "agent_template_system_prompt": "系统提示（append-system-prompt）",
+    "agent_template_system_prompt_ph": "定义这个 Agent 的角色、风格与约束…",
+    "agent_template_default_task": "默认任务（新建会话时预填输入框，可空）",
+    "agent_template_mode": "适用模式",
+    "agent_template_mode_both": "通用（代码+聊天）",
+    "agent_template_mode_code": "仅代码模式",
+    "agent_template_mode_chat": "仅聊天模式",
+    "agent_template_permission": "权限模式",
+    "agent_template_model": "模型（空=默认）",
+    "agent_template_cwd": "默认工作目录（可空）",
+    "agent_template_connectors": "绑定连接器（新建会话时自动启用）",
+    "agent_template_no_connectors": "连接器目录为空，可先在「连接器」里添加。",
+    "agent_template_confirm_delete": "删除模板",
+    "agent_template_applied": "已应用模板：",
+    "agent_template_connectors_missing": "以下连接器需要手动完成授权/密钥：",
+    "agent_template_open_market": "现在去连接器中心配置？",
+    "agent_template_import_failed": "导入失败"
   }
 }

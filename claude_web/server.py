@@ -8196,11 +8196,18 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
         }
         yield f"data: {json.dumps(meta)}\n\n"
 
-        effective_system_prompt = None if code_workspace else compose_system_prompt(
-            load_enabled_memories(work_dir, session_id),
-            req.system_prompt,
-            load_session_pinned_docs(session_id),
-        )
+        if code_workspace:
+            # Code mode keeps Claude Code's built-in system prompt intact, but
+            # still threads an Agent-template / user system prompt through
+            # --append-system-prompt so templates apply in code mode too. Memory
+            # and pinned docs stay out here to preserve existing code-mode context.
+            effective_system_prompt = compose_system_prompt([], req.system_prompt, None)
+        else:
+            effective_system_prompt = compose_system_prompt(
+                load_enabled_memories(work_dir, session_id),
+                req.system_prompt,
+                load_session_pinned_docs(session_id),
+            )
         current_sig = _proc_sig(
             remote_session_id,
             req.model, req.effort, effective_permission_mode, effective_system_prompt,
