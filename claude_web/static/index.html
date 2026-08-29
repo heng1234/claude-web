@@ -9346,7 +9346,7 @@ async function switchLang(lang) {
       <span id="mcpConfigPath" class="ml-2" style="color:var(--text-subtle);"></span>
     </div>
     <div id="mcpServerList" class="space-y-2 max-h-[40vh] overflow-y-auto mb-4"></div>
-    <details id="mcpCatalogWrap" class="border rounded-lg p-3 mb-2" style="border-color:var(--border);">
+    <details id="mcpCatalogWrap" class="border rounded-lg p-3 mb-2" style="border-color:var(--border);" open>
       <summary class="text-sm font-medium cursor-pointer" style="color:var(--text);" data-i18n="html.connector_catalog">🧩 连接器目录（一键添加）</summary>
       <div id="mcpCatalogCats" class="flex flex-wrap gap-1 mt-3"></div>
       <div id="mcpCatalogGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 max-h-[36vh] overflow-y-auto"></div>
@@ -25288,6 +25288,7 @@ function mcpSecretBadges(values) {
 }
 
 async function refreshMcpServers() {
+  loadMcpCatalog();
   try {
     const r = await fetch('/api/mcp/servers' + mcpQuery());
     if (!r.ok) {
