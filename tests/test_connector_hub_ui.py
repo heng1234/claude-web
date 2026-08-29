@@ -146,7 +146,7 @@ class ConnectorCatalogDataTest(unittest.TestCase):
         for entry in self.catalog["connectors"]:
             for field in entry.get("secret_fields", []):
                 with self.subTest(entry.get("id"), key=field.get("key")):
-                    self.assertIn(field.get("target"), {"header", "env"})
+                    self.assertIn(field.get("target"), {"header", "env", "url", "arg"})
                     self.assertTrue(field.get("key"))
 
     def test_catalog_ships_no_baked_in_credentials(self):

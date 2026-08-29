@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "note": "Built-in connector catalog. transport: stdio|http|sse; auth: none|api_key|oauth. Entries may carry a local brand logo (logo: connectors/<id>.svg, from simple-icons CC0) rendered on a brand-color tile (brand); entries without a logo fall back to the emoji icon. api_key entries declare secret_fields so the UI collects keys and routes them to the encrypted secret store. Verified 2026-08: the @modelcontextprotocol/server-* reference packages were mostly deprecated 2025-05; only filesystem/fetch/memory survive. Commercial services without a public MCP are listed as http templates for the user to fill in.",
+  "version": 4,
+  "note": "Built-in connector catalog. transport: stdio|http|sse; auth: none|api_key|oauth. Logo priority: bundled SVG (logo: connectors/<id>.svg, from simple-icons CC0) on a brand tile → colored word-mark tile (abbr + brand, for brands with no CC0 logo e.g. Feishu/DingTalk) → emoji icon. api_key entries declare secret_fields (target: env|header|url|arg) so the UI collects keys and routes them to the encrypted secret store; target:arg fills a <PLACEHOLDER> token in args (e.g. Feishu's -s <APP_SECRET>). Verified 2026-08 against npm/PyPI: @larksuiteoapi/lark-mcp (official Feishu), open-dingtalk/dingtalk-mcp (official DingTalk), wecom-mcp, mcp-email-server, akshare-one-mcp, api.tushare.pro/mcp are live public/free (user supplies own key). @modelcontextprotocol/server-* reference packages were mostly deprecated 2025-05; only filesystem/fetch/memory survive. Commercial services without a public MCP are listed as http templates for the user to fill in.",
   "connectors": [
     {
       "id": "filesystem",
@@ -159,10 +159,10 @@
       "transport": "stdio",
       "auth": "none",
       "icon": "📈",
-      "description": "免费开源的中国市场行情数据（社区包 akshare-mcp，需 uv/uvx）。",
+      "description": "免费开源的中国市场行情数据（社区包 akshare-one-mcp，需 uv/uvx）。数据来自东方财富、新浪、雪球等公开源，无需密钥。",
       "command": "uvx",
-      "args": ["akshare-mcp"],
-      "docs": "https://pypi.org/project/akshare-mcp/"
+      "args": ["akshare-one-mcp"],
+      "docs": "https://github.com/zwldarren/akshare-one-mcp"
     },
     {
       "id": "eastmoney-template",
@@ -205,6 +205,77 @@
         {"target": "header", "key": "Authorization", "label": "Authorization（如 Bearer xxx）"}
       ],
       "docs": "https://modelcontextprotocol.io/"
+    },
+    {
+      "id": "feishu",
+      "name": "飞书 / Lark",
+      "category": "office",
+      "transport": "stdio",
+      "auth": "api_key",
+      "icon": "🐦",
+      "abbr": "飞书",
+      "brand": "#3370FF",
+      "description": "飞书官方 OpenAPI MCP：读写文档、多维表格、消息、日历等。需在飞书开放平台创建应用拿到 App ID / App Secret。",
+      "long_description": "字节跳动官方维护的飞书/Lark MCP（@larksuiteoapi/lark-mcp）。在飞书开放平台（open.feishu.cn）创建企业自建应用，获取 App ID 与 App Secret 并开通所需权限后填入即可。凭据以 CLI 参数注入，勾选加密后仅本机加密存储、运行时解密。",
+      "command": "npx",
+      "args": ["-y", "@larksuiteoapi/lark-mcp", "mcp", "-a", "<APP_ID>", "-s", "<APP_SECRET>"],
+      "secret_fields": [
+        {"target": "arg", "key": "APP_ID", "placeholder": "<APP_ID>", "label": "App ID（飞书应用凭证）"},
+        {"target": "arg", "key": "APP_SECRET", "placeholder": "<APP_SECRET>", "label": "App Secret（飞书应用密钥）"}
+      ],
+      "docs": "https://github.com/larksuite/lark-openapi-mcp"
+    },
+    {
+      "id": "dingtalk",
+      "name": "钉钉 / DingTalk",
+      "category": "office",
+      "transport": "stdio",
+      "auth": "api_key",
+      "icon": "📨",
+      "abbr": "钉",
+      "brand": "#3296FA",
+      "description": "钉钉官方 MCP：日程、待办、消息等。需在钉钉开放平台创建应用拿到 Client ID / Client Secret。",
+      "long_description": "钉钉开放平台官方维护的 MCP（open-dingtalk/dingtalk-mcp）。在开放平台创建应用，获取 Client ID（AppKey）与 Client Secret（AppSecret）并授予所需权限后填入。密钥以环境变量注入，勾选加密后仅本机加密存储、运行时解密。",
+      "command": "npx",
+      "args": ["-y", "dingtalk-mcp@latest"],
+      "secret_fields": [
+        {"target": "env", "key": "DINGTALK_Client_ID", "label": "Client ID（钉钉 AppKey）"},
+        {"target": "env", "key": "DINGTALK_Client_Secret", "label": "Client Secret（钉钉 AppSecret）"}
+      ],
+      "docs": "https://open.dingtalk.com/document/ai-dev/dingtalk-server-api-mcp-overview"
+    },
+    {
+      "id": "wecom",
+      "name": "企业微信 / WeCom",
+      "category": "office",
+      "transport": "stdio",
+      "auth": "api_key",
+      "icon": "💬",
+      "logo": "connectors/wechat.svg",
+      "brand": "#07C160",
+      "description": "企业微信群机器人：向群聊推送消息。需在群机器人设置中获取 Webhook 地址。",
+      "long_description": "社区维护的企业微信 MCP（wecom-mcp），通过群机器人 Webhook 发送消息。在企业微信群「添加群机器人」后复制其 Webhook 地址（形如 https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx）填入即可。密钥即嵌在该 URL 中，勾选加密后仅本机加密存储、运行时解密。",
+      "command": "npx",
+      "args": ["-y", "wecom-mcp"],
+      "secret_fields": [
+        {"target": "env", "key": "WECOM_WEBHOOK_URL", "label": "群机器人 Webhook 地址"}
+      ],
+      "docs": "https://github.com/code-tinker/wecom-mcp"
+    },
+    {
+      "id": "email",
+      "name": "邮箱（IMAP/SMTP）",
+      "category": "office",
+      "transport": "stdio",
+      "auth": "none",
+      "icon": "📧",
+      "abbr": "@",
+      "brand": "#0F7B6C",
+      "description": "通用邮箱 MCP：读收件箱、发信、回复、整理。支持 QQ / 网易 163 / Gmail / Outlook 等任意 IMAP/SMTP 邮箱。",
+      "long_description": "社区维护的多账号邮箱 MCP（mcp-email-server，uvx 运行）。首次使用需先运行一次配置界面 `uvx mcp-email-server@latest ui` 录入邮箱地址与授权码（QQ/163 邮箱用「授权码」而非登录密码），保存后本连接器即可读取。凭据由该工具本地存储，不经过 claude-web。",
+      "command": "uvx",
+      "args": ["mcp-email-server@latest", "stdio"],
+      "docs": "https://github.com/Wh1isper/mcp-email-server"
     },
     {
       "id": "custom-http",

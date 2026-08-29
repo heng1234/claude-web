@@ -65,9 +65,15 @@ class ConnectorCatalogStructureTest(unittest.TestCase):
                 self.assertIsInstance(fields, list, f"{entry['id']} needs secret_fields")
                 self.assertGreaterEqual(len(fields), 1, entry["id"])
                 for field in fields:
-                    self.assertIn("target", field)  # "header" | "env"
+                    self.assertIn("target", field)  # header | env | url | arg
                     self.assertIn("key", field)
-                    self.assertIn(field["target"], ("header", "env"), entry["id"])
+                    self.assertIn(field["target"], ("header", "env", "url", "arg"), entry["id"])
+                    # arg-target secrets fill a "<...>" token in args, so the
+                    # placeholder token must actually exist in the args list.
+                    if field["target"] == "arg":
+                        token = field.get("placeholder") or ("<" + field["key"] + ">")
+                        self.assertIn(token, entry.get("args", []),
+                                      f"{entry['id']} arg secret token {token} not in args")
 
     def test_categories_are_from_a_known_set(self):
         known = {
@@ -75,6 +81,42 @@ class ConnectorCatalogStructureTest(unittest.TestCase):
         }
         for entry in self.catalog["connectors"]:
             self.assertIn(entry["category"], known, f"{entry['id']} bad category")
+
+    def test_doubao_staple_office_connectors_are_present(self):
+        # The connectors the user asked for (Feishu / DingTalk / WeCom / email),
+        # all backed by verified public/free MCP packages.
+        ids = {e["id"] for e in self.catalog["connectors"]}
+        for expected in ("feishu", "dingtalk", "wecom", "email"):
+            self.assertIn(expected, ids, f"missing {expected}")
+
+    def test_feishu_uses_arg_target_secrets_matching_official_cli(self):
+        feishu = next(e for e in self.catalog["connectors"] if e["id"] == "feishu")
+        self.assertEqual(feishu["command"], "npx")
+        self.assertIn("@larksuiteoapi/lark-mcp", feishu["args"])
+        targets = {f["target"] for f in feishu["secret_fields"]}
+        self.assertEqual(targets, {"arg"})
+
+    def test_logo_entries_point_to_bundled_svgs(self):
+        static_dir = CATALOG_PATH.parents[0] / "static"
+        for entry in self.catalog["connectors"]:
+            if entry.get("logo"):
+                svg = static_dir / entry["logo"]
+                self.assertTrue(svg.is_file(), f"{entry['id']} logo {entry['logo']} missing")
+
+    def test_bundled_logos_are_white_filled_for_dark_tiles(self):
+        # simple-icons glyphs default to black; on dark brand tiles they must be
+        # forced white or they're invisible.
+        static_dir = CATALOG_PATH.parents[0] / "static"
+        for entry in self.catalog["connectors"]:
+            if entry.get("logo"):
+                text = (static_dir / entry["logo"]).read_text(encoding="utf-8")
+                self.assertIn('fill="#ffffff"', text, f"{entry['id']} logo not white-filled")
+
+    def test_abbr_entries_carry_a_brand_color(self):
+        # Word-mark tiles (no CC0 logo) need both abbr text and a brand color.
+        for entry in self.catalog["connectors"]:
+            if entry.get("abbr") and not entry.get("logo"):
+                self.assertTrue(entry.get("brand"), f"{entry['id']} abbr tile needs brand")
 
 
 if __name__ == "__main__":

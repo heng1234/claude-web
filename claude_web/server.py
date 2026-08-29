@@ -7910,6 +7910,12 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 "browserEnabled": effective_browser_enabled,
                 "runtimeEpoch": remote_session_id,
             }
+            # Inject enabled connectors with secrets decrypted just for this run,
+            # so encrypted connectors actually connect (the on-disk .mcp.json the
+            # CLI reads only holds cwsecret:// refs it can't resolve).
+            runtime_mcp = _runtime_mcp_servers(work_dir)
+            if runtime_mcp:
+                agent_params["mcpServers"] = runtime_mcp
             if remote_ready and not is_new:
                 agent_params["resumeSessionId"] = remote_session_id
             else:
@@ -13769,6 +13775,21 @@ def _persist_config_secrets(cfg: dict, encrypt_secrets, store=None) -> dict:
         for field, value in list(mapping.items()):
             if field in keys and value and not is_secret_ref(str(value)):
                 mapping[field] = store.store_secret(str(value), label=f"{cfg.get('type','')}:{field}")
+    # Secrets passed as CLI args (e.g. Feishu's `-s <secret>`) are flagged by the
+    # synthetic key "__arg__<index>": encrypt the arg at that position in place.
+    args = cfg.get("args")
+    if isinstance(args, list):
+        for key in keys:
+            if not key.startswith("__arg__"):
+                continue
+            try:
+                idx = int(key[len("__arg__"):])
+            except ValueError:
+                continue
+            if 0 <= idx < len(args):
+                value = args[idx]
+                if value and not is_secret_ref(str(value)):
+                    args[idx] = store.store_secret(str(value), label=f"{cfg.get('type','')}:arg{idx}")
     return cfg
 
 
@@ -13781,15 +13802,71 @@ def _resolve_config_secrets(cfg: dict) -> dict:
     from claude_web.secret_store import is_secret_ref
 
     resolved = {"headers": dict(cfg.get("headers") or {}), "env": dict(cfg.get("env") or {})}
-    needs = any(
+    args_in = [str(item) for item in (cfg.get("args") or [])]
+    args_has_ref = any(is_secret_ref(a) for a in args_in)
+    needs = args_has_ref or any(
         is_secret_ref(v)
         for mapping in resolved.values()
         for v in mapping.values()
     )
     if not needs:
+        resolved["args"] = args_in
         return resolved
     store = _get_secret_store()
-    return {key: store.resolve_mapping(mapping) for key, mapping in resolved.items()}
+    out = {key: store.resolve_mapping(mapping) for key, mapping in resolved.items()}
+    out["args"] = [store.resolve_secret(a) if is_secret_ref(a) else a for a in args_in]
+    return out
+
+
+def _sdk_mcp_config(cfg: dict) -> Optional[dict]:
+    """Shape one stored MCP config into the SDK's mcpServers entry, with any
+    cwsecret:// refs decrypted. Returns None if the config is unusable."""
+    transport = _mcp_transport(cfg)
+    resolved = _resolve_config_secrets(cfg)
+    if transport in _REMOTE_MCP_TRANSPORTS:
+        url = str(cfg.get("url") or "").strip()
+        if not url:
+            return None
+        entry = {"type": transport, "url": url}
+        headers = {str(k): str(v) for k, v in (resolved.get("headers") or {}).items()}
+        if headers:
+            entry["headers"] = headers
+        return entry
+    if transport != "stdio":
+        return None
+    command = str(cfg.get("command") or "").strip()
+    if not command:
+        return None
+    entry = {"type": "stdio", "command": command,
+             "args": [str(a) for a in (resolved.get("args") or cfg.get("args") or [])]}
+    env = {str(k): str(v) for k, v in (resolved.get("env") or {}).items()}
+    if env:
+        entry["env"] = env
+    return entry
+
+
+def _runtime_mcp_servers(cwd: Optional[str]) -> dict:
+    """Collect all ENABLED MCP servers for `cwd`, decrypt their secrets, and
+    return them shaped for the daemon's `mcpServers` injection. This is what
+    makes encrypted connectors actually connect at turn time: the stored config
+    only holds cwsecret:// refs, so the CLI (reading .mcp.json via settingSources)
+    can't use them — we resolve here and inject plaintext just for this run."""
+    out: dict = {}
+    try:
+        sources = _mcp_sources(cwd)
+    except Exception:
+        return out
+    for source in sources:
+        for name, cfg in (source.get("servers") or {}).items():
+            if not isinstance(cfg, dict) or _is_mcp_disabled(source, name):
+                continue
+            try:
+                entry = _sdk_mcp_config(cfg)
+            except Exception:
+                entry = None
+            if entry is not None:
+                out[name] = entry  # later scopes (local/project) win over user
+    return out
 
 
 def _load_mcp_catalog() -> dict:
@@ -14054,11 +14131,12 @@ async def check_mcp_server_health(
     if transport != "stdio":
         return {"ok": False, "status": "unsupported", "error": "不支持的 MCP 传输类型", "tools": []}
     command = str(cfg.get("command") or "").strip()
-    args = [str(item) for item in (cfg.get("args") or [])]
+    resolved_cfg = _resolve_config_secrets(cfg)
+    args = [str(item) for item in (resolved_cfg.get("args") or cfg.get("args") or [])]
     if not command:
         raise HTTPException(status_code=400, detail="MCP command is empty")
     env = os.environ.copy()
-    env.update({str(k): str(v) for k, v in (_resolve_config_secrets(cfg).get("env") or {}).items()})
+    env.update({str(k): str(v) for k, v in (resolved_cfg.get("env") or {}).items()})
     started = time.monotonic()
     process = None
     try:
