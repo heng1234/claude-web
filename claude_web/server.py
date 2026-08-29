@@ -8182,7 +8182,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
         set_session_runtime_origin(session_id, "")
         set_session_native_user_offset(session_id, 0)
 
-    use_agent_sdk = runtime_origin != _RUNTIME_ORIGIN_CLI and _claude_agent_bridge.enabled
+    use_agent_sdk = code_workspace and runtime_origin != _RUNTIME_ORIGIN_CLI and _claude_agent_bridge.enabled
     if use_agent_sdk:
         if not await _claude_agent_bridge.ensure_started():
             await discard_git_checkpoint(checkpoint, work_dir)
@@ -16056,6 +16056,16 @@ def main():
     import argparse
     import sys
     import uvicorn
+
+    # Inject ANTHROPIC_* keys from ~/.claude/settings.json into the process env
+    # so all CLI subprocesses and the SDK daemon inherit them automatically.
+    try:
+        _settings_env = json.loads((Path.home() / ".claude" / "settings.json").read_text(encoding="utf-8")).get("env") or {}
+        for _k, _v in _settings_env.items():
+            if isinstance(_k, str) and isinstance(_v, str) and _k not in os.environ:
+                os.environ[_k] = _v
+    except Exception:
+        pass
 
     parser = argparse.ArgumentParser(description="Claude Code Web - Web UI for Claude Code CLI")
     parser.add_argument("--port", "-p", type=int, default=int(os.environ.get("PORT", "8765")), help="Port to listen on (default: 8765)")

@@ -1107,6 +1107,14 @@
     display: flex; flex-direction: column; overflow: hidden; padding: 0;
     border-radius: 18px;
   }
+  #agentTemplateMarket .modal-box {
+    width: min(900px, calc(100vw - 48px));
+    max-width: min(900px, calc(100vw - 48px));
+    height: min(85vh, 820px);
+    max-height: min(85vh, 820px);
+    display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    border-radius: 18px;
+  }
   .cw-market-head {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
     padding: 18px 24px 14px; border-bottom: 1px solid var(--border);
@@ -9508,7 +9516,7 @@ async function switchLang(lang) {
 
 <!-- Agent Template market -->
 <div id="agentTemplateMarket" class="modal-backdrop hidden">
-  <div class="modal-box">
+  <div class="modal-box" style="display:flex;flex-direction:column;overflow:hidden;padding:0;">
     <div class="cw-market-head">
       <div class="text-lg font-semibold flex items-center gap-2">
         <span>🧑‍🚀</span><span data-i18n="html.agent_template_title">Agent 模板</span>

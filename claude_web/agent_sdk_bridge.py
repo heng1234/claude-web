@@ -181,6 +181,20 @@ class AgentSdkBridge:
         self._ready = loop.create_future()
         self._transport_failed = False
         self._stopping = False
+        # Build env: start from current process env, then overlay ANTHROPIC_*
+        # keys from ~/.claude/settings.json so the daemon inherits the same
+        # auth token and base URL that the CLI uses.
+        daemon_env = os.environ.copy()
+        try:
+            import json as _json
+            _settings_path = Path.home() / ".claude" / "settings.json"
+            if _settings_path.exists():
+                _settings = _json.loads(_settings_path.read_text(encoding="utf-8"))
+                for _k, _v in (_settings.get("env") or {}).items():
+                    if isinstance(_k, str) and isinstance(_v, str):
+                        daemon_env[_k] = _v
+        except Exception:
+            pass
         try:
             self.process = await asyncio.create_subprocess_exec(
                 node,
@@ -190,6 +204,7 @@ class AgentSdkBridge:
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(self.daemon_path.parent),
                 limit=self.subprocess_stream_limit,
+                env=daemon_env,
             )
             self._reader_task = asyncio.create_task(self._read_stdout())
             self._stderr_task = asyncio.create_task(self._read_stderr())
