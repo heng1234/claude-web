@@ -337,6 +337,126 @@ class AgentSdkRuntimeLimitTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("runtime limit reached (8)", str(raised.exception))
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is required for the bridge concurrency test")
+class AgentSdkCrossSessionConcurrencyTest(unittest.IsolatedAsyncioTestCase):
+    """A slow control call on one session must not stall another session's send.
+
+    The daemon used to serialize every session through one global mutex, so a
+    long getContextUsage (Python allows up to 180s) held the lock that
+    reserveSend needed to emit its 'accepted' frame. Any other session's send
+    then blew past open_turn's acknowledgement window and surfaced as
+    "bridge did not queue the turn".
+    """
+
+    CONTEXT_DELAY_SECONDS = 3.0
+
+    async def asyncSetUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.sdk_dir = Path(self.temp_dir.name) / "claude-agent-sdk"
+        self.sdk_dir.mkdir()
+        (self.sdk_dir / "package.json").write_text(
+            '{"name":"@anthropic-ai/claude-agent-sdk","version":"0.2.112","type":"module","exports":"./sdk.mjs"}',
+            encoding="utf-8",
+        )
+        context_delay_ms = int(self.CONTEXT_DELAY_SECONDS * 1000)
+        (self.sdk_dir / "sdk.mjs").write_text(
+            textwrap.dedent(
+                f"""
+                const CONTEXT_DELAY_MS = {context_delay_ms};
+                export function query({{prompt}}) {{
+                  let closed = false;
+                  let release = null;
+                  return {{
+                    [Symbol.asyncIterator]() {{ return this; }},
+                    async next() {{
+                      const input = await prompt.next();
+                      if (closed || input.done) return {{done: true}};
+                      return await new Promise((resolve) => {{
+                        release = () => resolve({{done: true}});
+                        if (closed) release();
+                      }});
+                    }},
+                    close() {{ closed = true; if (release) release(); }},
+                    async interrupt() {{}},
+                    async setModel() {{}},
+                    async setPermissionMode() {{}},
+                    async getContextUsage() {{
+                      // Deliberately slow: emulates a real context inspection that
+                      // takes far longer than the send acknowledgement window.
+                      await new Promise((resolve) => setTimeout(resolve, CONTEXT_DELAY_MS));
+                      return {{totalTokens: 0, maxTokens: 200000, percentage: 0}};
+                    }},
+                    async rewindFiles() {{ return {{canRewind: true, filesChanged: []}}; }},
+                  }};
+                }}
+                export async function forkSession() {{ return {{sessionId: 'forked'}}; }}
+                export async function getSessionMessages() {{ return []; }}
+                """
+            ),
+            encoding="utf-8",
+        )
+        self.env = patch.dict(
+            os.environ,
+            {
+                "CLAUDE_AGENT_SDK_PATH": str(self.sdk_dir),
+                "CLAUDE_WEB_CODE_RUNTIME": "agent-sdk",
+            },
+        )
+        self.env.start()
+        self.bridge = AgentSdkBridge()
+
+    async def asyncTearDown(self):
+        await self.bridge.shutdown()
+        self.env.stop()
+        self.temp_dir.cleanup()
+
+    def _params(self, name: str) -> dict:
+        return {
+            "message": "hold",
+            "cwd": self.temp_dir.name,
+            "sessionId": f"native-{name}",
+            "runtimeEpoch": f"native-{name}",
+        }
+
+    async def test_slow_context_on_one_session_does_not_block_another_send(self):
+        # Session A: start a context query that blocks inside the SDK.
+        context_task = asyncio.create_task(
+            self.bridge.context_usage("local-slow", self._params("slow"), timeout=60.0)
+        )
+        # Give the daemon time to enter getContextUsage and hold its session lock.
+        await asyncio.sleep(0.75)
+        self.assertFalse(context_task.done(), "context query should still be in flight")
+
+        # Session B: a send must be acknowledged promptly despite A holding its lock.
+        started = asyncio.get_running_loop().time()
+        turn = await self.bridge.open_turn("local-fast", self._params("fast"))
+        elapsed = asyncio.get_running_loop().time() - started
+
+        self.assertIsNotNone(turn)
+        # Comfortably below the remaining context delay: proves no cross-session wait.
+        self.assertLess(
+            elapsed,
+            self.CONTEXT_DELAY_SECONDS / 2,
+            f"send waited {elapsed:.2f}s — it is serialized behind the other session",
+        )
+        usage = await context_task
+        self.assertTrue(usage.get("ok"))
+
+    async def test_concurrent_sends_for_one_session_accept_only_one(self):
+        # The pre-claim in reserveSend must still reject a second concurrent send
+        # for the SAME session, so Python never treats two turns as acknowledged.
+        results = await asyncio.gather(
+            self.bridge.open_turn("local-dup", self._params("dup")),
+            self.bridge.open_turn("local-dup", self._params("dup")),
+            return_exceptions=True,
+        )
+        failures = [item for item in results if isinstance(item, BaseException)]
+        accepted = [item for item in results if not isinstance(item, BaseException)]
+        self.assertEqual(len(accepted), 1, f"expected exactly one accepted turn, got {results}")
+        self.assertEqual(len(failures), 1)
+        self.assertIn("already running", str(failures[0]))
+
+
 @unittest.skipUnless(shutil.which("node"), "Node.js is required for the selected SDK version test")
 class AgentSdkSelectedVersionTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

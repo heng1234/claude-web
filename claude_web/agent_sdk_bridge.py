@@ -361,7 +361,7 @@ class AgentSdkBridge:
             except (BrokenPipeError, ConnectionResetError) as exc:
                 raise AgentSdkBridgeError("Claude Agent SDK bridge connection closed") from exc
 
-    async def open_turn(self, session_key: str, params: dict, timeout: float = 12.0) -> AgentSdkTurn:
+    async def open_turn(self, session_key: str, params: dict, timeout: float = 20.0) -> AgentSdkTurn:
         if not await self.ensure_started():
             raise AgentSdkBridgeError(self.last_error or "Claude Agent SDK is unavailable")
         request_id = str(uuid.uuid4())

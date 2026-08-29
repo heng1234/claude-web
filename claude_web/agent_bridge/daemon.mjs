@@ -29,12 +29,41 @@ let sdk = null;
 let sdkInfo = null;
 let shuttingDown = false;
 let outputTail = Promise.resolve();
-let runtimeMutationTail = Promise.resolve();
 
-async function withRuntimeMutation(action) {
-  const previous = runtimeMutationTail;
+// Per-session serialization. Each session key owns its own promise chain so a
+// slow operation on one session (e.g. a 180s getContextUsage, or runtime
+// create/dispose) never blocks another session's `send` from being accepted.
+// Replaces a single module-global mutex that serialized ALL sessions and caused
+// Python's open_turn acknowledgement window to time out under concurrency.
+const sessionMutationTails = new Map();
+
+async function withSessionMutation(key, action) {
+  const previous = sessionMutationTails.get(key) || Promise.resolve();
   let release;
-  runtimeMutationTail = new Promise((resolveRelease) => { release = resolveRelease; });
+  const current = new Promise((resolveRelease) => { release = resolveRelease; });
+  sessionMutationTails.set(key, current);
+  await previous;
+  try {
+    return await action();
+  } finally {
+    release();
+    // Drop the chain entry only when we are still its tail (no waiter queued
+    // behind us), so the Map cannot grow without bound across many sessions.
+    if (sessionMutationTails.get(key) === current) sessionMutationTails.delete(key);
+  }
+}
+
+// Guards ONLY cross-session shared state: the `runtimes` map membership and the
+// MAX_RUNTIMES capacity decision. The action MUST be pure in-memory work — never
+// await an SDK call or runtime create/dispose inside it. Lock order is fixed:
+// acquire a session lock first, then the registry lock; never the reverse, and
+// never await a session lock while holding the registry lock.
+let registryMutationTail = Promise.resolve();
+
+async function withRegistryMutation(action) {
+  const previous = registryMutationTail;
+  let release;
+  registryMutationTail = new Promise((resolveRelease) => { release = resolveRelease; });
   await previous;
   try {
     return await action();
@@ -461,9 +490,10 @@ async function readRuntime(runtime) {
   }
 }
 
-async function disposeRuntime(runtime) {
-  if (!runtime || runtime.disposed) return;
-  runtime.disposed = true;
+// Release SDK/runtime resources. Assumes the caller has already marked the
+// runtime disposed and detached it from `runtimes` (or will not race to). Safe
+// to call once per runtime.
+async function closeRuntimeResources(runtime) {
   cancelRuntimePermissions(runtime);
   runtime.input.close();
   try {
@@ -475,47 +505,90 @@ async function disposeRuntime(runtime) {
   if (runtimes.get(runtime.key) === runtime) runtimes.delete(runtime.key);
 }
 
+async function disposeRuntime(runtime) {
+  if (!runtime || runtime.disposed) return;
+  runtime.disposed = true;
+  await closeRuntimeResources(runtime);
+}
+
+// Session keys with an in-flight createRuntime. The capacity gate is decided
+// under the registry lock, but the matching `runtimes.set` can only happen after
+// slow work (loadSdk + query construction). Counting these reservations keeps
+// MAX_RUNTIMES correct across that gap now that sessions no longer share one
+// global lock.
+const pendingRuntimeReservations = new Set();
+
+function runtimeSlotsInUse() {
+  return runtimes.size + pendingRuntimeReservations.size;
+}
+
 async function enforceRuntimeLimit(exceptKey) {
-  const idle = [...runtimes.values()]
-    .filter((runtime) => runtime.key !== exceptKey && !runtime.activeRequestId && !runtime.controlActive)
-    .sort((left, right) => left.lastUsed - right.lastUsed);
-  while (runtimes.size >= MAX_RUNTIMES && idle.length) {
-    await disposeRuntime(idle.shift());
-  }
-  if (runtimes.size >= MAX_RUNTIMES && !runtimes.has(exceptKey)) {
-    throw new Error(`Claude Agent SDK runtime limit reached (${MAX_RUNTIMES}); stop an active Code session and retry`);
-  }
+  // Runs on behalf of a session lock holder about to create a runtime. Select
+  // and claim evictable victims under the registry lock (pure map work), then
+  // dispose them OUTSIDE any lock — closing an SDK query can be slow and must
+  // never run while the registry lock is held. Victims belong to OTHER sessions;
+  // we never await their session locks (which would invert lock order), we just
+  // detach them from the map so nothing revives them.
+  const victims = await withRegistryMutation(() => {
+    const idle = [...runtimes.values()]
+      .filter((runtime) => runtime.key !== exceptKey && !runtime.activeRequestId && !runtime.controlActive)
+      .sort((left, right) => left.lastUsed - right.lastUsed);
+    const claimed = [];
+    while (runtimeSlotsInUse() >= MAX_RUNTIMES && idle.length) {
+      const victim = idle.shift();
+      // Detach immediately so a concurrent send for the victim's session cannot
+      // reuse it after we decided to evict it.
+      victim.disposed = true;
+      if (runtimes.get(victim.key) === victim) runtimes.delete(victim.key);
+      claimed.push(victim);
+    }
+    if (runtimeSlotsInUse() >= MAX_RUNTIMES && !runtimes.has(exceptKey)) {
+      throw new Error(`Claude Agent SDK runtime limit reached (${MAX_RUNTIMES}); stop an active Code session and retry`);
+    }
+    // Hold the slot for this key until createRuntime publishes the runtime.
+    pendingRuntimeReservations.add(exceptKey);
+    return claimed;
+  });
+  // Victims were already marked disposed + detached under the registry lock, so
+  // use the internal closer (disposeRuntime would early-return on `disposed`).
+  for (const victim of victims) await closeRuntimeResources(victim);
 }
 
 async function createRuntime(key, params, signature) {
   await enforceRuntimeLimit(key);
-  const loaded = await loadSdk();
-  const input = createInputQueue();
-  const abortController = new AbortController();
-  const runtime = {
-    key,
-    signature,
-    input,
-    abortController,
-    sessionId: params.resumeSessionId || params.sessionId || null,
-    initialSessionId: params.resumeSessionId || params.sessionId || null,
-    activeRequestId: null,
-    controlActive: false,
-    lastUsed: Date.now(),
-    disposed: false,
-    runtimeEpoch: params.runtimeEpoch || null,
-    permissionModeState: { value: normalizePermissionMode(params.permissionMode) },
-    currentPermissionMode: normalizePermissionMode(params.permissionMode),
-    currentModel: params.model || null,
-    pendingApprovals: new Set(),
-    query: null,
-  };
-  const options = buildOptions(params, abortController, runtime);
-  const query = loaded.query({ prompt: input, options });
-  runtime.query = query;
-  runtimes.set(key, runtime);
-  runtime.reader = readRuntime(runtime);
-  return runtime;
+  // enforceRuntimeLimit reserved a slot for `key`; release it once the runtime
+  // is published (or on any failure) so the capacity gate stays accurate.
+  try {
+    const loaded = await loadSdk();
+    const input = createInputQueue();
+    const abortController = new AbortController();
+    const runtime = {
+      key,
+      signature,
+      input,
+      abortController,
+      sessionId: params.resumeSessionId || params.sessionId || null,
+      initialSessionId: params.resumeSessionId || params.sessionId || null,
+      activeRequestId: null,
+      controlActive: false,
+      lastUsed: Date.now(),
+      disposed: false,
+      runtimeEpoch: params.runtimeEpoch || null,
+      permissionModeState: { value: normalizePermissionMode(params.permissionMode) },
+      currentPermissionMode: normalizePermissionMode(params.permissionMode),
+      currentModel: params.model || null,
+      pendingApprovals: new Set(),
+      query: null,
+    };
+    const options = buildOptions(params, abortController, runtime);
+    const query = loaded.query({ prompt: input, options });
+    runtime.query = query;
+    await withRegistryMutation(() => { runtimes.set(key, runtime); });
+    runtime.reader = readRuntime(runtime);
+    return runtime;
+  } finally {
+    await withRegistryMutation(() => { pendingRuntimeReservations.delete(key); });
+  }
 }
 
 function assertRuntimeEpoch(runtime, params) {
@@ -574,7 +647,7 @@ async function runtimeForSendLocked(key, params) {
 }
 
 async function runtimeForSend(key, params) {
-  return withRuntimeMutation(() => runtimeForSendLocked(key, params));
+  return withSessionMutation(key, () => runtimeForSendLocked(key, params));
 }
 
 // Claims held between the atomic send reservation and the moment handleSend()
@@ -582,7 +655,7 @@ async function runtimeForSend(key, params) {
 // concurrent 'send' lines for one session could both pass the check and both
 // receive an 'accepted' frame before either claimed the runtime; Python then
 // treated two turns as acknowledged and their events interleaved. The claim
-// closes that window: check + claim happen inside a single withRuntimeMutation.
+// closes that window: check + claim happen inside a single withRegistryMutation.
 const pendingSendClaims = new Map();
 
 function sessionKeyOf(command) {
@@ -597,15 +670,16 @@ function releaseSendClaim(key, commandId) {
 }
 
 // Atomically validate that this session can accept a new turn and claim it.
-// Runs entirely under the runtime mutex so no other send can interleave.
+// The check + claim run under the registry lock so no other send can interleave
+// and grab the same capacity slot or session.
 async function reserveSend(command) {
   const { key, params } = sessionKeyOf(command);
-  return withRuntimeMutation(async () => {
+  return withRegistryMutation(async () => {
     const runtime = runtimes.get(key);
     if (runtime?.activeRequestId || pendingSendClaims.has(key)) {
       throw new Error('A Code turn is already running for this session');
     }
-    if (!runtime && runtimes.size + pendingSendClaims.size >= MAX_RUNTIMES) {
+    if (!runtime && runtimeSlotsInUse() + pendingSendClaims.size >= MAX_RUNTIMES) {
       const hasDisposableRuntime = [...runtimes.values()].some(
         (candidate) => !candidate.activeRequestId && !candidate.controlActive
       );
@@ -622,7 +696,7 @@ async function handleSend(command) {
   const params = command.params || {};
   const key = String(params.sessionKey || '').trim();
   if (!key) throw new Error('sessionKey is required');
-  await withRuntimeMutation(async () => {
+  await withSessionMutation(key, async () => {
     const runtime = await runtimeForSendLocked(key, params);
     if (runtime.activeRequestId || runtime.controlActive) {
       throw new Error('A Code turn is already running for this session');
@@ -659,7 +733,7 @@ async function handlePreconnect(command) {
   const key = String(params.sessionKey || '').trim();
   if (!key) throw new Error('sessionKey is required');
   const signature = runtimeSignature(params);
-  const result = await withRuntimeMutation(async () => {
+  const result = await withSessionMutation(key, async () => {
     const existing = runtimes.get(key);
     if (existing && existing.signature === signature) {
       existing.lastUsed = Date.now();
@@ -678,9 +752,11 @@ async function handleContext(command) {
   if (!key) throw new Error('sessionKey is required');
   // Context inspection is read-only. Never rebuild or reconfigure an existing
   // runtime from a stats request: permission/tool changes are owned by explicit
-  // controls and the next turn. Serialize the short SDK call so a queued send
-  // waits for it instead of racing runtime disposal.
-  const { runtime, usage } = await withRuntimeMutation(async () => {
+  // controls and the next turn. Serialized against this session's own sends so it
+  // cannot race runtime disposal — but NOT against other sessions, since
+  // getContextUsage can take minutes and would otherwise stall their sends past
+  // Python's open_turn acknowledgement window.
+  const { runtime, usage } = await withSessionMutation(key, async () => {
     let current = runtimes.get(key);
     if (current?.activeRequestId) {
       throw new Error('A Code turn is already running for this session');
@@ -704,7 +780,7 @@ async function handleReconnect(command) {
   const params = command.params || {};
   const key = String(params.sessionKey || '').trim();
   if (!key) throw new Error('sessionKey is required');
-  const runtime = await withRuntimeMutation(async () => {
+  const runtime = await withSessionMutation(key, async () => {
     const current = runtimes.get(key);
     if (current?.activeRequestId || current?.controlActive) {
       throw new Error('Cannot reconnect while the Code runtime is active');
@@ -820,7 +896,7 @@ async function handleRewindFiles(command) {
   const key = String(params.sessionKey || '').trim();
   const userMessageId = String(params.userMessageId || '').trim();
   if (!key || !userMessageId) throw new Error('sessionKey and userMessageId are required');
-  const runtime = await withRuntimeMutation(async () => {
+  const runtime = await withSessionMutation(key, async () => {
     const candidate = await runtimeForSendLocked(key, params);
     if (candidate.activeRequestId || candidate.controlActive) {
       throw new Error('Cannot rewind files while the runtime is active');
@@ -874,8 +950,13 @@ async function handlePermissionResponse(command) {
 
 async function handleClose(command) {
   const key = String(command.params?.sessionKey || '').trim();
-  const runtime = runtimes.get(key);
-  if (runtime) await disposeRuntime(runtime);
+  // Serialize against this session's own sends/controls so close never races a
+  // concurrent create for the same key. disposeRuntime detaches from `runtimes`
+  // itself; its internal registry deletes keep the map consistent.
+  await withSessionMutation(key, async () => {
+    const runtime = runtimes.get(key);
+    if (runtime) await disposeRuntime(runtime);
+  });
   await write({ id: command.id, type: 'response', ok: true });
 }
 
@@ -961,16 +1042,29 @@ async function main() {
     void (async () => {
       try {
         const cutoff = Date.now() - IDLE_RUNTIME_MS;
-        // Snapshot before disposing: disposeRuntime mutates `runtimes`, and
-        // deleting from a Map while iterating its live values is unsafe.
-        const idle = [...runtimes.values()].filter(
-          (runtime) => !runtime.activeRequestId && !runtime.controlActive && runtime.lastUsed < cutoff
-        );
-        for (const runtime of idle) {
-          // Await each dispose so a reclaimed runtime's request id can never be
-          // reused by a new turn before the old reader has fully detached.
-          try { await disposeRuntime(runtime); }
-          catch (error) { log(`idle dispose failed for ${runtime.key}:`, errorText(error)); }
+        // Snapshot candidate keys without a lock; re-verify under each session's
+        // own lock before disposing so we never evict a runtime that a
+        // concurrent send/control just claimed. Lock order stays session→registry.
+        const candidateKeys = [...runtimes.values()]
+          .filter((runtime) => !runtime.activeRequestId && !runtime.controlActive && runtime.lastUsed < cutoff)
+          .map((runtime) => runtime.key);
+        for (const key of candidateKeys) {
+          try {
+            await withSessionMutation(key, async () => {
+              const runtime = runtimes.get(key);
+              if (!runtime || runtime.activeRequestId || runtime.controlActive || runtime.lastUsed >= cutoff) {
+                return;
+              }
+              // Detach under the registry lock, then close outside it.
+              runtime.disposed = true;
+              await withRegistryMutation(() => {
+                if (runtimes.get(key) === runtime) runtimes.delete(key);
+              });
+              await closeRuntimeResources(runtime);
+            });
+          } catch (error) {
+            log(`idle dispose failed for ${key}:`, errorText(error));
+          }
         }
       } finally {
         idleSweepRunning = false;
