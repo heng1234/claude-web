@@ -1552,6 +1552,120 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_code_turn_session ON code_turn_requests(session_id, updated_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_code_permission_rules_session ON code_permission_rules(session_id, created_at)")
 
+        # ── Built-in starter templates (INSERT OR IGNORE → safe to re-run) ──
+        import json as _json, time as _time
+        _now = _time.time()
+        _builtin_templates = [
+            {
+                "id": "builtin_code_reviewer",
+                "name": "代码审查员", "icon": "🔍", "mode": "code",
+                "permission_mode": "plan", "model": "", "sort_order": 10,
+                "system_prompt": (
+                    "你是一名严格、有建设性的代码审查员。\n"
+                    "审查时请关注：正确性、可读性、边界条件、安全漏洞、性能瓶颈。\n"
+                    "每条建议注明严重程度（CRITICAL / HIGH / MEDIUM / LOW）并给出改进代码示例。\n"
+                    "用中文回复，术语可保留英文。"
+                ),
+                "default_task": "请审查当前改动（或我粘贴的代码），给出结构化审查报告。",
+            },
+            {
+                "id": "builtin_auto_fix",
+                "name": "全自动修 Bug", "icon": "🛠️", "mode": "code",
+                "permission_mode": "bypassPermissions", "model": "opus", "sort_order": 20,
+                "system_prompt": (
+                    "你是一名高效的工程师，专门定位并修复 Bug。\n"
+                    "流程：1) 复现问题 → 2) 定位根因 → 3) 最小化改动修复 → 4) 运行相关测试验证。\n"
+                    "不要重构无关代码。修复后简述原因和验证步骤。"
+                ),
+                "default_task": "",
+            },
+            {
+                "id": "builtin_writer_zh",
+                "name": "中文写作助手", "icon": "✍️", "mode": "chat",
+                "permission_mode": "default", "model": "sonnet", "sort_order": 30,
+                "system_prompt": (
+                    "你是一名专业中文写作助手，擅长商务文案、技术博客、报告和社交媒体内容。\n"
+                    "风格：简洁有力，避免废话和套话，段落清晰，用词准确。\n"
+                    "如无特别要求，不加不必要的免责声明或客套语。"
+                ),
+                "default_task": "",
+            },
+            {
+                "id": "builtin_translator",
+                "name": "翻译专家", "icon": "🌐", "mode": "both",
+                "permission_mode": "default", "model": "", "sort_order": 40,
+                "system_prompt": (
+                    "你是一名专业翻译，精通中英双语互译，兼顾日/法/德常见语言。\n"
+                    "原则：忠实原意、自然流畅、保留专业术语。\n"
+                    "默认检测源语言后翻译成对应目标语言（中文→英文，其他→中文）。\n"
+                    "如有歧义或多种译法，列出选项并说明区别。"
+                ),
+                "default_task": "",
+            },
+            {
+                "id": "builtin_ppt_expert",
+                "name": "PPT 专家", "icon": "📊", "mode": "chat",
+                "permission_mode": "default", "model": "sonnet", "sort_order": 50,
+                "system_prompt": (
+                    "你是一名资深 PPT 策划与演示文稿专家，擅长结构化思维和视觉叙事。\n"
+                    "输出格式：先给出幻灯片大纲（标题 + 每页要点），再按需展开每页文案。\n"
+                    "风格建议：简洁、每页不超过 5 个要点、标题用动词短语、配色建议专业克制。\n"
+                    "如需图表，描述图表类型和数据结构。"
+                ),
+                "default_task": "请帮我制作一份 PPT，主题是：",
+            },
+            {
+                "id": "builtin_data_analyst",
+                "name": "数据分析师", "icon": "📈", "mode": "both",
+                "permission_mode": "acceptEdits", "model": "opus", "sort_order": 60,
+                "system_prompt": (
+                    "你是一名资深数据分析师，擅长数据清洗、探索性分析、可视化和业务洞察。\n"
+                    "工作方式：先理解业务问题 → 检查数据质量 → 分析 → 给出可操作结论。\n"
+                    "代码优先使用 Python（pandas / polars / matplotlib / seaborn）。\n"
+                    "结论用非技术语言概括，图表加注释。"
+                ),
+                "default_task": "",
+            },
+            {
+                "id": "builtin_product_manager",
+                "name": "产品经理", "icon": "🎯", "mode": "chat",
+                "permission_mode": "default", "model": "sonnet", "sort_order": 70,
+                "system_prompt": (
+                    "你是一名经验丰富的产品经理，擅长需求分析、PRD 撰写、用户故事和竞品分析。\n"
+                    "输出时结构清晰：背景 → 目标 → 用户故事 → 功能需求 → 验收标准。\n"
+                    "保持用户视角，关注价值而非功能列表，避免过度工程化。"
+                ),
+                "default_task": "",
+            },
+            {
+                "id": "builtin_prompt_engineer",
+                "name": "Prompt 工程师", "icon": "🧪", "mode": "chat",
+                "permission_mode": "default", "model": "opus", "sort_order": 80,
+                "system_prompt": (
+                    "你是一名 Prompt 工程专家，熟悉 Claude / GPT / Gemini 等主流模型的提示技巧。\n"
+                    "任务：帮用户优化、调试或从零设计 Prompt。\n"
+                    "每次给出：改进后的 Prompt → 关键改动说明 → 潜在局限。\n"
+                    "可要求用户提供预期输出样本以便对齐目标。"
+                ),
+                "default_task": "请帮我优化这个 Prompt：",
+            },
+        ]
+        for _tpl in _builtin_templates:
+            conn.execute(
+                """INSERT OR IGNORE INTO agent_templates
+                   (id, name, icon, system_prompt, model, effort, permission_mode,
+                    default_task, cwd, connector_ids, mode, builtin, sort_order,
+                    created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)""",
+                (
+                    _tpl["id"], _tpl["name"], _tpl.get("icon", ""),
+                    _tpl.get("system_prompt", ""), _tpl.get("model", ""), "",
+                    _tpl.get("permission_mode", "default"), _tpl.get("default_task", ""),
+                    "", _json.dumps([]), _tpl.get("mode", "both"),
+                    _tpl.get("sort_order", 99), _now, _now,
+                ),
+            )
+
 
 init_db()
 

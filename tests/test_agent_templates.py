@@ -76,12 +76,14 @@ class AgentTemplateStoreTest(unittest.TestCase):
         server._agent_template_create({"name": "chat-only", "mode": "chat"})
         server._agent_template_create({"name": "code-only", "mode": "code"})
         server._agent_template_create({"name": "either", "mode": "both"})
-        code_names = {t["name"] for t in server._agent_template_list(mode="code")}
-        chat_names = {t["name"] for t in server._agent_template_list(mode="chat")}
+        # Filter to user-created rows only (builtins are seeded by init_db).
+        code_names = {t["name"] for t in server._agent_template_list(mode="code") if not t["builtin"]}
+        chat_names = {t["name"] for t in server._agent_template_list(mode="chat") if not t["builtin"]}
         self.assertEqual(code_names, {"code-only", "either"})
         self.assertEqual(chat_names, {"chat-only", "either"})
-        # No filter → all.
-        self.assertEqual(len(server._agent_template_list()), 3)
+        # No filter → user-created only count = 3.
+        user_all = [t for t in server._agent_template_list() if not t["builtin"]]
+        self.assertEqual(len(user_all), 3)
 
     # ---- update / delete ----------------------------------------------------
     def test_update_changes_fields_and_bumps_updated_at(self):
