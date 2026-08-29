@@ -47,12 +47,21 @@ class ConnectorCatalogStructureTest(unittest.TestCase):
             else:
                 self.assertTrue(entry.get("command"), f"{entry['id']} stdio entry needs command")
 
-    def test_api_key_entries_declare_their_secret_fields(self):
-        # api_key connectors must tell the UI which header/env keys to collect,
-        # so the add form can render inputs and route them to the secret store.
+    def test_api_key_entries_declare_where_the_key_goes(self):
+        # api_key connectors must tell the UI where the secret goes: either via
+        # secret_fields (header/env inputs routed to the secret store) OR by an
+        # inline "<...>" placeholder in the URL (e.g. Tushare's .../token=<token>).
         for entry in self.catalog["connectors"]:
             if entry["auth"] == "api_key":
                 fields = entry.get("secret_fields")
+                url = entry.get("url", "")
+                inline_placeholder = "<" in url and ">" in url
+                if fields is None:
+                    self.assertTrue(
+                        inline_placeholder,
+                        f"{entry['id']} needs secret_fields or an inline <...> URL placeholder",
+                    )
+                    continue
                 self.assertIsInstance(fields, list, f"{entry['id']} needs secret_fields")
                 self.assertGreaterEqual(len(fields), 1, entry["id"])
                 for field in fields:

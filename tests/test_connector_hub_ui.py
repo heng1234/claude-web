@@ -73,13 +73,16 @@ class ConnectorHubBehaviourTest(unittest.TestCase):
         self.assertIn("function renderMcpCatalog()", self.source)
         self.assertIn("mcpCatalogCategory === 'all'", self.source)
         self.assertIn("data-mcp-cat=", self.source)
-        self.assertIn("data-mcp-prefill=", self.source)
+        self.assertIn("data-mcp-add=", self.source)
 
-    def test_prefill_fills_transport_specific_fields_only(self):
-        self.assertIn("function prefillMcpConnector(id)", self.source)
-        self.assertIn("$('mcpNewTransport').value = transport", self.source)
-        self.assertIn("(c.secret_fields || []).filter(f => f.target === 'header')", self.source)
-        self.assertIn("(c.secret_fields || []).filter(f => f.target === 'env')", self.source)
+    def test_quick_add_direct_or_minimal_dialog(self):
+        # No-input connectors add in one click; ones needing secrets/placeholder
+        # open a minimal dialog instead of dumping fields into the add form.
+        self.assertIn("async function quickAddConnector(id)", self.source)
+        self.assertIn("function connectorNeedsInput(c)", self.source)
+        self.assertIn("if (!connectorNeedsInput(c))", self.source)
+        self.assertIn("function openConnectorDialog(c, scope)", self.source)
+        self.assertIn("function connectorRequestBody(c, values, encrypt)", self.source)
 
     def test_needs_auth_health_result_offers_authorize(self):
         self.assertIn("data.status === 'needs-auth' || data.needs_auth", self.source)

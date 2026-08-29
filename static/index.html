@@ -8024,6 +8024,9 @@ async function switchLang(lang) {
       <button id="cwOpenCodeFileBtn" class="sb-icon-btn cw-code-only" title="打开项目文件" aria-label="打开项目文件" data-i18n-title="html.open_project_files" data-i18n-aria="html.open_project_files">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h7v11.5A2.5 2.5 0 0 1 16.5 20h-10A2.5 2.5 0 0 1 4 17.5z"/><path d="M12 10v6M9 13h6"/></svg>
       </button>
+      <button id="connectorBtn" class="sb-icon-btn" title="连接器 · 一键连接应用与 MCP" aria-label="连接器" data-i18n-title="html.connector_hub_full" data-i18n-aria="html.connector_hub">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8V5a2 2 0 0 1 2-2h1M17 8V5a2 2 0 0 0-2-2h-1"/><rect x="5" y="8" width="14" height="6" rx="2"/><path d="M9 14v3a3 3 0 0 0 6 0v-3"/></svg>
+      </button>
       <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions" aria-label="配置中心" data-i18n-title="html.config_center_full" data-i18n-aria="html.config_center">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h10"/><path d="M8 12h10"/><path d="M8 18h10"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
       </button>
@@ -9338,7 +9341,7 @@ async function switchLang(lang) {
 <div id="mcpModal" class="modal-backdrop hidden">
   <div class="modal-box lg p-5" style="max-width:680px;">
     <div class="flex items-center justify-between mb-4">
-      <div class="text-lg font-semibold">🔌 MCP Servers</div>
+      <div class="text-lg font-semibold" data-i18n="html.connector_panel_title">🔌 连接器 / MCP</div>
       <button data-close class="text-xl">×</button>
     </div>
     <div class="text-xs mb-3" style="color:var(--text-muted);">
@@ -9346,7 +9349,7 @@ async function switchLang(lang) {
       <span id="mcpConfigPath" class="ml-2" style="color:var(--text-subtle);"></span>
     </div>
     <div id="mcpServerList" class="space-y-2 max-h-[40vh] overflow-y-auto mb-4"></div>
-    <details id="mcpCatalogWrap" class="border rounded-lg p-3 mb-2" style="border-color:var(--border);">
+    <details id="mcpCatalogWrap" class="border rounded-lg p-3 mb-2" style="border-color:var(--border);" open>
       <summary class="text-sm font-medium cursor-pointer" style="color:var(--text);" data-i18n="html.connector_catalog">🧩 连接器目录（一键添加）</summary>
       <div id="mcpCatalogCats" class="flex flex-wrap gap-1 mt-3"></div>
       <div id="mcpCatalogGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 max-h-[36vh] overflow-y-auto"></div>
@@ -10818,7 +10821,7 @@ function applyMobileQuestionMode() {
   document.documentElement.classList.toggle('mobile-question-mode', mobileQuestionMode);
   if (mobileModeBanner) mobileModeBanner.classList.toggle('active', mobileQuestionMode && !mobileBannerDismissed);
 
-  const hiddenFeatures = [configCenterBtn, mcpBtn];
+  const hiddenFeatures = [configCenterBtn, mcpBtn, $('connectorBtn')];
   hiddenFeatures.forEach(el => {
     if (!el) return;
     el.classList.toggle('mobile-mode-hidden', mobileQuestionMode);
@@ -25259,6 +25262,17 @@ mcpBtn.addEventListener('click', () => {
   refreshMcpServers();
 });
 
+// Top-bar connector entry: one click straight to the connector/MCP panel.
+const connectorBtn = $('connectorBtn');
+connectorBtn?.addEventListener('click', () => {
+  if (mobileQuestionMode) {
+    toast(t('mobile.no_mcp_manage'));
+    return;
+  }
+  openModal(mcpModal);
+  refreshMcpServers();
+});
+
 function currentMcpCwd() {
   return cwdInput.value.trim() || '~';
 }
@@ -25288,6 +25302,7 @@ function mcpSecretBadges(values) {
 }
 
 async function refreshMcpServers() {
+  loadMcpCatalog();
   try {
     const r = await fetch('/api/mcp/servers' + mcpQuery());
     if (!r.ok) {
@@ -25408,6 +25423,21 @@ async function refreshMcpServers() {
   }
 }
 
+// Shared: POST a server config; returns true on success, alerts + false on error.
+async function submitMcpServer(name, body, scope) {
+  const r = await fetch('/api/mcp/servers/' + encodeURIComponent(name) + mcpQuery({ scope }), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    alert(t('errors.unknown_error') + ': ' + (d.detail || r.status));
+    return false;
+  }
+  return true;
+}
+
 mcpAddBtn.addEventListener('click', async () => {
   if (mobileQuestionMode) {
     toast(t('mobile.no_mcp_add'));
@@ -25455,16 +25485,7 @@ mcpAddBtn.addEventListener('click', async () => {
     }
     body = { type: 'stdio', command: cmd, args, env: Object.keys(env).length ? env : null, encrypt_secrets: encryptSecrets };
   }
-  const r = await fetch('/api/mcp/servers/' + encodeURIComponent(name) + mcpQuery({ scope }), {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) {
-    const d = await r.json().catch(() => ({}));
-    alert(t('errors.unknown_error') + ': ' + (d.detail || r.status));
-    return;
-  }
+  if (!(await submitMcpServer(name, body, scope))) return;
   $('mcpNewName').value = '';
   $('mcpNewCmd').value = '';
   $('mcpNewArgs').value = '';
@@ -25528,48 +25549,149 @@ function renderMcpCatalog() {
   const items = mcpCatalog.filter(c => mcpCatalogCategory === 'all' || (c.category || 'other') === mcpCatalogCategory);
   const authLabel = { none: '', api_key: '需密钥', oauth: 'OAuth' };
   grid.innerHTML = items.map(c => `
-    <button data-mcp-prefill="${escapeHtml(c.id)}" class="text-left p-2 rounded-lg"
+    <button data-mcp-add="${escapeHtml(c.id)}" class="text-left p-2 rounded-lg flex items-start gap-2"
       style="background:var(--surface-2); border:1px solid var(--border);">
-      <div class="flex items-center gap-2">
-        <span>${escapeHtml(c.icon || '🧩')}</span>
-        <span class="font-medium text-sm">${escapeHtml(c.name || c.id)}</span>
-        ${c.auth && c.auth !== 'none' ? `<span class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--surface); color:var(--text-subtle);">${authLabel[c.auth] || c.auth}</span>` : ''}
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <span>${escapeHtml(c.icon || '🧩')}</span>
+          <span class="font-medium text-sm truncate">${escapeHtml(c.name || c.id)}</span>
+          ${c.auth && c.auth !== 'none' ? `<span class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--surface); color:var(--text-subtle);">${authLabel[c.auth] || c.auth}</span>` : ''}
+        </div>
+        <div class="mt-1 text-xs" style="color:var(--text-muted);">${escapeHtml(c.description || '')}</div>
       </div>
-      <div class="mt-1 text-xs" style="color:var(--text-muted);">${escapeHtml(c.description || '')}</div>
+      <span class="text-lg leading-none px-1" style="color:var(--accent);" aria-hidden="true">＋</span>
     </button>
   `).join('');
-  grid.querySelectorAll('[data-mcp-prefill]').forEach(btn => {
-    btn.addEventListener('click', () => prefillMcpConnector(btn.dataset.mcpPrefill));
+  grid.querySelectorAll('[data-mcp-add]').forEach(btn => {
+    btn.addEventListener('click', () => quickAddConnector(btn.dataset.mcpAdd));
   });
 }
 
-function prefillMcpConnector(id) {
+// A connector needs a dialog only if the user must supply something:
+// declared secret fields, or an inline "<...>" placeholder in the URL.
+function connectorNeedsInput(c) {
+  const hasSecretFields = Array.isArray(c.secret_fields) && c.secret_fields.length > 0;
+  const url = c.url || '';
+  const urlHasPlaceholder = url.includes('<') && url.includes('>');
+  const argsHavePlaceholder = (c.args || []).some(a => typeof a === 'string' && a.includes('<') && a.includes('>'));
+  return hasSecretFields || urlHasPlaceholder || argsHavePlaceholder;
+}
+
+// Build the request body for a catalog connector given collected field values.
+function connectorRequestBody(c, values, encrypt) {
+  const transport = (c.transport || 'stdio').toLowerCase();
+  const encryptSecrets = [];
+  if (transport === 'http' || transport === 'sse') {
+    let url = c.url || '';
+    const headers = {};
+    (c.secret_fields || []).forEach(f => {
+      const v = (values[f.key] || '').trim();
+      if (f.target === 'header') {
+        if (v) { headers[f.key] = v; if (encrypt) encryptSecrets.push(f.key); }
+      } else if (f.target === 'url' && v) {
+        url = url.replace(/<[^>]+>/, encodeURIComponent(v));
+      }
+    });
+    // Inline URL placeholder collected under the synthetic "__url__" key.
+    if (values.__url__) url = values.__url__.trim();
+    return { type: transport, url, headers: Object.keys(headers).length ? headers : null, encrypt_secrets: encryptSecrets };
+  }
+  const env = {};
+  (c.secret_fields || []).forEach(f => {
+    const v = (values[f.key] || '').trim();
+    if (f.target === 'env' && v) { env[f.key] = v; if (encrypt) encryptSecrets.push(f.key); }
+  });
+  let args = (c.args || []).slice();
+  if (values.__args__) args = values.__args__.trim().split(/\s+/);
+  return { type: 'stdio', command: c.command || '', args, env: Object.keys(env).length ? env : null, encrypt_secrets: encryptSecrets };
+}
+
+async function quickAddConnector(id) {
+  if (mobileQuestionMode) { toast(t('mobile.no_mcp_add')); return; }
   const c = (mcpCatalog || []).find(x => x.id === id);
   if (!c) return;
-  const transport = (c.transport || 'stdio').toLowerCase();
-  if ($('mcpNewTransport')) $('mcpNewTransport').value = transport;
-  applyMcpTransportVisibility();
-  if ($('mcpNewName')) $('mcpNewName').value = c.id || '';
-  if (transport === 'http' || transport === 'sse') {
-    if ($('mcpNewUrl')) $('mcpNewUrl').value = c.url || '';
-    // Prefill header keys from declared secret fields so the user just fills values.
-    const headerKeys = (c.secret_fields || []).filter(f => f.target === 'header').map(f => `${f.key}=`);
-    if ($('mcpNewHeaders')) $('mcpNewHeaders').value = headerKeys.join(', ');
-  } else {
-    if ($('mcpNewCmd')) $('mcpNewCmd').value = c.command || '';
-    if ($('mcpNewArgs')) $('mcpNewArgs').value = (c.args || []).join(' ');
-    const envKeys = (c.secret_fields || []).filter(f => f.target === 'env').map(f => `${f.key}=`);
-    if ($('mcpNewEnv')) $('mcpNewEnv').value = envKeys.join(', ');
+  const scope = $('mcpNewScope')?.value || 'local';
+
+  // No input needed → add directly, one click like Doubao.
+  if (!connectorNeedsInput(c)) {
+    const body = connectorRequestBody(c, {}, true);
+    if (await submitMcpServer(c.id, body, scope)) { toast(t('toasts.mcp_added') || '已添加'); refreshMcpServers(); }
+    return;
   }
-  // Expand the add-form so the prefilled values are visible.
-  const addDetails = $('mcpNewName')?.closest('details');
-  if (addDetails) addDetails.open = true;
-  $('mcpNewName')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  openConnectorDialog(c, scope);
 }
 
 $('mcpCatalogWrap')?.addEventListener('toggle', (e) => {
   if (e.target.open) loadMcpCatalog();
 });
+
+// Minimal per-connector dialog: shows ONLY the fields the user must supply
+// (secret keys, or an inline URL/args placeholder). URL/transport/command stay hidden.
+function openConnectorDialog(c, scope) {
+  const transport = (c.transport || 'stdio').toLowerCase();
+  const rows = [];
+  // Declared secret fields → one labelled input each.
+  (c.secret_fields || []).forEach(f => {
+    rows.push({ key: f.key, label: f.label || f.key, password: true });
+  });
+  // Inline "<...>" placeholder in URL → ask for the full URL (template connectors).
+  if ((c.url || '').match(/<[^>]+>/)) {
+    rows.push({ key: '__url__', label: '服务地址 URL', value: c.url, password: false });
+  }
+  // Inline placeholder in stdio args → ask for the args string.
+  if ((c.args || []).some(a => typeof a === 'string' && /<[^>]+>/.test(a))) {
+    rows.push({ key: '__args__', label: '参数', value: (c.args || []).join(' '), password: false });
+  }
+
+  const back = document.createElement('div');
+  back.className = 'modal-backdrop';
+  back.style.zIndex = '9999';
+  back.innerHTML = `
+    <div class="modal-box" style="max-width:420px;">
+      <div class="flex items-center justify-between mb-3">
+        <div class="text-base font-semibold">${escapeHtml(c.icon || '🧩')} ${escapeHtml(c.name || c.id)}</div>
+        <button data-cx-close class="text-xl">×</button>
+      </div>
+      <div class="text-xs mb-3" style="color:var(--text-muted);">${escapeHtml(c.description || '')}</div>
+      <div class="space-y-2">
+        ${rows.map((r, i) => `
+          <label class="block text-xs" style="color:var(--text-muted);">${escapeHtml(r.label)}
+            <input data-cx-field="${i}" type="${r.password ? 'password' : 'text'}"
+              value="${escapeHtml(r.value || '')}" autocomplete="off"
+              class="w-full px-3 py-1.5 text-sm mt-1" />
+          </label>
+        `).join('')}
+      </div>
+      <label class="flex items-center gap-2 text-xs mt-3" style="color:var(--text-muted);">
+        <input data-cx-encrypt type="checkbox" checked /> ${escapeHtml(t('html.encrypt_secrets_hint') || '加密保存密钥')}
+      </label>
+      <div class="flex justify-end gap-2 mt-4">
+        <button data-cx-close class="btn text-xs" style="padding:6px 14px;">${escapeHtml(t('misc.cancel') || '取消')}</button>
+        <button data-cx-ok class="btn btn-primary text-xs" style="padding:6px 14px;">${escapeHtml(t('misc.add') || '添加')}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  back.querySelectorAll('[data-cx-close]').forEach(b => b.addEventListener('click', close));
+  back.addEventListener('click', (e) => { if (e.target === back) close(); });
+  back.querySelector('[data-cx-field="0"]')?.focus();
+
+  back.querySelector('[data-cx-ok]').addEventListener('click', async () => {
+    const values = {};
+    rows.forEach((r, i) => { values[r.key] = back.querySelector(`[data-cx-field="${i}"]`).value; });
+    const encrypt = !!back.querySelector('[data-cx-encrypt]')?.checked;
+    const body = connectorRequestBody(c, values, encrypt);
+    const okBtn = back.querySelector('[data-cx-ok]');
+    okBtn.disabled = true; okBtn.textContent = '…';
+    if (await submitMcpServer(c.id, body, scope)) {
+      close();
+      toast(t('toasts.mcp_added') || '已添加');
+      refreshMcpServers();
+    } else {
+      okBtn.disabled = false; okBtn.textContent = t('misc.add') || '添加';
+    }
+  });
+}
 
 // ===== Config Center (Hooks / Skills / MCP / Permissions) =====
 const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'UserPromptSubmit', 'SubagentStop', 'Notification'];

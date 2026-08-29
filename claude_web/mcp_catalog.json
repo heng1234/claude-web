@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "note": "Built-in connector catalog. Extend via PR. transport: stdio|http|sse; auth: none|api_key|oauth. api_key entries declare secret_fields so the UI can collect keys and route them to the encrypted secret store.",
+  "version": 2,
+  "note": "Built-in connector catalog. transport: stdio|http|sse; auth: none|api_key|oauth. api_key entries declare secret_fields so the UI collects keys and routes them to the encrypted secret store. Verified 2026-08: the @modelcontextprotocol/server-* reference packages were mostly deprecated 2025-05; only filesystem/fetch/memory survive. Commercial services without a public MCP are listed as http templates for the user to fill in.",
   "connectors": [
     {
       "id": "filesystem",
@@ -15,46 +15,55 @@
       "docs": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
     },
     {
-      "id": "github",
-      "name": "GitHub",
-      "category": "dev",
-      "transport": "stdio",
-      "auth": "api_key",
-      "icon": "🐙",
-      "description": "查询仓库、Issue、PR、代码搜索。",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "secret_fields": [
-        {"target": "env", "key": "GITHUB_PERSONAL_ACCESS_TOKEN", "label": "GitHub Personal Access Token"}
-      ],
-      "docs": "https://github.com/modelcontextprotocol/servers/tree/main/src/github"
-    },
-    {
       "id": "fetch",
-      "name": "Fetch",
+      "name": "Fetch 抓网页",
       "category": "web",
       "transport": "stdio",
       "auth": "none",
       "icon": "🌐",
-      "description": "抓取网页并转为适合模型阅读的文本。",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "description": "抓取网页并转为适合模型阅读的文本。需已安装 uv（uvx）。",
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
       "docs": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
     },
     {
-      "id": "postgres",
-      "name": "PostgreSQL",
+      "id": "playwright",
+      "name": "Playwright 浏览器操作",
+      "category": "web",
+      "transport": "stdio",
+      "auth": "none",
+      "icon": "🎭",
+      "description": "微软官方浏览器自动化：网页导航、点击、填表、抓取。对应“操作浏览器”。",
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"],
+      "docs": "https://github.com/microsoft/playwright-mcp"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "category": "dev",
+      "transport": "http",
+      "auth": "oauth",
+      "icon": "🐙",
+      "description": "GitHub 官方远程 MCP：仓库、Issue、PR、代码搜索（OAuth 授权）。",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "docs": "https://github.com/github/github-mcp-server"
+    },
+    {
+      "id": "gitlab",
+      "name": "GitLab",
       "category": "dev",
       "transport": "stdio",
       "auth": "api_key",
-      "icon": "🐘",
-      "description": "只读查询 PostgreSQL 数据库并检视表结构。",
+      "icon": "🦊",
+      "description": "GitLab 仓库、MR、Issue（社区维护包 @zereight/mcp-gitlab）。",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-postgres", "<连接串>"],
+      "args": ["-y", "@zereight/mcp-gitlab"],
       "secret_fields": [
-        {"target": "env", "key": "DATABASE_URL", "label": "数据库连接串（含密码）"}
+        {"target": "env", "key": "GITLAB_PERSONAL_ACCESS_TOKEN", "label": "GitLab Personal Access Token"},
+        {"target": "env", "key": "GITLAB_API_URL", "label": "GitLab API 地址（自建填写，默认 gitlab.com）"}
       ],
-      "docs": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
+      "docs": "https://github.com/zereight/gitlab-mcp"
     },
     {
       "id": "sentry",
@@ -74,24 +83,112 @@
       "transport": "http",
       "auth": "oauth",
       "icon": "📝",
-      "description": "在 Notion 中查找、读取和整理页面与数据库（远程 MCP）。",
+      "description": "在 Notion 中查找、读取和整理页面与数据库（远程 MCP，OAuth）。",
       "url": "https://mcp.notion.com/mcp",
       "docs": "https://developers.notion.com/docs/mcp"
+    },
+    {
+      "id": "linear",
+      "name": "Linear",
+      "category": "office",
+      "transport": "http",
+      "auth": "oauth",
+      "icon": "📐",
+      "description": "查询和管理 Linear 的 Issue、项目与周期（远程 MCP，OAuth）。",
+      "url": "https://mcp.linear.app/mcp",
+      "docs": "https://linear.app/docs/mcp"
+    },
+    {
+      "id": "atlassian",
+      "name": "Atlassian (Jira/Confluence)",
+      "category": "office",
+      "transport": "http",
+      "auth": "oauth",
+      "icon": "🧩",
+      "description": "查询和操作 Jira 工单与 Confluence 页面（官方远程 MCP，OAuth）。",
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "docs": "https://www.atlassian.com/platform/remote-mcp-server"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "category": "office",
+      "transport": "stdio",
+      "auth": "api_key",
+      "icon": "💬",
+      "description": "读取频道消息、发送消息（社区维护包 @zencoderai/slack-mcp-server）。",
+      "command": "npx",
+      "args": ["-y", "@zencoderai/slack-mcp-server"],
+      "secret_fields": [
+        {"target": "env", "key": "SLACK_BOT_TOKEN", "label": "Slack Bot Token（xoxb- 开头）"},
+        {"target": "env", "key": "SLACK_TEAM_ID", "label": "Slack Team ID"}
+      ],
+      "docs": "https://github.com/zencoderai/slack-mcp-server"
     },
     {
       "id": "tushare",
       "name": "Tushare 金融数据",
       "category": "finance",
-      "transport": "stdio",
+      "transport": "http",
       "auth": "api_key",
       "icon": "🥕",
-      "description": "获取 A 股、基金、宏观等金融数据（需 Tushare token）。命令按所用社区 MCP 包填写。",
-      "command": "npx",
-      "args": ["-y", "<tushare-mcp-包名>"],
+      "description": "A 股、基金、宏观等金融数据（官方远程 MCP，需 Tushare token）。URL 末尾把 <token> 换成你的 token。",
+      "url": "https://api.tushare.pro/mcp/token=<token>",
+      "docs": "https://tushare.pro/document/1?doc_id=463"
+    },
+    {
+      "id": "akshare",
+      "name": "AKShare 开源行情",
+      "category": "finance",
+      "transport": "stdio",
+      "auth": "none",
+      "icon": "📈",
+      "description": "免费开源的中国市场行情数据（社区包 akshare-mcp，需 uv/uvx）。",
+      "command": "uvx",
+      "args": ["akshare-mcp"],
+      "docs": "https://pypi.org/project/akshare-mcp/"
+    },
+    {
+      "id": "eastmoney-template",
+      "name": "东方财富（自定义）",
+      "category": "finance",
+      "transport": "http",
+      "auth": "api_key",
+      "icon": "💹",
+      "description": "东方财富暂无公开官方 MCP。若你已获得官方/自建 MCP 接入，填入 URL 与密钥即可连接。",
+      "url": "https://<your-eastmoney-mcp-endpoint>/mcp",
       "secret_fields": [
-        {"target": "env", "key": "TUSHARE_TOKEN", "label": "Tushare Token"}
+        {"target": "header", "key": "Authorization", "label": "Authorization（如 Bearer xxx）"}
       ],
-      "docs": "https://tushare.pro/document/1"
+      "docs": "https://modelcontextprotocol.io/"
+    },
+    {
+      "id": "ifind-template",
+      "name": "同花顺 IFinD（自定义）",
+      "category": "finance",
+      "transport": "http",
+      "auth": "api_key",
+      "icon": "🏦",
+      "description": "同花顺 IFinD 暂无公开官方 MCP。若你已获得官方接入，填入 URL 与密钥即可连接。",
+      "url": "https://<your-ifind-mcp-endpoint>/mcp",
+      "secret_fields": [
+        {"target": "header", "key": "Authorization", "label": "Authorization（如 Bearer xxx）"}
+      ],
+      "docs": "https://modelcontextprotocol.io/"
+    },
+    {
+      "id": "wind-template",
+      "name": "Wind 万得（自定义）",
+      "category": "finance",
+      "transport": "http",
+      "auth": "api_key",
+      "icon": "🌪️",
+      "description": "Wind 暂无公开官方 MCP（社区包需已授权的 Wind 终端）。如有自建接入，填入 URL 与密钥。",
+      "url": "https://<your-wind-mcp-endpoint>/mcp",
+      "secret_fields": [
+        {"target": "header", "key": "Authorization", "label": "Authorization（如 Bearer xxx）"}
+      ],
+      "docs": "https://modelcontextprotocol.io/"
     },
     {
       "id": "custom-http",
@@ -105,6 +202,18 @@
       "secret_fields": [
         {"target": "header", "key": "Authorization", "label": "Authorization（如 Bearer xxx）"}
       ],
+      "docs": "https://modelcontextprotocol.io/"
+    },
+    {
+      "id": "custom-stdio",
+      "name": "自定义本地命令 MCP",
+      "category": "other",
+      "transport": "stdio",
+      "auth": "none",
+      "icon": "⚙️",
+      "description": "用本地命令启动任意 MCP server（stdio）。命令、参数、环境变量自行填写。",
+      "command": "npx",
+      "args": ["-y", "<mcp-包名>"],
       "docs": "https://modelcontextprotocol.io/"
     }
   ]
