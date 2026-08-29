@@ -448,6 +448,38 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         self.assertIn("return `${reason}，正在重试", source)
         self.assertIn("nativeTurnRecoveryRunningSessionId !== run.sessionId", source)
 
+    def test_dropped_terminal_frames_do_not_trigger_a_duplicate_resend(self):
+        # Regression: a third-party proxy can drop the `result`/`error`/`meta`
+        # frames after the backend already ran the turn. The frontend must not
+        # (1) treat a valid `done` turn_state as "no terminal", (2) report an
+        # accepted turn as not-accepted (which the queue auto-resends), or
+        # (3) delete the assistant bubble on the 409 already-dispatched reply
+        # (the "答案消失" symptom). See the same-question-resend loop.
+        source = (
+            Path(__file__).parents[1] / "claude_web" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+        # (1) A done frame with any legit terminal state is authoritative.
+        self.assertIn(
+            "const AUTHORITATIVE_DONE_STATES = ['waiting_plan', 'completed', 'failed', 'stopped']",
+            source,
+        )
+        self.assertIn("const hasAuthoritativeDone = AUTHORITATIVE_DONE_STATES.includes(doneTurnState)", source)
+        self.assertIn("&& !hasAuthoritativeDone", source)
+        # (2) Any evidence the backend ran the turn marks it accepted, so the
+        # queue's `!result?.accepted` resend guard cannot fire.
+        self.assertIn("const reachedBackend = serverAccepted", source)
+        self.assertIn("|| !!doneEvent", source)
+        self.assertIn(
+            "return { ok: false, accepted: reachedBackend, error: streamErrorEvent",
+            source,
+        )
+        # (3) The already-dispatched branch must not remove the assistant bubble;
+        # a re-send reuses the same container that already holds the real answer.
+        already_idx = source.index("const alreadyDispatched = turnIsCode")
+        block = source[already_idx:already_idx + 900]
+        self.assertIn("optimisticUserElement?.remove()", block)
+        self.assertNotIn("container.closest('.asst-wrap')?.remove()", block)
+
     def test_light_context_stays_default_on_and_permission_copy_is_current(self):
         source = (Path(__file__).parents[1] / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("lightContextMode: LS.get('lightContextMode', true)", source)

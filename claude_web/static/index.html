@@ -17835,14 +17835,15 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       } catch {}
       // The backend refuses to replay a client_turn_id it already dispatched.
       // This is not a busy runtime and must not be re-queued: the turn already
-      // ran (its answer may already be on screen). Drop the optimistic
-      // duplicate bubbles for THIS attempt only, leave earlier content intact,
-      // and report it as already-done so the queue entry is removed.
+      // ran and its answer may already be on screen. Do NOT remove the assistant
+      // bubble here — a re-send reuses the same container, so removing it erases
+      // the real answer the user is reading (the "答案消失" symptom). Drop only
+      // the duplicate optimistic user echo, and report it as already-done so the
+      // queue entry is retired.
       const alreadyDispatched = turnIsCode
         && resp.status === 409
         && /already dispatched|already accepted/i.test(message);
       if (alreadyDispatched) {
-        container.closest('.asst-wrap')?.remove();
         optimisticUserElement?.remove();
         if (lastUserIndex === optimisticUserIndex) {
           currentUserIndex = Math.max(0, optimisticUserIndex);
@@ -18012,9 +18013,16 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         } catch (e) { console.warn('parse fail', line, e); }
       }
     }
+    // A `done` frame carrying any legitimate terminal turn_state is itself an
+    // authoritative signal that the turn ended — even when a flaky proxy drops
+    // the preceding `result`/`error` frames. Only treat the stream as missing a
+    // terminal when we saw neither a result, an error, nor a terminal done.
+    const doneTurnState = String(doneEvent?.turn_state || '');
+    const AUTHORITATIVE_DONE_STATES = ['waiting_plan', 'completed', 'failed', 'stopped'];
+    const hasAuthoritativeDone = AUTHORITATIVE_DONE_STATES.includes(doneTurnState);
     const missingAuthoritativeTerminal = !lastResultEvent
       && !streamErrorEvent
-      && String(doneEvent?.turn_state || '') !== 'waiting_plan';
+      && !hasAuthoritativeDone;
     if (missingAuthoritativeTerminal && turnSessionId) {
       if (turnViewIsActive()) {
         startNativeTurnRecovery(
@@ -18055,7 +18063,14 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       finishPendingToolUses(streamErrorEvent ? t('status.error') : t('status.done'), streamErrorEvent ? 'error' : 'done');
     }
     if (streamErrorEvent) {
-      return { ok: false, accepted: serverAccepted, error: streamErrorEvent, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
+      // The queue auto-resends only when `accepted` is false. A dropped `meta`
+      // frame must not look like "the server never took this turn": if we saw a
+      // `done` frame or any assistant output, the backend definitely ran it, so
+      // replaying would ask the same question twice.
+      const reachedBackend = serverAccepted
+        || !!doneEvent
+        || !!collectedAssistantText.trim();
+      return { ok: false, accepted: reachedBackend, error: streamErrorEvent, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
     }
     if (!quiet && String(doneEvent?.turn_state || '') !== 'waiting_plan') {
       if (turnViewIsActive()) {
