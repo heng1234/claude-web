@@ -2887,6 +2887,12 @@
   .cfg-skill-card .desc { color: #817a72; font-size: 12.5px; margin-top: 4px; line-height: 1.5; }
   .cfg-skill-card .mp { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #9a928b; margin-top: 5px; }
   .cfg-skill-card .actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .cfg-skill-subtabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .cfg-skill-subtab { background: none; border: none; padding: 4px 12px; font-size: 13px; color: var(--text-subtle); cursor: pointer; border-radius: 6px 6px 0 0; }
+  .cfg-skill-subtab.active { color: var(--text); font-weight: 600; border-bottom: 2px solid var(--text); }
+  .cfg-skill-search { width: 100%; box-sizing: border-box; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; margin-bottom: 10px; background: var(--input-bg, #fff); color: var(--text); }
+  .cfg-skill-installed-badge { font-size: 11px; color: #6b9e6b; background: #eaf4ea; border-radius: 4px; padding: 2px 7px; font-weight: 600; }
+  .cfg-link-btn.primary { color: var(--accent, #c8541a); font-weight: 600; }
   .cfg-toggle {
     position: relative; display: inline-block; width: 36px; height: 20px;
     background: #ded7cf; border-radius: 999px; cursor: pointer;
@@ -15352,7 +15358,7 @@ function handleEvent(obj, container, options = {}) {
       else if (block.type === 'tool_use') { hideThinking(container); addToolUseBlock(container, block.name, block.input, { id: block.id, pending: !replay }); }
       else if (block.type === 'thinking') { hideThinking(container); addThinkingBlock(container, block.thinking || ''); }
     }
-    if (answerText) {
+    if (answerText && replay && options.isLast) {
       renderFeedbackControls(container, {
         messageKey: assistantMessageKey(obj, eventIndex),
         messageId: msgId || '',
@@ -16961,7 +16967,11 @@ function buildPermissionPayload() {
     }
   }
   else if (mode === 'readonly') out.disallowed_tools = ['Bash', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
-  else if (mode === 'custom') {
+  // 聊天模式默认 free → bypassPermissions，全自动跳过权限确认（root 降级为 acceptEdits）
+  if (!codeMode && !out.permission_mode) {
+    out.permission_mode = runtimeStatus.root_or_sudo ? 'acceptEdits' : 'bypassPermissions';
+  }
+  if (mode === 'custom') {
     const list = getStoredCustomTools();
     if (Array.isArray(list) && list.length > 0) out.allowed_tools = list;
   }
@@ -19486,13 +19496,14 @@ async function loadSession(id, options = {}) {
         }
         let asstContainer = null;
         const eventOffset = Number(data.event_offset || 0);
+        const lastAsstIdx = data.events.reduce((last, ev, i) => (ev.type === 'assistant' && ev.message ? i : last), -1);
         data.events.forEach((ev, localEventIndex) => {
           const eventIndex = eventOffset + localEventIndex;
           if (ev.type === 'user_input') {
             addUserMessage(ev.text || '', ev.images || [], { hasCheckpoint: !!ev.checkpoint, docs: ev.docs || [], fullText: ev.full_text || '', compacted: !!ev.compacted, eventIndex });
             asstContainer = null;
           } else if (ev.type === 'assistant' || ev.type === 'user') {
-            const c = handleEvent(ev, asstContainer, { replay: true, eventIndex });
+            const c = handleEvent(ev, asstContainer, { replay: true, eventIndex, isLast: localEventIndex === lastAsstIdx });
             if (c) asstContainer = c;
           } else {
             handleEvent(ev, asstContainer, { replay: true, eventIndex });
@@ -26714,70 +26725,168 @@ function renderHooksTab() {
 
 // ----- Skills tab -----
 async function renderSkillsTab() {
-  configBodySkills.innerHTML = `<div class="cfg-empty">${t('status.loading')}</div>`;
+  configBodySkills.innerHTML = `
+    <div class="cfg-skill-subtabs">
+      <button class="cfg-skill-subtab active" data-subtab="installed">已安装</button>
+      <button class="cfg-skill-subtab" data-subtab="market">市场</button>
+    </div>
+    <div id="cfgSkillInstalled"></div>
+    <div id="cfgSkillMarket" class="hidden"></div>`;
+
+  configBodySkills.querySelectorAll('.cfg-skill-subtab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      configBodySkills.querySelectorAll('.cfg-skill-subtab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.subtab;
+      $('cfgSkillInstalled').classList.toggle('hidden', tab !== 'installed');
+      $('cfgSkillMarket').classList.toggle('hidden', tab !== 'market');
+      if (tab === 'market') renderSkillMarket();
+    });
+  });
+
+  await renderSkillInstalled();
+}
+
+async function renderSkillInstalled() {
+  const el = $('cfgSkillInstalled');
+  el.innerHTML = `<div class="cfg-empty">${t('status.loading')}</div>`;
   try {
     const res = await fetch('/api/config/skills');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const items = data.skills || [];
-    let html = `<div class="cfg-info">扫描自 <code>${cfgEscape(data.skills_dir || '~/.claude/skills')}</code>。禁用 = 把 <code>SKILL.md</code> 重命名为 <code>SKILL.md.disabled</code>，Claude Code 启动时会跳过该 skill。</div>`;
+    let html = `<div class="cfg-info">扫描自 <code>${cfgEscape(data.skills_dir || '~/.claude/skills')}</code>。</div>`;
     if (!items.length) {
-      html += '<div class="cfg-empty">未发现 skill。</div>';
+      html += '<div class="cfg-empty">未发现 skill，可从市场安装。</div>';
     } else {
       for (const it of items) {
         const name = cfgEscape(it.name);
         const desc = cfgEscape(it.description || (it.error ? `解析错误：${it.error}` : ''));
-        const mp = cfgEscape(it.marketplace || '@local');
         html += `<div class="cfg-skill-card" data-skill-name="${name}">
           <div class="meta">
             <div class="name">${name}</div>
             <div class="desc" data-original="${desc}">${desc || '<em>无描述</em>'}</div>
-            <div class="mp">来源: ${mp}</div>
           </div>
           <div class="actions">
             <div class="cfg-toggle${it.enabled ? ' on' : ''}" data-skill="${name}" title="${it.enabled ? t('ui.enabled') : t('ui.disabled')}"></div>
             <button class="cfg-link-btn cfg-skill-view" data-skill="${name}">查看</button>
+            <button class="cfg-link-btn cfg-skill-delete" data-skill="${name}" style="color:var(--danger)">删除</button>
           </div>
         </div>`;
       }
     }
-    configBodySkills.innerHTML = html;
+    el.innerHTML = html;
 
-    configBodySkills.querySelectorAll('.cfg-toggle').forEach(el => {
-      el.addEventListener('click', async () => {
-        const name = el.dataset.skill;
-        const enabled = !el.classList.contains('on');
+    el.querySelectorAll('.cfg-toggle').forEach(tog => {
+      tog.addEventListener('click', async () => {
+        const name = tog.dataset.skill;
+        const enabled = !tog.classList.contains('on');
         try {
           const r = await fetch(`/api/config/skills/${encodeURIComponent(name)}`, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ enabled }),
           });
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          el.classList.toggle('on', enabled);
-          el.title = enabled ? t('ui.enabled') : t('ui.disabled');
+          tog.classList.toggle('on', enabled);
+          tog.title = enabled ? t('ui.enabled') : t('ui.disabled');
           toast(enabled ? `已启用 ${name}` : `已禁用 ${name}`);
-        } catch (e) {
-          toast(`切换失败：${e.message || e}`);
-        }
+        } catch (e) { toast(`切换失败：${e.message || e}`); }
       });
     });
-    configBodySkills.querySelectorAll('.cfg-skill-view').forEach(el => {
-      el.addEventListener('click', async () => {
-        const name = el.dataset.skill;
+    el.querySelectorAll('.cfg-skill-view').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const name = btn.dataset.skill;
         try {
           const r = await fetch(`/api/config/skills/${encodeURIComponent(name)}/source`);
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           const d = await r.json();
           cfgShowSkillSource(name, d.content || '');
-        } catch (e) {
-          toast(`加载失败：${e.message || e}`);
-        }
+        } catch (e) { toast(`加载失败：${e.message || e}`); }
+      });
+    });
+    el.querySelectorAll('.cfg-skill-delete').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const name = btn.dataset.skill;
+        if (!confirm(`确定删除 skill "${name}"？此操作不可恢复。`)) return;
+        try {
+          const r = await fetch(`/api/config/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          toast(`已删除 ${name}`);
+          renderSkillInstalled();
+        } catch (e) { toast(`删除失败：${e.message || e}`); }
       });
     });
 
     cfgTranslateSkills(items);
   } catch (e) {
-    configBodySkills.innerHTML = cfgErrorBanner(`加载失败：${e.message || e}`);
+    el.innerHTML = cfgErrorBanner(`加载失败：${e.message || e}`);
+  }
+}
+
+async function renderSkillMarket() {
+  const el = $('cfgSkillMarket');
+  if (el.dataset.loaded === '1') return;
+  el.innerHTML = `<div class="cfg-empty">${t('status.loading')} 正在从 GitHub 拉取市场数据…</div>`;
+  try {
+    const res = await fetch('/api/config/skills-market');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const skills = data.skills || [];
+
+    let html = `<div class="cfg-info">来源：<code>${cfgEscape(data.repo || '')}</code>，共 ${skills.length} 个 skill。</div>
+      <input id="cfgSkillSearch" class="cfg-skill-search" type="text" placeholder="搜索 skill…">
+      <div id="cfgSkillMarketList">`;
+    for (const s of skills) {
+      const name = cfgEscape(s.name);
+      const desc = cfgEscape(s.description || '');
+      const installed = !!s.installed;
+      html += `<div class="cfg-skill-card" data-market-name="${name}" data-desc="${desc}">
+        <div class="meta">
+          <div class="name">${name}</div>
+          <div class="desc">${desc || '<em>无描述</em>'}</div>
+        </div>
+        <div class="actions">
+          ${installed
+            ? `<span class="cfg-skill-installed-badge">已安装</span>`
+            : `<button class="cfg-link-btn cfg-skill-install primary" data-skill="${name}" data-url="${cfgEscape(s.skill_md_url)}">安装</button>`}
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+    el.innerHTML = html;
+    el.dataset.loaded = '1';
+
+    $('cfgSkillSearch').addEventListener('input', function() {
+      const q = this.value.trim().toLowerCase();
+      el.querySelectorAll('.cfg-skill-card[data-market-name]').forEach(card => {
+        const n = (card.dataset.marketName || '').toLowerCase();
+        const d = (card.dataset.desc || '').toLowerCase();
+        card.classList.toggle('hidden', !!q && !n.includes(q) && !d.includes(q));
+      });
+    });
+
+    el.querySelectorAll('.cfg-skill-install').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const name = btn.dataset.skill;
+        const url = btn.dataset.url;
+        btn.disabled = true; btn.textContent = '安装中…';
+        try {
+          const r = await fetch(`/api/config/skills/${encodeURIComponent(name)}/install`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skill_md_url: url }),
+          });
+          if (!r.ok) { const d = await r.json(); throw new Error(d.detail || `HTTP ${r.status}`); }
+          btn.replaceWith(Object.assign(document.createElement('span'), { className: 'cfg-skill-installed-badge', textContent: '已安装' }));
+          toast(`已安装 ${name}`);
+          renderSkillInstalled();
+        } catch (e) {
+          btn.disabled = false; btn.textContent = '安装';
+          toast(`安装失败：${e.message || e}`);
+        }
+      });
+    });
+  } catch (e) {
+    el.innerHTML = cfgErrorBanner(`市场加载失败：${e.message || e}`);
   }
 }
 
@@ -26786,14 +26895,15 @@ async function cfgTranslateSkills(items) {
     .filter(it => it.description && !it.error)
     .map(it => ({ name: it.name, description: it.description }));
   if (!payload.length) return;
-  const needIndicator = configBodySkills.querySelector('.cfg-skill-card .desc');
+  const container = $('cfgSkillInstalled') || configBodySkills;
+  const needIndicator = container.querySelector('.cfg-skill-card .desc');
   if (needIndicator) {
     const tip = document.createElement('div');
     tip.id = 'cfgSkillTranslateTip';
     tip.className = 'cfg-info';
     tip.style.marginTop = '6px';
     tip.textContent = t('x.translating');
-    configBodySkills.insertBefore(tip, configBodySkills.querySelector('.cfg-skill-card'));
+    container.insertBefore(tip, container.querySelector('.cfg-skill-card'));
   }
   try {
     const r = await fetch('/api/config/skills/translate', {
@@ -26803,7 +26913,7 @@ async function cfgTranslateSkills(items) {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
     const map = data.translations || {};
-    configBodySkills.querySelectorAll('.cfg-skill-card').forEach(card => {
+    container.querySelectorAll('.cfg-skill-card').forEach(card => {
       const n = card.dataset.skillName;
       const zh = map[n];
       if (!zh) return;

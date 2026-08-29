@@ -1552,7 +1552,7 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_code_turn_session ON code_turn_requests(session_id, updated_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_code_permission_rules_session ON code_permission_rules(session_id, created_at)")
 
-        # ── Built-in starter templates (INSERT OR IGNORE → safe to re-run) ──
+        # ── Built-in starter templates (upsert: updates all fields except created_at) ──
         import json as _json, time as _time
         _now = _time.time()
         _builtin_templates = [
@@ -1581,7 +1581,7 @@ def init_db() -> None:
             },
             {
                 "id": "builtin_writer_zh",
-                "name": "中文写作助手", "icon": "✍️", "mode": "chat",
+                "name": "中文写作助手", "icon": "✍️", "mode": "both",
                 "permission_mode": "default", "model": "sonnet", "sort_order": 30,
                 "system_prompt": (
                     "你是一名专业中文写作助手，擅长商务文案、技术博客、报告和社交媒体内容。\n"
@@ -1604,7 +1604,7 @@ def init_db() -> None:
             },
             {
                 "id": "builtin_ppt_expert",
-                "name": "PPT 专家", "icon": "📊", "mode": "chat",
+                "name": "PPT 专家", "icon": "📊", "mode": "both",
                 "permission_mode": "default", "model": "sonnet", "sort_order": 50,
                 "system_prompt": (
                     "你是一名资深 PPT 策划与演示文稿专家，擅长结构化思维和视觉叙事。\n"
@@ -1628,7 +1628,7 @@ def init_db() -> None:
             },
             {
                 "id": "builtin_product_manager",
-                "name": "产品经理", "icon": "🎯", "mode": "chat",
+                "name": "产品经理", "icon": "🎯", "mode": "both",
                 "permission_mode": "default", "model": "sonnet", "sort_order": 70,
                 "system_prompt": (
                     "你是一名经验丰富的产品经理，擅长需求分析、PRD 撰写、用户故事和竞品分析。\n"
@@ -1639,7 +1639,7 @@ def init_db() -> None:
             },
             {
                 "id": "builtin_prompt_engineer",
-                "name": "Prompt 工程师", "icon": "🧪", "mode": "chat",
+                "name": "Prompt 工程师", "icon": "🧪", "mode": "both",
                 "permission_mode": "default", "model": "opus", "sort_order": 80,
                 "system_prompt": (
                     "你是一名 Prompt 工程专家，熟悉 Claude / GPT / Gemini 等主流模型的提示技巧。\n"
@@ -1649,14 +1649,68 @@ def init_db() -> None:
                 ),
                 "default_task": "请帮我优化这个 Prompt：",
             },
+            {
+                "id": "builtin_test_writer",
+                "name": "单元测试生成", "icon": "🧪", "mode": "code",
+                "permission_mode": "bypassPermissions", "model": "sonnet", "sort_order": 90,
+                "system_prompt": (
+                    "你是一名测试工程师，专注于编写高质量单元测试和集成测试。\n"
+                    "原则：覆盖正常路径、边界条件、异常情况，追求 80%+ 覆盖率。\n"
+                    "使用项目已有的测试框架，保持风格一致。\n"
+                    "测试命名清晰描述场景，每个测试只验证一件事。"
+                ),
+                "default_task": "请为选中的代码（或整个模块）生成完整的测试套件。",
+            },
+            {
+                "id": "builtin_doc_writer",
+                "name": "文档生成器", "icon": "📝", "mode": "code",
+                "permission_mode": "bypassPermissions", "model": "sonnet", "sort_order": 100,
+                "system_prompt": (
+                    "你是一名技术文档专家，擅长生成清晰、准确的代码文档。\n"
+                    "可生成：函数/类注释、README、API 文档、架构说明。\n"
+                    "风格：简洁准确，包含参数说明、返回值、使用示例。\n"
+                    "中英文均可，根据项目语言风格决定。"
+                ),
+                "default_task": "请为当前代码生成文档注释和 README。",
+            },
+            {
+                "id": "builtin_perf_optimizer",
+                "name": "性能优化师", "icon": "⚡", "mode": "code",
+                "permission_mode": "acceptEdits", "model": "opus", "sort_order": 110,
+                "system_prompt": (
+                    "你是一名性能优化专家，擅长识别和修复代码性能瓶颈。\n"
+                    "流程：1) 分析热点 → 2) 量化影响 → 3) 提出优化方案 → 4) 实施并验证。\n"
+                    "关注点：时间复杂度、内存使用、I/O 效率、并发瓶颈。\n"
+                    "每次优化前后给出对比说明，避免过早优化。"
+                ),
+                "default_task": "请分析当前代码的性能瓶颈并给出优化建议。",
+            },
+            {
+                "id": "builtin_refactor",
+                "name": "重构助手", "icon": "♻️", "mode": "code",
+                "permission_mode": "bypassPermissions", "model": "sonnet", "sort_order": 120,
+                "system_prompt": (
+                    "你是一名重构专家，专注于提升代码可读性、可维护性和可测试性。\n"
+                    "原则：小步重构，每次只做一件事，保持测试绿色。\n"
+                    "常用手法：提取函数/类、消除重复、简化条件、依赖注入。\n"
+                    "重构前说明意图，重构后确认行为不变。"
+                ),
+                "default_task": "请分析并重构选中的代码，提升可读性和可维护性。",
+            },
         ]
         for _tpl in _builtin_templates:
             conn.execute(
-                """INSERT OR IGNORE INTO agent_templates
+                """INSERT INTO agent_templates
                    (id, name, icon, system_prompt, model, effort, permission_mode,
                     default_task, cwd, connector_ids, mode, builtin, sort_order,
                     created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)
+                   ON CONFLICT(id) DO UPDATE SET
+                     name=excluded.name, icon=excluded.icon,
+                     system_prompt=excluded.system_prompt, model=excluded.model,
+                     permission_mode=excluded.permission_mode,
+                     default_task=excluded.default_task, mode=excluded.mode,
+                     sort_order=excluded.sort_order, updated_at=excluded.updated_at""",
                 (
                     _tpl["id"], _tpl["name"], _tpl.get("icon", ""),
                     _tpl.get("system_prompt", ""), _tpl.get("model", ""), "",
@@ -14929,6 +14983,99 @@ async def list_config_skills(request: Request):
     return {"skills": items, "skills_dir": str(_SKILLS_DIR)}
 
 
+_SKILLS_MARKET_REPO = "affaan-m/everything-claude-code"
+_SKILLS_MARKET_SUBDIR = "skills"
+_skills_market_cache: Optional[dict] = None
+_skills_market_cache_ts: float = 0.0
+_SKILLS_MARKET_CACHE_TTL = 300  # 5 minutes
+_skills_market_lock: Optional[asyncio.Lock] = None
+
+import re as _re_skills
+_SKILL_URL_RE = _re_skills.compile(
+    r'^https://raw\.githubusercontent\.com/affaan-m/everything-claude-code/[a-zA-Z0-9._-]+/skills/[a-zA-Z0-9._-]+/SKILL\.md$'
+)
+
+
+@app.get("/api/config/skills-market")
+async def list_market_skills(request: Request):
+    _require_not_mobile_access(request)
+    import httpx
+    global _skills_market_cache, _skills_market_cache_ts, _skills_market_lock
+    import time as _time
+    if _skills_market_lock is None:
+        _skills_market_lock = asyncio.Lock()
+    now = _time.monotonic()
+    if _skills_market_cache is not None and now - _skills_market_cache_ts < _SKILLS_MARKET_CACHE_TTL:
+        return _skills_market_cache
+
+    async with _skills_market_lock:
+        # Re-check after acquiring lock (another request may have populated it)
+        now = _time.monotonic()
+        if _skills_market_cache is not None and now - _skills_market_cache_ts < _SKILLS_MARKET_CACHE_TTL:
+            return _skills_market_cache
+
+        installed = set()
+        if _SKILLS_DIR.exists():
+            for entry in _SKILLS_DIR.iterdir():
+                if entry.is_dir():
+                    installed.add(entry.name)
+
+        api_url = f"https://api.github.com/repos/{_SKILLS_MARKET_REPO}/contents/{_SKILLS_MARKET_SUBDIR}"
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+                r = await client.get(api_url, headers={"Accept": "application/vnd.github.v3+json"})
+                r.raise_for_status()
+                entries = r.json()
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"GitHub API error: {e}")
+
+        skills = []
+        for entry in entries:
+            if entry.get("type") != "dir":
+                continue
+            name = entry["name"]
+            skill_md_url = f"https://raw.githubusercontent.com/{_SKILLS_MARKET_REPO}/main/{_SKILLS_MARKET_SUBDIR}/{name}/SKILL.md"
+            skills.append({
+                "name": name,
+                "installed": name in installed,
+                "skill_md_url": skill_md_url,
+                "repo": _SKILLS_MARKET_REPO,
+            })
+
+        async def fetch_desc(s: dict) -> dict:
+            try:
+                async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+                    r = await client.get(s["skill_md_url"])
+                    if r.status_code == 200:
+                        parsed = _parse_skill_frontmatter_text(r.text, s["name"])
+                        s["description"] = parsed.get("description", "")
+            except Exception:
+                s["description"] = ""
+            return s
+
+        import asyncio as _asyncio
+        skills = list(await _asyncio.gather(*[fetch_desc(s) for s in skills]))
+
+        result = {"skills": skills, "repo": _SKILLS_MARKET_REPO}
+        _skills_market_cache = result
+        _skills_market_cache_ts = _time.monotonic()
+        return result
+
+
+def _parse_skill_frontmatter_text(text: str, dir_name: str) -> dict:
+    import re as _re
+    item: dict = {"name": dir_name, "description": "", "error": None}
+    m = _re.match(r"^---\s*\n(.*?)\n---", text, _re.DOTALL)
+    if not m:
+        return item
+    for line in m.group(1).splitlines():
+        if line.startswith("name:"):
+            item["name"] = line[5:].strip().strip('"\'')
+        elif line.startswith("description:"):
+            item["description"] = line[12:].strip().strip('"\'')
+    return item
+
+
 @app.get("/api/config/skills/{name}/source")
 async def get_config_skill_source(request: Request, name: str):
     _require_not_mobile_access(request)
@@ -15083,6 +15230,57 @@ def _directory_picker_payload(raw_path: str = "", *, show_hidden: bool = False) 
         "roots": roots,
         "truncated": len(entries) >= 250,
     }
+
+
+class SkillInstallRequest(BaseModel):
+    skill_md_url: str
+
+
+@app.post("/api/config/skills/{name}/install")
+async def install_market_skill(request: Request, name: str, payload: SkillInstallRequest):
+    _require_not_mobile_access(request)
+    safe = _validate_skill_dir_name(name)
+    skill_dir = _SKILLS_DIR / safe
+    if skill_dir.exists():
+        raise HTTPException(status_code=409, detail=f"skill '{safe}' already installed")
+
+    # Validate URL matches exact expected pattern — no path traversal or redirects
+    if not _SKILL_URL_RE.fullmatch(payload.skill_md_url):
+        raise HTTPException(status_code=400, detail="URL not from allowed market source")
+
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+            r = await client.get(payload.skill_md_url)
+            r.raise_for_status()
+            content = r.text
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"download failed: {e}")
+
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+
+    # Invalidate market cache so installed state updates
+    global _skills_market_cache
+    _skills_market_cache = None
+
+    return {"ok": True, "name": safe, "path": str(skill_dir / "SKILL.md")}
+
+
+@app.delete("/api/config/skills/{name}")
+async def delete_market_skill(request: Request, name: str):
+    _require_not_mobile_access(request)
+    import shutil as _shutil
+    safe = _validate_skill_dir_name(name)
+    skill_dir = _SKILLS_DIR / safe
+    if not skill_dir.exists():
+        raise HTTPException(status_code=404, detail=f"skill '{safe}' not found")
+    try:
+        _shutil.rmtree(skill_dir)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"delete failed: {e}")
+    global _skills_market_cache
+    _skills_market_cache = None
+    return {"ok": True, "name": safe}
 
 
 @app.get("/api/directories")
