@@ -413,6 +413,18 @@ function buildOptions(params, abortController, runtime) {
   };
   if (params.model) options.model = params.model;
   if (['low', 'medium', 'high', 'xhigh', 'max'].includes(params.effort)) options.effort = params.effort;
+  // Connector secrets are encrypted at rest, so the stored MCP config holds
+  // `cwsecret://` refs rather than usable credentials. Python decrypts them and
+  // passes the ready-to-connect servers here, keeping plaintext keys out of
+  // .mcp.json entirely. Disk-configured servers still load via settingSources;
+  // these are merged on top by name.
+  if (params.mcpServers && typeof params.mcpServers === 'object' && !Array.isArray(params.mcpServers)) {
+    const injected = {};
+    for (const [name, config] of Object.entries(params.mcpServers)) {
+      if (config && typeof config === 'object') injected[name] = config;
+    }
+    if (Object.keys(injected).length) options.mcpServers = injected;
+  }
   const allowedTools = stringList(params.allowedTools);
   const disallowedTools = stringList(params.disallowedTools);
   if (allowedTools) options.allowedTools = allowedTools;

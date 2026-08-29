@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "note": "Built-in connector catalog. Extend via PR. transport: stdio|http|sse; auth: none|api_key|oauth. api_key entries declare secret_fields so the UI can collect keys and route them to the encrypted secret store.",
+  "connectors": [
+    {
+      "id": "filesystem",
+      "name": "Filesystem",
+      "category": "dev",
+      "transport": "stdio",
+      "auth": "none",
+      "icon": "📁",
+      "description": "读写本地目录文件（限定在允许的路径内）。",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "<允许访问的目录>"],
+      "docs": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "category": "dev",
+      "transport": "stdio",
+      "auth": "api_key",
+      "icon": "🐙",
+      "description": "查询仓库、Issue、PR、代码搜索。",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "secret_fields": [
+        {"target": "env", "key": "GITHUB_PERSONAL_ACCESS_TOKEN", "label": "GitHub Personal Access Token"}
+      ],
+      "docs": "https://github.com/modelcontextprotocol/servers/tree/main/src/github"
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch",
+      "category": "web",
+      "transport": "stdio",
+      "auth": "none",
+      "icon": "🌐",
+      "description": "抓取网页并转为适合模型阅读的文本。",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "docs": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+    },
+    {
+      "id": "postgres",
+      "name": "PostgreSQL",
+      "category": "dev",
+      "transport": "stdio",
+      "auth": "api_key",
+      "icon": "🐘",
+      "description": "只读查询 PostgreSQL 数据库并检视表结构。",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "<连接串>"],
+      "secret_fields": [
+        {"target": "env", "key": "DATABASE_URL", "label": "数据库连接串（含密码）"}
+      ],
+      "docs": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
+    },
+    {
+      "id": "sentry",
+      "name": "Sentry",
+      "category": "dev",
+      "transport": "http",
+      "auth": "oauth",
+      "icon": "🛡️",
+      "description": "查询 Sentry 的错误与性能问题（远程 MCP，OAuth 授权）。",
+      "url": "https://mcp.sentry.dev/mcp",
+      "docs": "https://docs.sentry.io/product/sentry-mcp/"
+    },
+    {
+      "id": "notion",
+      "name": "Notion",
+      "category": "office",
+      "transport": "http",
+      "auth": "oauth",
+      "icon": "📝",
+      "description": "在 Notion 中查找、读取和整理页面与数据库（远程 MCP）。",
+      "url": "https://mcp.notion.com/mcp",
+      "docs": "https://developers.notion.com/docs/mcp"
+    },
+    {
+      "id": "tushare",
+      "name": "Tushare 金融数据",
+      "category": "finance",
+      "transport": "stdio",
+      "auth": "api_key",
+      "icon": "🥕",
+      "description": "获取 A 股、基金、宏观等金融数据（需 Tushare token）。命令按所用社区 MCP 包填写。",
+      "command": "npx",
+      "args": ["-y", "<tushare-mcp-包名>"],
+      "secret_fields": [
+        {"target": "env", "key": "TUSHARE_TOKEN", "label": "Tushare Token"}
+      ],
+      "docs": "https://tushare.pro/document/1"
+    },
+    {
+      "id": "custom-http",
+      "name": "自定义远程 MCP",
+      "category": "other",
+      "transport": "http",
+      "auth": "api_key",
+      "icon": "🔌",
+      "description": "接入任意兼容 MCP 的远程服务（HTTP），用 Authorization 头携带密钥。",
+      "url": "https://example.com/mcp",
+      "secret_fields": [
+        {"target": "header", "key": "Authorization", "label": "Authorization（如 Bearer xxx）"}
+      ],
+      "docs": "https://modelcontextprotocol.io/"
+    }
+  ]
+}

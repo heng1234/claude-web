@@ -9345,19 +9345,39 @@ async function switchLang(lang) {
       <span data-i18n="html.mcp_desc">管理 Claude Code 的 MCP 工具服务器。修改后需新建会话才生效。</span>
       <span id="mcpConfigPath" class="ml-2" style="color:var(--text-subtle);"></span>
     </div>
-    <div id="mcpServerList" class="space-y-2 max-h-[50vh] overflow-y-auto mb-4"></div>
+    <div id="mcpServerList" class="space-y-2 max-h-[40vh] overflow-y-auto mb-4"></div>
+    <details id="mcpCatalogWrap" class="border rounded-lg p-3 mb-2" style="border-color:var(--border);">
+      <summary class="text-sm font-medium cursor-pointer" style="color:var(--text);" data-i18n="html.connector_catalog">🧩 连接器目录（一键添加）</summary>
+      <div id="mcpCatalogCats" class="flex flex-wrap gap-1 mt-3"></div>
+      <div id="mcpCatalogGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 max-h-[36vh] overflow-y-auto"></div>
+    </details>
     <details class="border rounded-lg p-3" style="border-color:var(--border);">
-      <summary class="text-sm font-medium cursor-pointer" style="color:var(--text);" data-i18n="html.add_mcp_server">＋ 添加 stdio MCP Server</summary>
+      <summary class="text-sm font-medium cursor-pointer" style="color:var(--text);" data-i18n="html.add_mcp_server">＋ 添加 MCP Server</summary>
       <div class="mt-3 space-y-2">
         <select id="mcpNewScope" class="w-full px-3 py-1.5 text-sm">
           <option value="local" data-i18n="html.scope_local">Local（当前目录）</option>
           <option value="user" data-i18n="html.scope_user">User（全局）</option>
           <option value="project">Project（.mcp.json）</option>
         </select>
+        <select id="mcpNewTransport" class="w-full px-3 py-1.5 text-sm">
+          <option value="stdio" data-i18n="html.transport_stdio">stdio（本地命令）</option>
+          <option value="http">http（远程）</option>
+          <option value="sse">sse（远程）</option>
+        </select>
         <input id="mcpNewName" placeholder="名称（如 github）" class="w-full px-3 py-1.5 text-sm"  data-i18n-placeholder="html.ph_mcp_name" />
-        <input id="mcpNewCmd" placeholder="命令（如 npx）" class="w-full px-3 py-1.5 text-sm"  data-i18n-placeholder="html.ph_mcp_command" />
-        <input id="mcpNewArgs" placeholder="参数（空格分隔，如 -y @modelcontextprotocol/server-github）" class="w-full px-3 py-1.5 text-sm"  data-i18n-placeholder="html.ph_mcp_args" />
-        <input id="mcpNewEnv" placeholder="环境变量（KEY=VALUE 逗号分隔，如 GITHUB_TOKEN=ghp_xxx）" class="w-full px-3 py-1.5 text-sm"  data-i18n-placeholder="html.ph_mcp_env" />
+        <div id="mcpStdioFields" class="space-y-2">
+          <input id="mcpNewCmd" placeholder="命令（如 npx）" class="w-full px-3 py-1.5 text-sm"  data-i18n-placeholder="html.ph_mcp_command" />
+          <input id="mcpNewArgs" placeholder="参数（空格分隔，如 -y @modelcontextprotocol/server-github）" class="w-full px-3 py-1.5 text-sm"  data-i18n-placeholder="html.ph_mcp_args" />
+          <input id="mcpNewEnv" placeholder="环境变量（KEY=VALUE 逗号分隔，如 GITHUB_TOKEN=ghp_xxx）" class="w-full px-3 py-1.5 text-sm"  data-i18n-placeholder="html.ph_mcp_env" />
+        </div>
+        <div id="mcpRemoteFields" class="space-y-2 hidden">
+          <input id="mcpNewUrl" placeholder="URL（如 https://mcp.example.com/mcp）" class="w-full px-3 py-1.5 text-sm" data-i18n-placeholder="html.ph_mcp_url" />
+          <input id="mcpNewHeaders" placeholder="请求头（KEY=VALUE 逗号分隔，如 Authorization=Bearer xxx）" class="w-full px-3 py-1.5 text-sm" data-i18n-placeholder="html.ph_mcp_headers" />
+        </div>
+        <label class="flex items-center gap-2 text-xs" style="color:var(--text-muted);">
+          <input id="mcpEncryptSecrets" type="checkbox" checked />
+          <span data-i18n="html.encrypt_secrets_hint">加密保存密钥（本机加密存储，配置文件只留引用）</span>
+        </label>
         <button id="mcpAddBtn" class="btn btn-primary text-xs" style="padding:6px 14px;" data-i18n="misc.add">添加</button>
       </div>
     </details>
@@ -25347,6 +25367,24 @@ async function refreshMcpServers() {
             result.style.color = '#16834a';
             const tools = data.tools || [];
             result.innerHTML = `<strong>连接正常 · ${Number(data.latency_ms || 0)}ms · ${tools.length} 个工具</strong>${tools.length ? `<div class="mt-1" style="color:var(--text-muted)">${tools.map(tool => `<code title="${escapeHtml(tool.description || '')}" style="margin-right:6px">${escapeHtml(tool.name)}</code>`).join('')}</div>` : ''}`;
+          } else if (data.status === 'needs-auth' || data.needs_auth) {
+            result.style.color = '#b45309';
+            result.innerHTML = `需要授权：请在服务器所在机器的终端运行 <code>claude mcp add</code> 完成 OAuth，或点击下方“授权”。`;
+            const authBtn = document.createElement('button');
+            authBtn.textContent = '授权';
+            authBtn.className = 'ml-2 text-xs px-2 py-0.5 rounded';
+            authBtn.style.cssText = 'background:var(--surface); border:1px solid var(--border);';
+            authBtn.addEventListener('click', async () => {
+              authBtn.disabled = true; authBtn.textContent = '授权中…';
+              try {
+                const ar = await fetch('/api/mcp/servers/' + encodeURIComponent(name) + '/authorize' + mcpQuery({ scope: btn.dataset.mcpScope }), { method: 'POST' });
+                const ad = await ar.json().catch(() => ({}));
+                if (ar.ok && ad.ok) { result.style.color = '#16834a'; result.textContent = '已注册授权。' + (ad.hint || ''); }
+                else { result.style.color = '#c83a35'; result.textContent = '授权失败：' + (ad.hint || ad.output || ad.detail || ar.status); }
+              } catch (err) { result.style.color = '#c83a35'; result.textContent = '授权失败：' + (err.message || err); }
+              finally { authBtn.disabled = false; }
+            });
+            result.appendChild(authBtn);
           } else {
             result.style.color = '#c83a35'; result.textContent = `检测失败：${data.error || data.status || t('errors.unknown_error')}`;
           }
@@ -25376,23 +25414,51 @@ mcpAddBtn.addEventListener('click', async () => {
     return;
   }
   const scope = $('mcpNewScope').value;
+  const transport = ($('mcpNewTransport')?.value || 'stdio').toLowerCase();
   const name = $('mcpNewName').value.trim();
-  const cmd = $('mcpNewCmd').value.trim();
-  const argsStr = $('mcpNewArgs').value.trim();
-  const envStr = $('mcpNewEnv').value.trim();
-  if (!name || !cmd) { alert(t('errors.cannot_be_empty')); return; }
-  const args = argsStr ? argsStr.split(/\s+/) : [];
-  const env = {};
-  if (envStr) {
-    envStr.split(',').forEach(pair => {
-      const [k, ...rest] = pair.split('=');
-      if (k && rest.length) env[k.trim()] = rest.join('=').trim();
-    });
+  if (!name) { alert(t('errors.cannot_be_empty')); return; }
+  const encrypt = !!$('mcpEncryptSecrets')?.checked;
+  let body;
+  const encryptSecrets = [];
+  if (transport === 'http' || transport === 'sse') {
+    const url = $('mcpNewUrl').value.trim();
+    if (!url) { alert(t('errors.cannot_be_empty')); return; }
+    const headers = {};
+    const headersStr = $('mcpNewHeaders').value.trim();
+    if (headersStr) {
+      headersStr.split(',').forEach(pair => {
+        const [k, ...rest] = pair.split('=');
+        if (k && rest.length) {
+          const key = k.trim();
+          headers[key] = rest.join('=').trim();
+          if (encrypt) encryptSecrets.push(key);
+        }
+      });
+    }
+    body = { type: transport, url, headers: Object.keys(headers).length ? headers : null, encrypt_secrets: encryptSecrets };
+  } else {
+    const cmd = $('mcpNewCmd').value.trim();
+    if (!cmd) { alert(t('errors.cannot_be_empty')); return; }
+    const argsStr = $('mcpNewArgs').value.trim();
+    const envStr = $('mcpNewEnv').value.trim();
+    const args = argsStr ? argsStr.split(/\s+/) : [];
+    const env = {};
+    if (envStr) {
+      envStr.split(',').forEach(pair => {
+        const [k, ...rest] = pair.split('=');
+        if (k && rest.length) {
+          const key = k.trim();
+          env[key] = rest.join('=').trim();
+          if (encrypt) encryptSecrets.push(key);
+        }
+      });
+    }
+    body = { type: 'stdio', command: cmd, args, env: Object.keys(env).length ? env : null, encrypt_secrets: encryptSecrets };
   }
   const r = await fetch('/api/mcp/servers/' + encodeURIComponent(name) + mcpQuery({ scope }), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ command: cmd, args, env: Object.keys(env).length ? env : null }),
+    body: JSON.stringify(body),
   });
   if (!r.ok) {
     const d = await r.json().catch(() => ({}));
@@ -25403,7 +25469,106 @@ mcpAddBtn.addEventListener('click', async () => {
   $('mcpNewCmd').value = '';
   $('mcpNewArgs').value = '';
   $('mcpNewEnv').value = '';
+  if ($('mcpNewUrl')) $('mcpNewUrl').value = '';
+  if ($('mcpNewHeaders')) $('mcpNewHeaders').value = '';
   refreshMcpServers();
+});
+
+// Toggle stdio vs remote input groups based on the selected transport.
+function applyMcpTransportVisibility() {
+  const remote = ($('mcpNewTransport')?.value || 'stdio') !== 'stdio';
+  $('mcpStdioFields')?.classList.toggle('hidden', remote);
+  $('mcpRemoteFields')?.classList.toggle('hidden', !remote);
+}
+$('mcpNewTransport')?.addEventListener('change', applyMcpTransportVisibility);
+
+// ===== Connector catalog (one-click prefill) =====
+let mcpCatalog = null;
+let mcpCatalogCategory = 'all';
+
+const MCP_CATEGORY_LABELS = {
+  all: '全部', finance: '金融', office: '办公', dev: '开发',
+  media: '媒体', web: '网络', research: '研究', other: '其他',
+};
+
+async function loadMcpCatalog() {
+  if (mcpCatalog) { renderMcpCatalog(); return; }
+  try {
+    const r = await fetch('/api/mcp/catalog');
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    mcpCatalog = Array.isArray(data.connectors) ? data.connectors : [];
+  } catch (e) {
+    mcpCatalog = [];
+  }
+  renderMcpCatalog();
+}
+
+function renderMcpCatalog() {
+  const cats = $('mcpCatalogCats');
+  const grid = $('mcpCatalogGrid');
+  if (!cats || !grid) return;
+  if (!mcpCatalog || mcpCatalog.length === 0) {
+    cats.innerHTML = '';
+    grid.innerHTML = '<div class="text-xs col-span-full text-center py-4" style="color:var(--text-subtle);">暂无可用连接器</div>';
+    return;
+  }
+  const present = new Set(mcpCatalog.map(c => c.category || 'other'));
+  const catKeys = ['all', ...Object.keys(MCP_CATEGORY_LABELS).filter(k => k !== 'all' && present.has(k))];
+  cats.innerHTML = catKeys.map(k => `
+    <button data-mcp-cat="${escapeHtml(k)}" class="text-xs px-2 py-0.5 rounded"
+      style="background:${k === mcpCatalogCategory ? 'var(--accent)' : 'var(--surface)'};
+             color:${k === mcpCatalogCategory ? '#fff' : 'var(--text-muted)'};
+             border:1px solid var(--border);">${escapeHtml(MCP_CATEGORY_LABELS[k] || k)}</button>
+  `).join('');
+  cats.querySelectorAll('[data-mcp-cat]').forEach(btn => {
+    btn.addEventListener('click', () => { mcpCatalogCategory = btn.dataset.mcpCat; renderMcpCatalog(); });
+  });
+
+  const items = mcpCatalog.filter(c => mcpCatalogCategory === 'all' || (c.category || 'other') === mcpCatalogCategory);
+  const authLabel = { none: '', api_key: '需密钥', oauth: 'OAuth' };
+  grid.innerHTML = items.map(c => `
+    <button data-mcp-prefill="${escapeHtml(c.id)}" class="text-left p-2 rounded-lg"
+      style="background:var(--surface-2); border:1px solid var(--border);">
+      <div class="flex items-center gap-2">
+        <span>${escapeHtml(c.icon || '🧩')}</span>
+        <span class="font-medium text-sm">${escapeHtml(c.name || c.id)}</span>
+        ${c.auth && c.auth !== 'none' ? `<span class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--surface); color:var(--text-subtle);">${authLabel[c.auth] || c.auth}</span>` : ''}
+      </div>
+      <div class="mt-1 text-xs" style="color:var(--text-muted);">${escapeHtml(c.description || '')}</div>
+    </button>
+  `).join('');
+  grid.querySelectorAll('[data-mcp-prefill]').forEach(btn => {
+    btn.addEventListener('click', () => prefillMcpConnector(btn.dataset.mcpPrefill));
+  });
+}
+
+function prefillMcpConnector(id) {
+  const c = (mcpCatalog || []).find(x => x.id === id);
+  if (!c) return;
+  const transport = (c.transport || 'stdio').toLowerCase();
+  if ($('mcpNewTransport')) $('mcpNewTransport').value = transport;
+  applyMcpTransportVisibility();
+  if ($('mcpNewName')) $('mcpNewName').value = c.id || '';
+  if (transport === 'http' || transport === 'sse') {
+    if ($('mcpNewUrl')) $('mcpNewUrl').value = c.url || '';
+    // Prefill header keys from declared secret fields so the user just fills values.
+    const headerKeys = (c.secret_fields || []).filter(f => f.target === 'header').map(f => `${f.key}=`);
+    if ($('mcpNewHeaders')) $('mcpNewHeaders').value = headerKeys.join(', ');
+  } else {
+    if ($('mcpNewCmd')) $('mcpNewCmd').value = c.command || '';
+    if ($('mcpNewArgs')) $('mcpNewArgs').value = (c.args || []).join(' ');
+    const envKeys = (c.secret_fields || []).filter(f => f.target === 'env').map(f => `${f.key}=`);
+    if ($('mcpNewEnv')) $('mcpNewEnv').value = envKeys.join(', ');
+  }
+  // Expand the add-form so the prefilled values are visible.
+  const addDetails = $('mcpNewName')?.closest('details');
+  if (addDetails) addDetails.open = true;
+  $('mcpNewName')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+$('mcpCatalogWrap')?.addEventListener('toggle', (e) => {
+  if (e.target.open) loadMcpCatalog();
 });
 
 // ===== Config Center (Hooks / Skills / MCP / Permissions) =====

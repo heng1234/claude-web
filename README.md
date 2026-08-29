@@ -95,6 +95,15 @@ Chrome MV3 Side Panel 支持读取当前页、选中文字右键提问，并把�
 - 会话元数据存入 `claude-web.db`，事件存入 `history/*.jsonl`，附件存入 `uploads/`。
 - 数据默认留在本机，沿用本机 Claude Code 登录状态，不读取或保存 Anthropic API Key。
 
+### 连接器（MCP Server）
+
+- **一键连接器目录**：内置常用 MCP 连接器（GitHub、Notion、Sentry、Postgres、Tushare 等），按金融 / 办公 / 开发 / 网络 / 研究等分类，点选即预填添加表单。
+- **本地 / 远程传输**：支持 stdio（本地命令）与 http / sse（远程 MCP Server），远程连接器可填 URL 与请求头，并提供连接健康检测。
+- **本机加密保存密钥**：勾选"加密保存密钥"后，API Key / Bearer 等敏感头与环境变量会用本机主密钥（优先 OS keychain，否则 `~/.claude/.cw_connector_key`，权限 `0600`）加密存入 `claude-web.db`，`.mcp.json` 只留 `cwsecret://` 引用；运行会话时才解密并注入，不写回明文、不上传。
+- **OAuth 连接器**：需要 OAuth 的连接器委托本机 `claude mcp add` 完成授权，令牌由 CLI 保存在 SDK 读取的位置，本工具不自建回调、不保存 client secret。
+
+> 说明：上面隐私声明中的"不接触 API Key"指的是 Claude 自身的登录态；连接器密钥是你自愿提供的第三方服务凭据，仅本机加密存储、绝不上传。
+
 ### 渲染与通知
 
 - Markdown、代码高亮、Mermaid、LaTeX、表格、引用和图片预览。

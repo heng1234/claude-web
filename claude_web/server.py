@@ -13670,18 +13670,148 @@ def _stdio_config_from_request(req: "McpServerRequest") -> dict:
     return cfg
 
 
+_REMOTE_MCP_TRANSPORTS = {"http", "sse"}
+
+
+def _validated_mcp_url(raw: Optional[str]) -> str:
+    """Accept only http(s) URLs for remote MCP servers.
+
+    Rejecting other schemes keeps file://, javascript: and similar values from
+    being written into the MCP config that the Agent SDK later connects to.
+    """
+    url = (raw or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required for http/sse transport")
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="url must be an http(s) URL")
+    return url
+
+
+def _remote_config_from_request(req: "McpServerRequest", transport: str) -> dict:
+    cfg = {"type": transport, "url": _validated_mcp_url(req.url)}
+    if req.headers:
+        cfg["headers"] = req.headers
+    return cfg
+
+
+def _mcp_config_from_request(req: "McpServerRequest") -> dict:
+    """Build an MCP server config, dispatching on the requested transport."""
+    transport = (req.type or "").strip().lower() or ("http" if req.url else "stdio")
+    if transport in _REMOTE_MCP_TRANSPORTS:
+        return _remote_config_from_request(req, transport)
+    if transport != "stdio":
+        raise HTTPException(status_code=400, detail="type must be stdio, http, or sse")
+    return _stdio_config_from_request(req)
+
+
 class McpServerRequest(BaseModel):
+    type: Optional[str] = None
     command: Optional[str] = None
     args: Optional[List[str]] = None
     env: Optional[Dict[str, str]] = None
+    url: Optional[str] = None
+    headers: Optional[Dict[str, str]] = None
+    encrypt_secrets: Optional[List[str]] = None
     disabled: Optional[bool] = None
 
 
 class McpServerPatchRequest(BaseModel):
+    type: Optional[str] = None
     command: Optional[str] = None
     args: Optional[List[str]] = None
     env: Optional[Dict[str, str]] = None
+    url: Optional[str] = None
+    headers: Optional[Dict[str, str]] = None
+    encrypt_secrets: Optional[List[str]] = None
     disabled: Optional[bool] = None
+
+
+_MCP_CATALOG_PATH = Path(__file__).resolve().parent / "mcp_catalog.json"
+_mcp_catalog_cache: Optional[dict] = None
+_connector_secret_store = None
+
+
+def _get_secret_store():
+    """Lazily construct the shared connector SecretStore.
+
+    Kept lazy so importing the server never requires `cryptography` unless a
+    connector secret is actually stored or resolved.
+    """
+    global _connector_secret_store
+    if _connector_secret_store is None:
+        from claude_web.secret_store import SecretStore
+
+        _connector_secret_store = SecretStore(
+            db_path=_DATA_DIR / "claude-web.db",
+            key_file=Path.home() / ".claude" / ".cw_connector_key",
+        )
+    return _connector_secret_store
+
+
+def _persist_config_secrets(cfg: dict, encrypt_secrets, store=None) -> dict:
+    """Replace flagged plaintext header/env values with cwsecret:// refs.
+
+    `encrypt_secrets` lists the header/env keys whose values must be encrypted
+    at rest. Values that are already refs are left as-is (idempotent on edit).
+    Returns the same cfg object with its mappings rewritten in place.
+    """
+    from claude_web.secret_store import is_secret_ref
+
+    keys = {str(k) for k in (encrypt_secrets or [])}
+    if not keys:
+        return cfg
+    store = store or _get_secret_store()
+    for mapping_key in ("headers", "env"):
+        mapping = cfg.get(mapping_key)
+        if not isinstance(mapping, dict):
+            continue
+        for field, value in list(mapping.items()):
+            if field in keys and value and not is_secret_ref(str(value)):
+                mapping[field] = store.store_secret(str(value), label=f"{cfg.get('type','')}:{field}")
+    return cfg
+
+
+def _resolve_config_secrets(cfg: dict) -> dict:
+    """Return connection headers/env with any cwsecret:// refs decrypted.
+
+    Only touches mappings that contain a ref, so the store (and cryptography)
+    stay untouched for plain-value connectors.
+    """
+    from claude_web.secret_store import is_secret_ref
+
+    resolved = {"headers": dict(cfg.get("headers") or {}), "env": dict(cfg.get("env") or {})}
+    needs = any(
+        is_secret_ref(v)
+        for mapping in resolved.values()
+        for v in mapping.values()
+    )
+    if not needs:
+        return resolved
+    store = _get_secret_store()
+    return {key: store.resolve_mapping(mapping) for key, mapping in resolved.items()}
+
+
+def _load_mcp_catalog() -> dict:
+    """Load the built-in connector catalog (cached). Never raises to callers:
+    a missing/corrupt file yields an empty catalog so the UI degrades to the
+    manual add form rather than erroring."""
+    global _mcp_catalog_cache
+    if _mcp_catalog_cache is None:
+        try:
+            data = json.loads(_MCP_CATALOG_PATH.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or not isinstance(data.get("connectors"), list):
+                data = {"version": 1, "connectors": []}
+        except (OSError, json.JSONDecodeError):
+            data = {"version": 1, "connectors": []}
+        _mcp_catalog_cache = data
+    return _mcp_catalog_cache
+
+
+@app.get("/api/mcp/catalog")
+async def get_mcp_catalog(request: Request):
+    _require_not_mobile_access(request)
+    return _load_mcp_catalog()
 
 
 @app.get("/api/mcp/servers")
@@ -13721,7 +13851,8 @@ async def add_mcp_server(
     target = _mcp_target(scope, cwd)
     if _mcp_config_in_source(target, name) is not None:
         raise HTTPException(status_code=409, detail=f"server '{name}' already exists")
-    cfg = _stdio_config_from_request(req)
+    cfg = _mcp_config_from_request(req)
+    cfg = _persist_config_secrets(cfg, req.encrypt_secrets)
     if req.disabled:
         if target["scope"] == "project":
             target["servers"][name] = cfg
@@ -13759,6 +13890,16 @@ async def patch_mcp_server(
         cfg["args"] = req.args
     if req.env is not None:
         cfg["env"] = req.env
+    if req.url is not None:
+        cfg["url"] = _validated_mcp_url(req.url)
+        # Adopt the transport the URL was given under; default to http.
+        transport = (req.type or "").strip().lower()
+        cfg["type"] = transport if transport in _REMOTE_MCP_TRANSPORTS else "http"
+        cfg.pop("command", None)
+        cfg.pop("args", None)
+    if req.headers is not None:
+        cfg["headers"] = req.headers
+    _persist_config_secrets(cfg, req.encrypt_secrets)
     save_choices = False
     cfg.pop("disabled", None)
     if req.disabled is not None:
@@ -13802,6 +13943,96 @@ async def _mcp_read_json_line(stream: asyncio.StreamReader, request_id: int, tim
     raise asyncio.TimeoutError
 
 
+async def _probe_remote_mcp_server(cfg: dict, resolved_headers: dict) -> dict:
+    """Probe an HTTP/SSE MCP server with initialize + tools/list.
+
+    `resolved_headers` are the connection headers with any cwsecret:// refs
+    already decrypted by the caller, so the plaintext secret never lives on the
+    stored config and the raw ref never goes on the wire.
+    """
+    url = str(cfg.get("url") or "").strip()
+    if not url:
+        return {"ok": False, "status": "error", "error": "缺少 url", "tools": []}
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+        # Base headers come from the stored config; `resolved_headers` overlays
+        # them with decrypted secret values so a cwsecret:// ref is replaced by
+        # its plaintext (and the raw ref never goes on the wire).
+        **{str(k): str(v) for k, v in (cfg.get("headers") or {}).items()},
+        **{str(k): str(v) for k, v in (resolved_headers or {}).items()},
+    }
+
+    def _extract(response_text: str) -> dict:
+        # Streamable-HTTP servers may answer as SSE ("data: {json}") or plain
+        # JSON. Accept either so the probe works against both transports.
+        text = response_text.strip()
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("data:"):
+                line = line[5:].strip()
+            if not line:
+                continue
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                continue
+        return json.loads(text) if text else {}
+
+    started = time.monotonic()
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            init_req = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "claude-web", "version": __version__},
+                },
+            }
+            init_resp = await client.post(url, headers=headers, json=init_req)
+            if init_resp.status_code in (401, 403):
+                return {"ok": False, "status": "needs-auth",
+                        "error": "远程服务需要授权（OAuth/密钥）", "tools": []}
+            init_resp.raise_for_status()
+            init_payload = _extract(init_resp.text)
+            if init_payload.get("error"):
+                raise RuntimeError(str(init_payload["error"]))
+            # A session id may be handed back for subsequent calls.
+            session_headers = dict(headers)
+            session_id = init_resp.headers.get("mcp-session-id")
+            if session_id:
+                session_headers["mcp-session-id"] = session_id
+            await client.post(url, headers=session_headers,
+                              json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+            tools_resp = await client.post(
+                url, headers=session_headers,
+                json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            )
+            tools_resp.raise_for_status()
+            tools_payload = _extract(tools_resp.text)
+            if tools_payload.get("error"):
+                raise RuntimeError(str(tools_payload["error"]))
+            tools = (tools_payload.get("result") or {}).get("tools") or []
+            return {
+                "ok": True,
+                "status": "ready",
+                "latency_ms": round((time.monotonic() - started) * 1000),
+                "server_info": (init_payload.get("result") or {}).get("serverInfo") or {},
+                "tools": [
+                    {"name": str(item.get("name") or ""),
+                     "description": str(item.get("description") or "")[:1000]}
+                    for item in tools if isinstance(item, dict)
+                ],
+            }
+    except Exception as exc:  # noqa: BLE001 - report any failure to the UI
+        return {"ok": False, "status": "error", "error": str(exc)[:1200], "tools": []}
+
+
 @app.post("/api/mcp/servers/{name}/health")
 async def check_mcp_server_health(
     request: Request,
@@ -13816,14 +14047,18 @@ async def check_mcp_server_health(
         raise HTTPException(status_code=404, detail=f"server '{name}' not found")
     if _is_mcp_disabled(target, name):
         return {"ok": False, "status": "disabled", "error": "MCP Server 当前已禁用", "tools": []}
-    if _mcp_transport(cfg) != "stdio":
-        return {"ok": False, "status": "unsupported", "error": "当前仅支持检测 stdio MCP Server", "tools": []}
+    transport = _mcp_transport(cfg)
+    if transport in _REMOTE_MCP_TRANSPORTS:
+        resolved = _resolve_config_secrets(cfg)
+        return await _probe_remote_mcp_server(cfg, resolved.get("headers") or {})
+    if transport != "stdio":
+        return {"ok": False, "status": "unsupported", "error": "不支持的 MCP 传输类型", "tools": []}
     command = str(cfg.get("command") or "").strip()
     args = [str(item) for item in (cfg.get("args") or [])]
     if not command:
         raise HTTPException(status_code=400, detail="MCP command is empty")
     env = os.environ.copy()
-    env.update({str(k): str(v) for k, v in (cfg.get("env") or {}).items()})
+    env.update({str(k): str(v) for k, v in (_resolve_config_secrets(cfg).get("env") or {}).items()})
     started = time.monotonic()
     process = None
     try:
@@ -13889,6 +14124,63 @@ async def check_mcp_server_health(
                     process.kill()
                 except Exception:
                     pass
+
+
+def _mcp_authorize_argv(name: str, url: str, transport: str, scope: str = "user") -> list:
+    """Build the `claude mcp add` argv that registers a remote server so the
+    CLI can drive its OAuth flow and store the token where the SDK reads it."""
+    return claude_cli_argv(
+        "mcp", "add", "--transport", transport, "--scope", scope, name, url,
+    )
+
+
+@app.post("/api/mcp/servers/{name}/authorize")
+async def authorize_mcp_server(
+    request: Request,
+    name: str,
+    cwd: Optional[str] = Query(default=None),
+    scope: Optional[str] = Query(default=None),
+):
+    """Register a remote connector via the `claude` CLI so it can perform OAuth.
+
+    The CLI owns the OAuth flow and its token storage (the Agent SDK reads the
+    same location), so we never handle a client secret here. A non-TTY web
+    backend cannot reliably drive the interactive browser callback, so this
+    registers the server and reports status; when it still needs auth the user
+    finishes once in a terminal using the returned hint.
+    """
+    _require_not_mobile_access(request)
+    target = _find_mcp_source(name, scope, cwd)
+    cfg = _mcp_config_in_source(target, name)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail=f"server '{name}' not found")
+    transport = _mcp_transport(cfg)
+    if transport not in _REMOTE_MCP_TRANSPORTS:
+        raise HTTPException(status_code=400, detail="仅远程 (http/sse) 连接器需要授权")
+    url = str(cfg.get("url") or "").strip()
+    argv = _mcp_authorize_argv(name, url, transport, scope=target["scope"])
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *argv,
+            cwd=str(_resolve_mcp_cwd(cwd)),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30.0)
+    except (asyncio.TimeoutError, FileNotFoundError, OSError) as exc:
+        return {
+            "ok": False,
+            "status": "error",
+            "error": str(exc)[:800],
+            "hint": "可在终端执行：" + " ".join(argv),
+        }
+    output = ((stdout or b"") + (stderr or b"")).decode("utf-8", errors="replace")
+    return {
+        "ok": process.returncode == 0,
+        "status": "registered" if process.returncode == 0 else "error",
+        "output": output.strip()[:2000],
+        "hint": "若仍显示待授权，请在终端执行：" + " ".join(argv),
+    }
 
 
 # ===== Config Center: Settings / Hooks / Skills / Permissions =====

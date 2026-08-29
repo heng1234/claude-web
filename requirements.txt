@@ -6,3 +6,7 @@ python-docx>=1.0
 python-pptx>=1.0
 openpyxl>=3.1
 xlrd>=2.0
+httpx>=0.27
+cryptography>=42
+# Optional: OS keychain for the connector secret master key (falls back to a 0600 key file if absent)
+# keyring>=24
