@@ -1510,6 +1510,27 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_templates (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                icon TEXT NOT NULL DEFAULT '',
+                system_prompt TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                effort TEXT NOT NULL DEFAULT '',
+                permission_mode TEXT NOT NULL DEFAULT 'default',
+                default_task TEXT NOT NULL DEFAULT '',
+                cwd TEXT NOT NULL DEFAULT '',
+                connector_ids TEXT NOT NULL DEFAULT '[]',
+                mode TEXT NOT NULL DEFAULT 'both',
+                builtin INTEGER NOT NULL DEFAULT 0,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session_usage_session ON session_usage(session_id, turn_idx)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session_usage_ts ON session_usage(ts)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id)")
@@ -1588,6 +1609,156 @@ def set_session_browser_enabled(session_id: str, enabled: bool) -> None:
             "UPDATE sessions SET browser_enabled = ? WHERE id = ?",
             (1 if enabled else 0, session_id),
         )
+
+
+# --- Agent templates (reusable session presets) ---------------------------
+# A template packs icon + system prompt + model + permission mode + bound
+# connectors + default task + cwd + mode into a named, cloneable snapshot.
+# Applied at "new session from template" time by pre-filling the /api/chat body
+# and enabling the bound connectors. Mode (code|chat|both) filters which
+# templates surface in each workspace mode.
+
+_AGENT_TEMPLATE_PERMISSION_MODES = {"default", "acceptEdits", "bypassPermissions", "plan"}
+_AGENT_TEMPLATE_MODES = {"code", "chat", "both"}
+
+
+def _agent_template_normalize(fields: dict) -> dict:
+    """Validate/clamp a template's writable fields into a storable dict.
+    Never mutates the input; returns a fresh dict of column values."""
+    name = str(fields.get("name") or "").strip()[:80]
+    if not name:
+        raise ValueError("模板名称不能为空")
+    permission_mode = str(fields.get("permission_mode") or "default").strip()
+    if permission_mode not in _AGENT_TEMPLATE_PERMISSION_MODES:
+        permission_mode = "default"
+    mode = str(fields.get("mode") or "both").strip().lower()
+    if mode not in _AGENT_TEMPLATE_MODES:
+        mode = "both"
+    raw_ids = fields.get("connector_ids")
+    ids = [str(x) for x in raw_ids if str(x).strip()] if isinstance(raw_ids, list) else []
+    return {
+        "name": name,
+        "icon": str(fields.get("icon") or "")[:40],
+        "system_prompt": str(fields.get("system_prompt") or "")[:20000],
+        "model": str(fields.get("model") or "")[:160],
+        "effort": str(fields.get("effort") or "")[:40],
+        "permission_mode": permission_mode,
+        "default_task": str(fields.get("default_task") or "")[:4000],
+        "cwd": str(fields.get("cwd") or "")[:2000],
+        "connector_ids": json.dumps(ids, ensure_ascii=False),
+        "mode": mode,
+    }
+
+
+def _agent_template_row_to_dict(row) -> dict:
+    """Shape a DB row into an API dict, parsing connector_ids JSON."""
+    data = dict(row)
+    try:
+        data["connector_ids"] = json.loads(data.get("connector_ids") or "[]")
+    except (TypeError, ValueError):
+        data["connector_ids"] = []
+    data["builtin"] = bool(data.get("builtin"))
+    return data
+
+
+def _agent_template_create(fields: dict) -> str:
+    values = _agent_template_normalize(fields)
+    now = time.time()
+    tid = uuid.uuid4().hex
+    builtin = 1 if fields.get("builtin") else 0
+    sort_order = int(fields.get("sort_order") or 0)
+    with db_connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO agent_templates
+                (id, name, icon, system_prompt, model, effort, permission_mode,
+                 default_task, cwd, connector_ids, mode, builtin, sort_order,
+                 created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                tid, values["name"], values["icon"], values["system_prompt"],
+                values["model"], values["effort"], values["permission_mode"],
+                values["default_task"], values["cwd"], values["connector_ids"],
+                values["mode"], builtin, sort_order, now, now,
+            ),
+        )
+    return tid
+
+
+def _agent_template_get(tid: str):
+    with db_connect() as conn:
+        row = conn.execute("SELECT * FROM agent_templates WHERE id = ?", (tid,)).fetchone()
+    return _agent_template_row_to_dict(row) if row is not None else None
+
+
+def _agent_template_list(mode: Optional[str] = None) -> list:
+    with db_connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM agent_templates ORDER BY builtin DESC, sort_order ASC, updated_at DESC"
+        ).fetchall()
+    items = [_agent_template_row_to_dict(r) for r in rows]
+    m = (mode or "").strip().lower()
+    if m in {"code", "chat"}:
+        items = [t for t in items if t["mode"] in {m, "both"}]
+    return items
+
+
+def _agent_template_update(tid: str, fields: dict) -> None:
+    existing = _agent_template_get(tid)
+    if existing is None:
+        raise KeyError(tid)
+    if existing["builtin"]:
+        raise PermissionError("内置模板不可修改，请先克隆")
+    merged = {**existing, **fields}
+    values = _agent_template_normalize(merged)
+    with db_connect() as conn:
+        conn.execute(
+            """
+            UPDATE agent_templates SET name=?, icon=?, system_prompt=?, model=?,
+                effort=?, permission_mode=?, default_task=?, cwd=?, connector_ids=?,
+                mode=?, updated_at=? WHERE id=?
+            """,
+            (
+                values["name"], values["icon"], values["system_prompt"],
+                values["model"], values["effort"], values["permission_mode"],
+                values["default_task"], values["cwd"], values["connector_ids"],
+                values["mode"], time.time(), tid,
+            ),
+        )
+
+
+def _agent_template_delete(tid: str) -> None:
+    existing = _agent_template_get(tid)
+    if existing is None:
+        return
+    if existing["builtin"]:
+        raise PermissionError("内置模板不可删除")
+    with db_connect() as conn:
+        conn.execute("DELETE FROM agent_templates WHERE id = ?", (tid,))
+
+
+def _agent_template_clone(tid: str) -> str:
+    src = _agent_template_get(tid)
+    if src is None:
+        raise KeyError(tid)
+    fields = {**src, "name": f"{src['name']} 副本", "builtin": False}
+    return _agent_template_create(fields)
+
+
+def _agent_template_export(tid: str) -> dict:
+    src = _agent_template_get(tid)
+    if src is None:
+        raise KeyError(tid)
+    blob = _agent_template_normalize(src)
+    blob["connector_ids"] = src["connector_ids"]  # export as a list, not JSON text
+    blob["icon"] = src["icon"]
+    return blob
+
+
+def _agent_template_import(blob: dict) -> str:
+    # Imported templates are always fresh, user-owned, editable copies.
+    return _agent_template_create({**blob, "builtin": False})
 
 
 _SUMMARY_CACHE_LIMIT = 20000
@@ -2177,6 +2348,19 @@ class CodeWorkspacePresetRequest(BaseModel):
     light_context: Optional[bool] = True
     validation_command: Optional[str] = ""
     validation_mode: Optional[str] = "ask"
+
+
+class AgentTemplateRequest(BaseModel):
+    name: str
+    icon: Optional[str] = ""
+    system_prompt: Optional[str] = ""
+    model: Optional[str] = ""
+    effort: Optional[str] = ""
+    permission_mode: Optional[str] = "default"
+    default_task: Optional[str] = ""
+    cwd: Optional[str] = ""
+    connector_ids: Optional[List[str]] = None
+    mode: Optional[str] = "both"
 
 
 class ProjectPathRequest(BaseModel):
@@ -10597,6 +10781,89 @@ async def delete_code_workspace_preset(request: Request, preset_id: str):
     with db_connect() as conn:
         conn.execute("DELETE FROM code_workspace_presets WHERE id = ?", (preset_id,))
     return {"ok": True}
+
+
+_AGENT_TEMPLATE_ID_RE = re.compile(r"[0-9a-f]{32}")
+
+
+def _valid_agent_template_id(tid: str) -> str:
+    if not _AGENT_TEMPLATE_ID_RE.fullmatch(tid or ""):
+        raise HTTPException(status_code=400, detail="invalid template id")
+    return tid
+
+
+@app.get("/api/agent-templates")
+async def list_agent_templates(request: Request, mode: Optional[str] = None):
+    _require_not_mobile_access(request)
+    return {"templates": _agent_template_list(mode=mode)}
+
+
+@app.post("/api/agent-templates")
+async def create_agent_template(request: Request, req: AgentTemplateRequest):
+    _require_not_mobile_access(request)
+    try:
+        tid = _agent_template_create(req.dict())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True, "id": tid, "template": _agent_template_get(tid)}
+
+
+@app.patch("/api/agent-templates/{template_id}")
+async def update_agent_template(request: Request, template_id: str, req: AgentTemplateRequest):
+    _require_not_mobile_access(request)
+    _valid_agent_template_id(template_id)
+    try:
+        _agent_template_update(template_id, req.dict())
+    except KeyError:
+        raise HTTPException(status_code=404, detail="template not found")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True, "template": _agent_template_get(template_id)}
+
+
+@app.delete("/api/agent-templates/{template_id}")
+async def delete_agent_template(request: Request, template_id: str):
+    _require_not_mobile_access(request)
+    _valid_agent_template_id(template_id)
+    try:
+        _agent_template_delete(template_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    return {"ok": True}
+
+
+@app.post("/api/agent-templates/{template_id}/clone")
+async def clone_agent_template(request: Request, template_id: str):
+    _require_not_mobile_access(request)
+    _valid_agent_template_id(template_id)
+    try:
+        new_id = _agent_template_clone(template_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="template not found")
+    return {"ok": True, "id": new_id, "template": _agent_template_get(new_id)}
+
+
+@app.get("/api/agent-templates/{template_id}/export")
+async def export_agent_template(request: Request, template_id: str):
+    _require_not_mobile_access(request)
+    _valid_agent_template_id(template_id)
+    try:
+        blob = _agent_template_export(template_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="template not found")
+    return {"ok": True, "template": blob}
+
+
+@app.post("/api/agent-templates/import")
+async def import_agent_template(request: Request, req: AgentTemplateRequest):
+    _require_not_mobile_access(request)
+    try:
+        new_id = _agent_template_import(req.dict())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True, "id": new_id, "template": _agent_template_get(new_id)}
 
 
 @app.post("/api/sessions/{session_id}/changes/review")
