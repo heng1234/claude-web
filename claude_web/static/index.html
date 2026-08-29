@@ -26222,7 +26222,9 @@ async function openAgentTemplateEditor(id) {
   const atCwdList = $('atCwdList');
   if (atCwdList) atCwdList.innerHTML = (savedCwdOptions || []).map(p => `<option value="${escapeHtml(p)}"></option>`).join('');
   renderAtConnectorChips();
-  if (readonly) $('atConnectors').querySelectorAll('[data-at-conn]').forEach(ch => ch.style.pointerEvents = 'none');
+  if (readonly) $('atConnectors').querySelectorAll('[data-at-conn]').forEach(ch => {
+    ch.style.pointerEvents = 'none'; ch.setAttribute('tabindex', '-1'); ch.setAttribute('aria-disabled', 'true');
+  });
   openModal(agentTemplateEditor);
 }
 
@@ -26280,10 +26282,11 @@ async function exportAgentTemplate(id) {
     const data = await r.json();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    const blobUrl = URL.createObjectURL(blob);
+    a.href = blobUrl;
     a.download = ((tpl && tpl.name) || 'agent-template').replace(/[^\w.-]+/g, '_') + '.json';
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   } catch (e) { toast((t('errors.unknown_error') || '出错') + ': ' + String(e.message || e)); }
 }
 
@@ -26295,6 +26298,9 @@ $('agentTemplateImportBtn')?.addEventListener('click', () => {
     if (!file) return;
     try {
       const parsed = JSON.parse(await file.text());
+      if (typeof parsed !== 'object' || parsed === null || typeof parsed.name !== 'string' || !parsed.name.trim()) {
+        throw new Error(t('html.agent_template_invalid_file') || '无效的模板文件');
+      }
       const r = await fetch('/api/agent-templates/import', {
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(parsed),
       });
@@ -26312,13 +26318,22 @@ $('agentTemplateImportBtn')?.addEventListener('click', () => {
 async function applyAgentTemplate(id) {
   const tpl = agentTemplates.find(x => String(x.id) === String(id));
   if (!tpl) return;
-  // Mode: switch code/chat if the template is mode-specific.
+
+  // Warn user if a conversation is already in progress.
+  if (sessionId) {
+    const ok = confirm(t('html.agent_template_confirm_apply') || '应用模板会开启一个新会话，当前会话将保留在历史记录中。确定继续？');
+    if (!ok) return;
+  }
+
+  // Start new session FIRST, then switch mode — avoids double startNewSession
+  // from setCodeMode's own cwd-change guard firing after we've already reset.
+  startNewSession();
+
+  // Mode switch after session reset so no second reset is triggered.
   if (tpl.mode === 'code' && !codeMode) setCodeMode(true);
   else if (tpl.mode === 'chat' && codeMode) setCodeMode(false);
 
   const nextCwd = String(tpl.cwd || '').trim();
-  // Fresh session so system prompt / cwd apply cleanly to the next turn.
-  if (sessionId) startNewSession();
   if (nextCwd) cwdInput.value = nextCwd;
 
   selectedModel = tpl.model || ''; modelSelect.value = selectedModel; LS.set('model', selectedModel);
@@ -26348,23 +26363,28 @@ async function autoEnableTemplateConnectors(ids) {
   if (!ids.length) return;
   if (!mcpCatalog) await loadMcpCatalog();
   const missing = [];
+  const enabled = [];
   for (const rawId of ids) {
     const id = String(rawId);
     const c = (mcpCatalog || []).find(x => String(x.id) === id);
-    if (mcpInstalledNames.has(id.toLowerCase())) continue;   // already present
+    if (mcpInstalledNames.has(id.toLowerCase())) { enabled.push(c ? (c.name || id) : id); continue; }
     if (c && !connectorNeedsInput(c)) {
       try {
         const scope = $('mcpNewScope')?.value || 'local';
         const body = connectorRequestBody(c, {}, true);
         await submitMcpServer(c.id, body, scope);
+        enabled.push(c.name || id);
       } catch (_) { missing.push(c ? (c.name || id) : id); }
     } else {
-      missing.push(c ? (c.name || id) : id);   // needs key / OAuth / unknown
+      missing.push(c ? (c.name || id) : id);
     }
   }
   refreshMcpServers();
-  if (missing.length) {
-    const go = confirm((t('html.agent_template_connectors_missing') || '以下连接器需要手动完成授权/密钥：') + '\n\n' + missing.join('、') + '\n\n' + (t('html.agent_template_open_market') || '现在去连接器中心配置？'));
+  if (enabled.length && !missing.length) {
+    toast((t('html.agent_template_connectors_enabled') || '已自动启用连接器：') + enabled.join('、'));
+  } else if (missing.length) {
+    const detail = missing.map(n => '• ' + n).join('\n');
+    const go = confirm((t('html.agent_template_connectors_missing') || '以下连接器需要手动完成授权/密钥：') + '\n\n' + detail + '\n\n' + (t('html.agent_template_open_market') || '现在去连接器中心配置？'));
     if (go) { closeModal(agentTemplateMarket); openConnectorMarket(); }
   }
 }

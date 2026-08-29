@@ -1431,6 +1431,8 @@
     "agent_template_applied": "已应用模板：",
     "agent_template_connectors_missing": "以下连接器需要手动完成授权/密钥：",
     "agent_template_open_market": "现在去连接器中心配置？",
-    "agent_template_import_failed": "导入失败"
+    "agent_template_import_failed": "导入失败",
+    "agent_template_invalid_file": "无效的模板文件，缺少必填字段",
+    "agent_template_connectors_enabled": "已自动启用连接器："
   }
 }

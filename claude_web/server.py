@@ -8190,94 +8190,94 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 status_code=503,
                 detail=_claude_agent_bridge.last_error or "Claude Agent SDK is unavailable",
             )
-            agent_params = {
-                "cwd": work_dir,
-                "content": _agent_sdk_message_content(full_message, req.images or []),
-                "model": req.model,
-                "effort": req.effort or "high",
-                "permissionMode": effective_permission_mode,
-                "allowedTools": req.allowed_tools,
-                "disallowedTools": req.disallowed_tools,
-                "browserEnabled": effective_browser_enabled,
-                "runtimeEpoch": remote_session_id,
-            }
-            # Inject system prompt (and for chat mode: memories + pinned docs).
-            # Code mode keeps Claude Code's built-in system prompt intact so we
-            # only append the user/template override. Chat mode has no built-in
-            # prompt so we compose the full context here.
-            _sdk_system_prompt = compose_system_prompt(
-                [] if code_workspace else load_enabled_memories(work_dir, session_id),
-                req.system_prompt,
-                None if code_workspace else load_session_pinned_docs(session_id),
-            )
-            if _sdk_system_prompt:
-                agent_params["systemPromptAppend"] = _sdk_system_prompt
-            # Inject enabled connectors with secrets decrypted just for this run,
-            # so encrypted connectors actually connect (the on-disk .mcp.json the
-            # CLI reads only holds cwsecret:// refs it can't resolve).
-            runtime_mcp = _runtime_mcp_servers(work_dir)
-            if runtime_mcp:
-                agent_params["mcpServers"] = runtime_mcp
-            if remote_ready and not is_new:
-                agent_params["resumeSessionId"] = remote_session_id
-            else:
-                agent_params["sessionId"] = remote_session_id
-            reserved_turn_id = _reserve_code_turn(session_id, req.client_turn_id)
+        agent_params = {
+            "cwd": work_dir,
+            "content": _agent_sdk_message_content(full_message, req.images or []),
+            "model": req.model,
+            "effort": req.effort or "high",
+            "permissionMode": effective_permission_mode,
+            "allowedTools": req.allowed_tools,
+            "disallowedTools": req.disallowed_tools,
+            "browserEnabled": effective_browser_enabled,
+            "runtimeEpoch": remote_session_id,
+        }
+        # Inject system prompt (and for chat mode: memories + pinned docs).
+        # Code mode keeps Claude Code's built-in system prompt intact so we
+        # only append the user/template override. Chat mode has no built-in
+        # prompt so we compose the full context here.
+        _sdk_system_prompt = compose_system_prompt(
+            [] if code_workspace else load_enabled_memories(work_dir, session_id),
+            req.system_prompt,
+            None if code_workspace else load_session_pinned_docs(session_id),
+        )
+        if _sdk_system_prompt:
+            agent_params["systemPromptAppend"] = _sdk_system_prompt
+        # Inject enabled connectors with secrets decrypted just for this run,
+        # so encrypted connectors actually connect (the on-disk .mcp.json the
+        # CLI reads only holds cwsecret:// refs it can't resolve).
+        runtime_mcp = _runtime_mcp_servers(work_dir)
+        if runtime_mcp:
+            agent_params["mcpServers"] = runtime_mcp
+        if remote_ready and not is_new:
+            agent_params["resumeSessionId"] = remote_session_id
+        else:
+            agent_params["sessionId"] = remote_session_id
+        reserved_turn_id = _reserve_code_turn(session_id, req.client_turn_id)
+        try:
+            turn = await _claude_agent_bridge.open_turn(session_id, agent_params)
+        except asyncio.TimeoutError as exc:
             try:
-                turn = await _claude_agent_bridge.open_turn(session_id, agent_params)
-            except asyncio.TimeoutError as exc:
-                try:
-                    await _claude_agent_bridge.restart(
-                        "Claude Agent SDK bridge did not queue the turn within the acknowledgement window"
-                    )
-                except Exception:
-                    pass
-                _release_code_turn(session_id, reserved_turn_id)
-                await discard_git_checkpoint(checkpoint, work_dir)
-                raise HTTPException(
-                    status_code=504,
-                    detail=(
-                        "Claude Agent SDK bridge did not queue the turn; the bridge was restarted "
-                        "without replaying the request. Check recent file/tool state before sending it again."
-                    ),
-                ) from exc
-            except AgentSdkBridgeError as exc:
-                message = str(exc)
-                activation_state = await _settle_pending_agent_sdk_activation(
-                    success=False,
-                    error=message,
-                    session_id=session_id,
+                await _claude_agent_bridge.restart(
+                    "Claude Agent SDK bridge did not queue the turn within the acknowledgement window"
                 )
-                if activation_state in {"rolled_back", "rollback_failed"}:
-                    message = (
-                        f"{message}\n"
-                        "新版 Claude Agent SDK 兼容校验失败，已恢复上一版本；本轮任务未自动重放。"
-                    )
-                status_code = (
-                    429 if "runtime limit reached" in message
-                    else (409 if "already running" in message or "active turn" in message else 502)
-                )
-                _release_code_turn(session_id, reserved_turn_id)
-                await discard_git_checkpoint(checkpoint, work_dir)
-                raise HTTPException(status_code=status_code, detail=message) from exc
-            await async_append_event(session_id, user_event)
-            _mark_code_turn_accepted(session_id, reserved_turn_id)
-            set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
-            _plan_waiting_sessions.discard(session_id)
-            _agent_sdk_running_sessions.add(session_id)
-            return _agent_sdk_streaming_response(
-                turn=turn,
+            except Exception:
+                pass
+            _release_code_turn(session_id, reserved_turn_id)
+            await discard_git_checkpoint(checkpoint, work_dir)
+            raise HTTPException(
+                status_code=504,
+                detail=(
+                    "Claude Agent SDK bridge did not queue the turn; the bridge was restarted "
+                    "without replaying the request. Check recent file/tool state before sending it again."
+                ),
+            ) from exc
+        except AgentSdkBridgeError as exc:
+            message = str(exc)
+            activation_state = await _settle_pending_agent_sdk_activation(
+                success=False,
+                error=message,
                 session_id=session_id,
-                remote_session_id=remote_session_id,
-                remote_ready=remote_ready,
-                work_dir=work_dir,
-                display_text=display_text,
-                checkpoint=checkpoint,
-                git_dirty_before=git_dirty_before,
-                workspace_mode=workspace_mode,
-                turn_id=turn_id,
-                reconnect_params=agent_params,
             )
+            if activation_state in {"rolled_back", "rollback_failed"}:
+                message = (
+                    f"{message}\n"
+                    "新版 Claude Agent SDK 兼容校验失败，已恢复上一版本；本轮任务未自动重放。"
+                )
+            status_code = (
+                429 if "runtime limit reached" in message
+                else (409 if "already running" in message or "active turn" in message else 502)
+            )
+            _release_code_turn(session_id, reserved_turn_id)
+            await discard_git_checkpoint(checkpoint, work_dir)
+            raise HTTPException(status_code=status_code, detail=message) from exc
+        await async_append_event(session_id, user_event)
+        _mark_code_turn_accepted(session_id, reserved_turn_id)
+        set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
+        _plan_waiting_sessions.discard(session_id)
+        _agent_sdk_running_sessions.add(session_id)
+        return _agent_sdk_streaming_response(
+            turn=turn,
+            session_id=session_id,
+            remote_session_id=remote_session_id,
+            remote_ready=remote_ready,
+            work_dir=work_dir,
+            display_text=display_text,
+            checkpoint=checkpoint,
+            git_dirty_before=git_dirty_before,
+            workspace_mode=workspace_mode,
+            turn_id=turn_id,
+            reconnect_params=agent_params,
+        )
         # An explicit CLAUDE_WEB_CODE_RUNTIME=cli setting may select the legacy
         # runtime only for a new/unowned Code session. Once pinned, ownership is
         # never changed implicitly.

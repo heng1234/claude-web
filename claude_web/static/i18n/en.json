@@ -1431,6 +1431,8 @@
     "agent_template_applied": "Applied template: ",
     "agent_template_connectors_missing": "These connectors need manual auth/keys:",
     "agent_template_open_market": "Open the connector hub now?",
-    "agent_template_import_failed": "Import failed"
+    "agent_template_import_failed": "Import failed",
+    "agent_template_invalid_file": "Invalid template file, missing required fields",
+    "agent_template_connectors_enabled": "Auto-enabled connectors: "
   }
 }
