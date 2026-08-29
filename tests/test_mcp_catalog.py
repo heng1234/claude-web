@@ -118,6 +118,31 @@ class ConnectorCatalogStructureTest(unittest.TestCase):
             if entry.get("abbr") and not entry.get("logo"):
                 self.assertTrue(entry.get("brand"), f"{entry['id']} abbr tile needs brand")
 
+    def test_capability_values_are_from_a_known_set(self):
+        # capability is an optional tier hint; only known values are allowed so
+        # the UI's label/badge map stays in sync.
+        for entry in self.catalog["connectors"]:
+            cap = entry.get("capability")
+            if cap is not None:
+                self.assertIn(cap, ("notify",), f"{entry['id']} bad capability {cap}")
+
+    def test_push_only_bots_are_marked_notify(self):
+        # WeCom / DingTalk group robots can only push, not read/write — they must
+        # carry capability:notify so the UI badges them "仅通知".
+        by_id = {e["id"]: e for e in self.catalog["connectors"]}
+        for pid in ("wecom", "dingtalk"):
+            self.assertEqual(by_id[pid].get("capability"), "notify",
+                             f"{pid} should be capability:notify")
+
+    def test_full_read_write_tools_are_not_marked_notify(self):
+        # Feishu / email / GitHub are real read/write tools, not push-only bots;
+        # mislabeling them "notify" would misinform users.
+        by_id = {e["id"]: e for e in self.catalog["connectors"]}
+        for fid in ("feishu", "email", "github"):
+            if fid in by_id:
+                self.assertNotEqual(by_id[fid].get("capability"), "notify",
+                                    f"{fid} is a full tool, not notify-only")
+
 
 if __name__ == "__main__":
     unittest.main()

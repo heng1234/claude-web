@@ -1,6 +1,6 @@
 {
-  "version": 4,
-  "note": "Built-in connector catalog. transport: stdio|http|sse; auth: none|api_key|oauth. Logo priority: bundled SVG (logo: connectors/<id>.svg, from simple-icons CC0) on a brand tile → colored word-mark tile (abbr + brand, for brands with no CC0 logo e.g. Feishu/DingTalk) → emoji icon. api_key entries declare secret_fields (target: env|header|url|arg) so the UI collects keys and routes them to the encrypted secret store; target:arg fills a <PLACEHOLDER> token in args (e.g. Feishu's -s <APP_SECRET>). Verified 2026-08 against npm/PyPI: @larksuiteoapi/lark-mcp (official Feishu), open-dingtalk/dingtalk-mcp (official DingTalk), wecom-mcp, mcp-email-server, akshare-one-mcp, api.tushare.pro/mcp are live public/free (user supplies own key). @modelcontextprotocol/server-* reference packages were mostly deprecated 2025-05; only filesystem/fetch/memory survive. Commercial services without a public MCP are listed as http templates for the user to fill in.",
+  "version": 5,
+  "note": "Built-in connector catalog. transport: stdio|http|sse; auth: none|api_key|oauth. capability:notify marks push-only bots (WeCom/DingTalk group robots) that can only send notifications, not read/write — the UI badges these '仅通知' to set user expectation vs full read/write tools (GitHub/Feishu/email). Logo priority: bundled SVG (logo: connectors/<id>.svg, from simple-icons CC0) on a brand tile → colored word-mark tile (abbr + brand, for brands with no CC0 logo e.g. Feishu/DingTalk) → emoji icon. api_key entries declare secret_fields (target: env|header|url|arg) so the UI collects keys and routes them to the encrypted secret store; target:arg fills a <PLACEHOLDER> token in args (e.g. Feishu's -s <APP_SECRET>). Verified 2026-08 against npm/PyPI: @larksuiteoapi/lark-mcp (official Feishu), open-dingtalk/dingtalk-mcp (official DingTalk), wecom-mcp, mcp-email-server, akshare-one-mcp, api.tushare.pro/mcp are live public/free (user supplies own key). @modelcontextprotocol/server-* reference packages were mostly deprecated 2025-05; only filesystem/fetch/memory survive. Commercial services without a public MCP are listed as http templates for the user to fill in.",
   "connectors": [
     {
       "id": "filesystem",
@@ -231,6 +231,7 @@
       "category": "office",
       "transport": "stdio",
       "auth": "api_key",
+      "capability": "notify",
       "icon": "📨",
       "abbr": "钉",
       "brand": "#3296FA",
@@ -250,6 +251,7 @@
       "category": "office",
       "transport": "stdio",
       "auth": "api_key",
+      "capability": "notify",
       "icon": "💬",
       "logo": "connectors/wechat.svg",
       "brand": "#07C160",

@@ -1146,6 +1146,16 @@
     background: var(--surface-2); color: var(--text-subtle); border: 1px solid var(--border);
     flex-shrink: 0;
   }
+  .cw-connector-tag.is-oauth {
+    color: #16834a; border-color: color-mix(in srgb, #16834a 30%, transparent);
+    background: color-mix(in srgb, #16834a 9%, transparent);
+  }
+  .cw-connector-tag.is-notify {
+    color: #b45309; border-color: color-mix(in srgb, #b45309 30%, transparent);
+    background: color-mix(in srgb, #b45309 10%, transparent);
+  }
+  :root.dark .cw-connector-tag.is-oauth { color: #34d399; }
+  :root.dark .cw-connector-tag.is-notify { color: #fbbf24; }
   .cw-connector-plus {
     font-size: 22px; line-height: 1; flex-shrink: 0; align-self: center;
     width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
@@ -25628,7 +25638,43 @@ const MCP_CATEGORY_LABELS = {
   media: '媒体', web: '网络', research: '学术', other: '其他',
 };
 
-const CONNECTOR_AUTH_LABELS = { none: '', api_key: '需密钥', oauth: 'OAuth' };
+const CONNECTOR_AUTH_LABELS = { none: '', api_key: '需密钥', oauth: '一键授权' };
+const CONNECTOR_CAPABILITY_LABELS = { notify: '仅通知' };
+
+// Chips that communicate the connector's tier so users know the effort/ability
+// before clicking: oauth = one-click authorize (green), api_key = needs own
+// keys/self-built app, capability:notify = push-only bot (amber). Shared by the
+// market grid and the detail card so both stay in sync.
+function connectorTagsHtml(c) {
+  const chips = [];
+  if (c.auth && c.auth !== 'none') {
+    const cls = c.auth === 'oauth' ? ' is-oauth' : '';
+    const label = t('html.connector_auth_' + c.auth) || CONNECTOR_AUTH_LABELS[c.auth] || c.auth;
+    chips.push(`<span class="cw-connector-tag${cls}">${escapeHtml(label)}</span>`);
+  }
+  if (c.capability && CONNECTOR_CAPABILITY_LABELS[c.capability]) {
+    const label = t('html.connector_cap_' + c.capability) || CONNECTOR_CAPABILITY_LABELS[c.capability];
+    chips.push(`<span class="cw-connector-tag is-notify">${escapeHtml(label)}</span>`);
+  }
+  return chips.join('');
+}
+
+// One-line expectation hint shown in the detail card: how much setup this tier
+// costs, and (for notify bots) that it can only push, not read/write. Keeps the
+// GitHub-style "one click" cards honest against self-built-app connectors.
+function connectorSetupHintHtml(c) {
+  const parts = [];
+  if (c.capability === 'notify') {
+    parts.push(t('html.connector_hint_notify') || '此连接器为群机器人，仅能向群聊推送通知，不能读取或管理消息。');
+  }
+  if (c.auth === 'oauth') {
+    parts.push(t('html.connector_hint_oauth') || '点击连接后在浏览器完成授权即可，无需自备密钥。');
+  } else if (c.auth === 'api_key') {
+    parts.push(t('html.connector_hint_api_key') || '需先在对方开放平台自建应用/机器人并获取密钥，再填入此处（密钥仅本机加密存储）。');
+  }
+  if (!parts.length) return '';
+  return `<div class="text-xs leading-relaxed mb-5" style="color:var(--text-subtle);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">${escapeHtml(parts.join(' '))}</div>`;
+}
 
 // Render a connector's brand logo. Priority: bundled SVG on its brand tile →
 // colored word-mark tile (for brands with no CC0 logo, e.g. Feishu/DingTalk) →
@@ -25678,7 +25724,6 @@ function renderConnectorMarket() {
   });
 
   const items = mcpCatalog.filter(c => mcpCatalogCategory === 'all' || (c.category || 'other') === mcpCatalogCategory);
-  const tagText = t('html.connector_tag') || '连接器';
   const connectedText = t('html.connector_connected') || '已连接';
   grid.innerHTML = items.map(c => {
     const installed = mcpInstalledNames.has(String(c.id).toLowerCase());
@@ -25688,7 +25733,7 @@ function renderConnectorMarket() {
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
           <span class="font-medium text-sm truncate">${escapeHtml(c.name || c.id)}</span>
-          <span class="cw-connector-tag">${escapeHtml(tagText)}</span>
+          ${connectorTagsHtml(c)}
         </div>
         <div class="mt-1 text-xs leading-relaxed" style="color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(c.description || '')}</div>
       </div>
@@ -25729,7 +25774,7 @@ function renderMcpCatalog() {
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
           <span class="font-medium text-sm">${escapeHtml(c.name || c.id)}</span>
-          ${c.auth && c.auth !== 'none' ? `<span class="cw-connector-tag">${escapeHtml(CONNECTOR_AUTH_LABELS[c.auth] || c.auth)}</span>` : ''}
+          ${connectorTagsHtml(c)}
         </div>
         <div class="mt-1 text-xs leading-relaxed" style="color:var(--text-muted);">${escapeHtml(c.description || '')}</div>
       </div>
@@ -25833,11 +25878,12 @@ function openConnectorDetail(id) {
       </div>
       <div class="text-lg font-semibold mb-2">${escapeHtml(c.name || c.id)}</div>
       <div class="text-sm leading-relaxed mb-4" style="color:var(--text-muted);">${escapeHtml(desc)}</div>
-      <div class="flex items-center gap-2 mb-5">
+      <div class="flex items-center gap-2 mb-3 flex-wrap">
         <span class="cw-connector-tag">${escapeHtml(t('html.connector_tag') || '连接器')}</span>
-        ${c.auth && c.auth !== 'none' ? `<span class="cw-connector-tag">${escapeHtml(CONNECTOR_AUTH_LABELS[c.auth] || c.auth)}</span>` : ''}
+        ${connectorTagsHtml(c)}
         ${c.docs ? `<a href="${escapeHtml(c.docs)}" target="_blank" rel="noopener" class="text-xs ml-auto" style="color:var(--accent);">${escapeHtml(t('html.connector_learn_more') || '了解更多')}</a>` : ''}
       </div>
+      ${connectorSetupHintHtml(c)}
       <button data-cd-connect class="btn btn-primary w-full" style="padding:10px;">${escapeHtml(connectLabel)}</button>
     </div>`;
   document.body.appendChild(back);
