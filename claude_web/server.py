@@ -15022,7 +15022,7 @@ async def list_market_skills(request: Request):
 
         api_url = f"https://api.github.com/repos/{_SKILLS_MARKET_REPO}/contents/{_SKILLS_MARKET_SUBDIR}"
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
                 r = await client.get(api_url, headers={"Accept": "application/vnd.github.v3+json"})
                 r.raise_for_status()
                 entries = r.json()
@@ -15044,7 +15044,7 @@ async def list_market_skills(request: Request):
 
         async def fetch_desc(s: dict) -> dict:
             try:
-                async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+                async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
                     r = await client.get(s["skill_md_url"])
                     if r.status_code == 200:
                         parsed = _parse_skill_frontmatter_text(r.text, s["name"])

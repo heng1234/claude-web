@@ -1255,6 +1255,75 @@
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   }
 
+  /* ===== Agent Template Editor modal ===== */
+  #agentTemplateEditor .modal-box { border-radius: 16px; }
+  .at-editor-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px 18px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, var(--bg)) 0%, var(--bg) 100%);
+  }
+  .at-editor-header-left { display: flex; align-items: center; gap: 10px; }
+  .at-editor-header-icon {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .at-editor-title { font-size: 15px; font-weight: 700; color: var(--text); }
+  .at-editor-close {
+    width: 28px; height: 28px; border-radius: 8px; border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: var(--text-muted); cursor: pointer; transition: background .15s;
+  }
+  .at-editor-close:hover { background: var(--hover); color: var(--text); }
+  .at-editor-body { padding: 20px 24px; overflow-y: auto; max-height: 66vh; display: flex; flex-direction: column; gap: 16px; }
+  .at-field-label {
+    font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 5px; display: flex; align-items: center; gap: 4px;
+  }
+  .at-field-label .at-label-hint {
+    font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0;
+    color: var(--text-subtle); opacity: .8;
+  }
+  .at-icon-input-wrap {
+    width: 64px; height: 64px; border-radius: 14px;
+    border: 1.5px solid var(--border); background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .15s, box-shadow .15s; cursor: text; overflow: hidden;
+  }
+  .at-icon-input-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+  .at-icon-input-wrap input { width: 100%; height: 100%; border: none; background: transparent; text-align: center; font-size: 26px; outline: none; padding: 0; cursor: text; }
+  .at-name-input { font-size: 15px; font-weight: 500; }
+  .at-system-prompt { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.6; resize: vertical; }
+  .at-section-divider { height: 1px; background: var(--border); margin: 2px 0; opacity: .5; }
+  .at-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .at-editor-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 60%, var(--bg));
+  }
+  .at-editor-footer-hint { font-size: 11px; color: var(--text-subtle); }
+  .at-save-btn {
+    display: flex; align-items: center; gap: 6px; padding: 7px 20px;
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s;
+  }
+  .at-save-btn:hover { opacity: .9; transform: translateY(-1px); }
+  .at-save-btn:active { transform: translateY(0); }
+  .at-cancel-btn {
+    padding: 7px 16px; background: transparent;
+    border: 1px solid var(--border); border-radius: 8px;
+    font-size: 13px; color: var(--text-muted); cursor: pointer; transition: border-color .15s, color .15s;
+  }
+  .at-cancel-btn:hover { border-color: var(--text-muted); color: var(--text); }
+  .at-readonly-banner {
+    display: flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+    font-size: 12px; color: var(--text-muted);
+  }
+
   /* ===== Settings modal ===== */
   #settingsModal.modal-backdrop {
     background: rgba(47, 44, 41, .42);
@@ -9542,39 +9611,60 @@ async function switchLang(lang) {
 
 <!-- Agent Template editor -->
 <div id="agentTemplateEditor" class="modal-backdrop hidden">
-  <div class="modal-box p-0" style="max-width:580px;overflow:hidden;">
+  <div class="modal-box p-0" style="max-width:600px;overflow:hidden;">
     <!-- header -->
-    <div class="flex items-center justify-between px-6 pt-5 pb-4" style="border-bottom:1px solid var(--border);">
-      <div id="agentTemplateEditorTitle" class="text-base font-semibold">＋ 新建模板</div>
-      <button data-close class="text-xl leading-none" style="color:var(--text-subtle);">×</button>
+    <div class="at-editor-header">
+      <div class="at-editor-header-left">
+        <div class="at-editor-header-icon">🧩</div>
+        <div id="agentTemplateEditorTitle" class="at-editor-title">＋ 新建模板</div>
+      </div>
+      <button data-close class="at-editor-close">×</button>
     </div>
     <!-- body -->
-    <div class="px-6 py-4 space-y-4" style="max-height:68vh;overflow-y:auto;">
+    <div class="at-editor-body">
+      <!-- readonly banner (shown for builtin) -->
+      <div id="atReadonlyBanner" class="at-readonly-banner hidden">
+        <span>🔒</span>
+        <span data-i18n="html.agent_template_readonly_hint">内置模板只读，可克隆后修改。</span>
+      </div>
       <!-- icon + name row -->
-      <div class="flex gap-3 items-start">
+      <div class="flex gap-3 items-end">
         <div>
-          <div class="text-xs mb-1" style="color:var(--text-muted);" data-i18n="html.agent_template_icon">图标</div>
-          <input id="atIcon" class="cw-input text-center" maxlength="4" placeholder="🧩" style="width:64px;font-size:22px;padding:6px 0;text-align:center;" />
+          <div class="at-field-label" data-i18n="html.agent_template_icon">图标</div>
+          <div class="at-icon-input-wrap">
+            <input id="atIcon" maxlength="4" placeholder="🧩" />
+          </div>
         </div>
         <div class="flex-1">
-          <div class="text-xs mb-1" style="color:var(--text-muted);" data-i18n="html.agent_template_name">名称 <span style="color:#ef4444;">*</span></div>
-          <input id="atName" class="cw-input w-full" maxlength="80" placeholder="例如：代码审查员" />
+          <div class="at-field-label">
+            <span data-i18n="html.agent_template_name">名称</span>
+            <span style="color:#ef4444;">*</span>
+          </div>
+          <input id="atName" class="cw-input w-full at-name-input" maxlength="80" placeholder="例如：代码审查员" />
         </div>
       </div>
+      <div class="at-section-divider"></div>
       <!-- system prompt -->
       <div>
-        <div class="text-xs mb-1" style="color:var(--text-muted);" data-i18n="html.agent_template_system_prompt">系统提示 <span style="color:var(--text-subtle);font-weight:400;">(append-system-prompt)</span></div>
-        <textarea id="atSystemPrompt" class="cw-input w-full" rows="4" placeholder="定义这个 Agent 的角色、风格与约束…" style="resize:vertical;"></textarea>
+        <div class="at-field-label">
+          <span data-i18n="html.agent_template_system_prompt">系统提示</span>
+          <span class="at-label-hint">append-system-prompt</span>
+        </div>
+        <textarea id="atSystemPrompt" class="cw-input w-full at-system-prompt" rows="5" placeholder="定义这个 Agent 的角色、风格与约束…" style="resize:vertical;"></textarea>
       </div>
       <!-- default task -->
       <div>
-        <div class="text-xs mb-1" style="color:var(--text-muted);" data-i18n="html.agent_template_default_task">默认任务 <span style="color:var(--text-subtle);font-weight:400;">(新建会话时预填，可空)</span></div>
-        <textarea id="atDefaultTask" class="cw-input w-full" rows="2" style="resize:vertical;"></textarea>
+        <div class="at-field-label">
+          <span data-i18n="html.agent_template_default_task">默认任务</span>
+          <span class="at-label-hint">新建会话时预填输入框，可空</span>
+        </div>
+        <textarea id="atDefaultTask" class="cw-input w-full" rows="2" style="resize:vertical;font-size:13px;"></textarea>
       </div>
+      <div class="at-section-divider"></div>
       <!-- mode + permission -->
-      <div class="grid grid-cols-2 gap-3">
+      <div class="at-grid-2">
         <div>
-          <div class="text-xs mb-1" style="color:var(--text-muted);" data-i18n="html.agent_template_mode">适用模式</div>
+          <div class="at-field-label" data-i18n="html.agent_template_mode">适用模式</div>
           <select id="atMode" class="cw-input w-full">
             <option value="both">🌐 通用（代码+聊天）</option>
             <option value="code">💻 仅代码模式</option>
@@ -9582,7 +9672,7 @@ async function switchLang(lang) {
           </select>
         </div>
         <div>
-          <div class="text-xs mb-1" style="color:var(--text-muted);" data-i18n="html.agent_template_permission">权限模式</div>
+          <div class="at-field-label" data-i18n="html.agent_template_permission">权限模式</div>
           <select id="atPermission" class="cw-input w-full">
             <option value="default">🔒 default（询问）</option>
             <option value="acceptEdits">✏️ acceptEdits（自动写文件）</option>
@@ -9592,9 +9682,12 @@ async function switchLang(lang) {
         </div>
       </div>
       <!-- model + cwd -->
-      <div class="grid grid-cols-2 gap-3">
+      <div class="at-grid-2">
         <div>
-          <div class="text-xs mb-1" style="color:var(--text-muted);" data-i18n="html.agent_template_model">模型</div>
+          <div class="at-field-label">
+            <span data-i18n="html.agent_template_model">模型</span>
+            <span class="at-label-hint">空=默认</span>
+          </div>
           <select id="atModel" class="cw-input w-full">
             <option value="">默认（跟随全局）</option>
             <option value="opus">claude opus（最强推理）</option>
@@ -9604,21 +9697,32 @@ async function switchLang(lang) {
           </select>
         </div>
         <div>
-          <div class="text-xs mb-1" style="color:var(--text-muted);" data-i18n="html.agent_template_cwd">工作目录 <span style="color:var(--text-subtle);font-weight:400;">(可空)</span></div>
+          <div class="at-field-label">
+            <span data-i18n="html.agent_template_cwd">工作目录</span>
+            <span class="at-label-hint">可空</span>
+          </div>
           <input id="atCwd" class="cw-input w-full" list="atCwdList" placeholder="~/project 或留空" />
           <datalist id="atCwdList"></datalist>
         </div>
       </div>
       <!-- connectors -->
       <div>
-        <div class="text-xs mb-2" style="color:var(--text-muted);" data-i18n="html.agent_template_connectors">绑定连接器 <span style="color:var(--text-subtle);font-weight:400;">(新建会话时自动启用)</span></div>
+        <div class="at-field-label">
+          <span data-i18n="html.agent_template_connectors">绑定连接器</span>
+          <span class="at-label-hint">新建会话时自动启用</span>
+        </div>
         <div id="atConnectors" class="cw-at-connectors"></div>
       </div>
     </div>
     <!-- footer -->
-    <div class="flex items-center justify-end gap-2 px-6 py-4" style="border-top:1px solid var(--border);">
-      <button id="atCancelBtn" data-close class="btn text-sm" data-i18n="misc.cancel">取消</button>
-      <button id="atSaveBtn" class="btn btn-primary text-sm" data-i18n="misc.save">保存</button>
+    <div class="at-editor-footer">
+      <span class="at-editor-footer-hint" id="atFooterHint"></span>
+      <div class="flex items-center gap-2">
+        <button id="atCancelBtn" data-close class="at-cancel-btn" data-i18n="misc.cancel">取消</button>
+        <button id="atSaveBtn" class="at-save-btn" data-i18n="misc.save">
+          <span>💾</span><span>保存模板</span>
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -26232,6 +26336,15 @@ async function openAgentTemplateEditor(id) {
   $('agentTemplateEditorTitle').textContent = tpl
     ? (readonly ? (t('html.agent_template_view') || '查看模板') : (t('html.agent_template_edit') || '编辑模板'))
     : (t('html.agent_template_new') || '＋ 新建模板');
+  // Sync header icon to template icon
+  const headerIcon = document.querySelector('#agentTemplateEditor .at-editor-header-icon');
+  if (headerIcon) headerIcon.textContent = tpl ? (tpl.icon || '🧩') : '🧩';
+  // Show/hide readonly banner
+  const banner = $('atReadonlyBanner');
+  if (banner) banner.classList.toggle('hidden', !readonly);
+  // Footer hint
+  const footerHint = $('atFooterHint');
+  if (footerHint) footerHint.textContent = readonly ? (t('html.agent_template_readonly_hint') || '内置模板只读，可克隆后修改。') : '';
   // Built-in templates are read-only; lock inputs and hide save.
   ['atIcon','atName','atSystemPrompt','atDefaultTask','atMode','atPermission','atModel','atCwd'].forEach(fid => {
     const el = $(fid); if (el) el.disabled = readonly;

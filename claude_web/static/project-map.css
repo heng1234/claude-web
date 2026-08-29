@@ -638,11 +638,26 @@ body.cw-project-map-open .cw-project-map-host {
 }
 
 .pm-revision-row {
+  display: block;
+  width: 100%;
   margin-bottom: 7px;
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-2);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.pm-revision-row:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.pm-revision-row.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 
 .pm-revision-row b,
@@ -685,6 +700,78 @@ body.cw-project-map-open .cw-project-map-host {
   color: var(--text-muted);
   font-size: 10px;
   line-height: 1.5;
+}
+
+.pm-timeline {
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+
+.pm-timeline-metric {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.pm-timeline-metric button {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.pm-timeline-metric button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--text);
+}
+
+.pm-timeline-svg {
+  width: 100%;
+  height: 96px;
+  overflow: visible;
+}
+
+.pm-timeline-line {
+  stroke: var(--accent);
+  stroke-width: 1.6;
+}
+
+.pm-timeline-dot {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  cursor: pointer;
+  transition: r .12s ease;
+}
+
+.pm-timeline-dot:hover {
+  r: 5.5;
+}
+
+.pm-timeline-dot.is-active {
+  fill: var(--accent);
+  r: 5.5;
+}
+
+.pm-timeline-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 45%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 10%, var(--surface));
+  color: var(--text);
+  font-size: 11px;
 }
 
 .pm-source-row {

@@ -59,6 +59,11 @@
     revisions: [],
     historyLoading: false,
     revisionCompare: null,
+    timelineRevision: 0,
+    timelineMetric: 'nodes',
+    timelineDatasets: new Map(),
+    timelineLoading: false,
+    timelineOrder: [],
     run: null,
     runMessage: '',
     error: '',
@@ -234,6 +239,18 @@
     return (state.dataset?.relations || []).find(item => item.id === state.selectedRelationId) || null;
   }
 
+  // Historical revisions carry file hashes that no longer match disk, so the
+  // backend rejects context packs built from them. Disable those actions up
+  // front instead of letting the user discover it through an error.
+  function viewingHistory() {
+    const viewing = Number(state.timelineRevision || 0);
+    return Boolean(viewing) && viewing !== timelineLatestRevision();
+  }
+
+  function actionsLocked() {
+    return state.stale || viewingHistory();
+  }
+
   function renderShell() {
     const target = host();
     if (!target) return;
@@ -386,13 +403,13 @@
     `).join('');
   }
 
-  function graphSvg(model) {
+  function graphSvg(model, options = {}) {
     const shown = model.nodes;
     const relations = model.relations;
     if (!shown.length) return '<div class="pm-empty"><div class="pm-empty-card"><p>当前视图没有可显示的节点</p></div></div>';
-    const positions = layoutNodes(shown, relations);
+    const selected = 'selectedId' in options ? options.selectedId : selectedNode()?.id;
+    const positions = layoutNodes(shown, relations, { selectedId: selected });
     const positionIndex = new Map(positions.map(point => [point.id, point]));
-    const selected = selectedNode()?.id;
     const connected = new Set();
     relations.forEach(relation => {
       if (relation.source_id === selected) connected.add(relation.target_id);
@@ -448,8 +465,8 @@
     `;
   }
 
-  function layoutNodes(nodes, relations) {
-    const selected = selectedNode()?.id;
+  function layoutNodes(nodes, relations, options = {}) {
+    const selected = 'selectedId' in options ? options.selectedId : selectedNode()?.id;
     const buckets = [[], [], []];
     if (state.viewMode === 'neighborhood' && selected) {
       const incoming = new Set(relations.filter(item => item.target_id === selected).map(item => item.source_id));
@@ -505,10 +522,10 @@
           <span>${html(node.layer === 'semantic' ? 'AI 语义层' : '解析器证据')}</span>
         </div>
         <div class="pm-node-actions" aria-label="节点动作">
-          <button class="pm-button" type="button" data-pm-action="add-context" ${state.contextPackLoading || state.stale ? 'disabled' : ''}>添加上下文</button>
-          <button class="pm-button" type="button" data-pm-action="prefill-plan" ${state.contextPackLoading || state.stale ? 'disabled' : ''}>生成 Plan</button>
-          <button class="pm-button" type="button" data-pm-action="prefill-task" ${state.contextPackLoading || state.stale ? 'disabled' : ''}>创建任务</button>
-          ${state.testSuggestions.length ? `<button class="pm-button" type="button" data-pm-action="prefill-tests" ${state.stale ? 'disabled' : ''}>建议测试</button>` : ''}
+          <button class="pm-button" type="button" data-pm-action="add-context" ${state.contextPackLoading || actionsLocked() ? 'disabled' : ''}>添加上下文</button>
+          <button class="pm-button" type="button" data-pm-action="prefill-plan" ${state.contextPackLoading || actionsLocked() ? 'disabled' : ''}>生成 Plan</button>
+          <button class="pm-button" type="button" data-pm-action="prefill-task" ${state.contextPackLoading || actionsLocked() ? 'disabled' : ''}>创建任务</button>
+          ${state.testSuggestions.length ? `<button class="pm-button" type="button" data-pm-action="prefill-tests" ${actionsLocked() ? 'disabled' : ''}>建议测试</button>` : ''}
         </div>
         ${state.stale ? '<p class="pm-warning">源码或地图版本已经变化，刷新地图后才能创建可信上下文。</p>' : ''}
         ${node.stale_reasons?.length ? `<p class="pm-warning">${node.stale_reasons.map(html).join('；')}</p>` : ''}
@@ -521,7 +538,7 @@
         <div class="pm-detail-section">
           <strong>源码证据 ${sources.length ? `· ${sources.length}` : ''}</strong>
           ${sources.length ? `
-            <button class="pm-button" type="button" data-pm-action="impact" ${state.impactLoading ? 'disabled' : ''}>
+            <button class="pm-button" type="button" data-pm-action="impact" ${state.impactLoading || viewingHistory() ? 'disabled' : ''}>
               ${state.impactLoading ? '分析中…' : '分析该节点的可能影响'}
             </button>
             ${state.impactSummary ? `<p class="pm-detail-summary" style="margin-top:8px;">${html(state.impactSummary)}</p>` : ''}
@@ -580,17 +597,55 @@
   function historyView() {
     if (state.historyLoading) return '<p class="pm-detail-summary">正在读取历史版本…</p>';
     const compare = state.revisionCompare;
+    const viewing = Number(state.timelineRevision || 0);
+    const latest = state.revisions[0] ? Number(state.revisions[0].revision) : state.revision;
+    const isHistory = viewing && viewing !== latest;
     return `<div>
-      <h2 class="pm-detail-title">地图版本</h2>
-      <p class="pm-detail-summary">历史版本只读，不会回滚或替换当前源码对应关系。</p>
+      <h2 class="pm-detail-title">架构演化时间轴</h2>
+      <p class="pm-detail-summary">拖动或点击版本查看该时刻的架构快照。历史版本只读，不会回滚或替换当前源码对应关系。</p>
+      ${isHistory ? `<div class="pm-timeline-banner" role="status">正在查看历史版本 v${viewing}（只读）<button class="pm-button" type="button" data-pm-action="timeline-latest">回到最新 v${latest}</button></div>` : ''}
+      ${timelineChart()}
+      ${state.timelineLoading ? '<p class="pm-detail-summary">正在读取该版本图谱…</p>' : ''}
       ${state.revisions.length > 1 ? `<button class="pm-button" type="button" data-pm-action="compare-latest">比较最近两版</button>` : ''}
       ${compare ? revisionCompareView(compare) : ''}
       <div class="pm-detail-section"><strong>修订记录 · ${state.revisions.length}</strong>
-        ${state.revisions.map(item => `<div class="pm-revision-row">
-          <b>v${Number(item.revision)}</b><span>${Number(item.node_count || 0)} 节点 · ${Number(item.relation_count || 0)} 关系 · ${html(item.completeness || 'unknown')}</span>
+        ${state.revisions.map(item => {
+          const rev = Number(item.revision);
+          const active = rev === (viewing || latest);
+          return `<button class="pm-revision-row${active ? ' is-active' : ''}" type="button" data-pm-timeline="${rev}" aria-pressed="${active}">
+          <b>v${rev}</b><span>${Number(item.node_count || 0)} 节点 · ${Number(item.relation_count || 0)} 关系 · ${html(item.completeness || 'unknown')}</span>
           <small>scanner ${html(item.scanner_version || 'unknown')} · prompt ${html(item.prompt_version || 'unknown')}</small>
-        </div>`).join('') || '<p class="pm-detail-summary">暂无历史版本。</p>'}
+        </button>`;
+        }).join('') || '<p class="pm-detail-summary">暂无历史版本。</p>'}
       </div>
+    </div>`;
+  }
+
+  function timelineChart() {
+    const items = [...state.revisions].sort((a, b) => Number(a.revision) - Number(b.revision));
+    if (items.length < 2) return '<p class="pm-detail-summary">至少需要两个版本才能显示演化趋势。</p>';
+    const key = state.timelineMetric === 'relations' ? 'relation_count' : 'node_count';
+    const values = items.map(item => Number(item[key] || 0));
+    const max = Math.max(1, ...values);
+    const width = 300;
+    const height = 96;
+    const stepX = items.length > 1 ? width / (items.length - 1) : width;
+    const points = items.map((item, index) => {
+      const x = index * stepX;
+      const y = height - (Number(item[key] || 0) / max) * (height - 12) - 6;
+      return { x, y, rev: Number(item.revision), value: Number(item[key] || 0) };
+    });
+    const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+    const viewing = Number(state.timelineRevision || 0) || (state.revisions[0] ? Number(state.revisions[0].revision) : 0);
+    return `<div class="pm-timeline">
+      <div class="pm-timeline-metric" role="group" aria-label="趋势指标">
+        <button type="button" data-pm-metric="nodes" aria-pressed="${state.timelineMetric !== 'relations'}">节点</button>
+        <button type="button" data-pm-metric="relations" aria-pressed="${state.timelineMetric === 'relations'}">关系</button>
+      </div>
+      <svg class="pm-timeline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="架构规模随版本演化趋势">
+        <path class="pm-timeline-line" d="${line}" fill="none" />
+        ${points.map(p => `<circle class="pm-timeline-dot${p.rev === viewing ? ' is-active' : ''}" data-pm-timeline="${p.rev}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4"><title>v${p.rev} · ${p.value}</title></circle>`).join('')}
+      </svg>
     </div>`;
   }
 
@@ -678,6 +733,19 @@
     });
     target?.querySelector('[data-pm-action="compare-latest"]')?.addEventListener('click', () => {
       void compareLatestRevisions();
+    });
+    target?.querySelector('[data-pm-action="timeline-latest"]')?.addEventListener('click', () => {
+      const latest = state.revisions[0] ? Number(state.revisions[0].revision) : state.revision;
+      selectTimelineRevision(latest);
+    });
+    target?.querySelectorAll('[data-pm-timeline]').forEach(element => {
+      element.addEventListener('click', () => selectTimelineRevision(Number(element.dataset.pmTimeline)));
+    });
+    target?.querySelectorAll('[data-pm-metric]').forEach(button => {
+      button.addEventListener('click', () => {
+        state.timelineMetric = button.dataset.pmMetric === 'relations' ? 'relations' : 'nodes';
+        renderContent();
+      });
     });
     target?.querySelectorAll('[data-pm-kind]').forEach(button => {
       button.addEventListener('click', () => {
@@ -803,8 +871,58 @@
     }
   }
 
-  async function compareLatestRevisions() {
+  function timelineLatestRevision() {
+    return state.revisions[0] ? Number(state.revisions[0].revision) : state.revision;
+  }
+
+  async function selectTimelineRevision(revision) {
+    const target = Number(revision) || 0;
+    const latest = timelineLatestRevision();
+    state.timelineRevision = target;
+    state.selectedRelationId = '';
+    if (!target || target === latest) {
+      state.dataset = state.timelineDatasets.get(latest) || state.dataset;
+      renderShell();
+      return;
+    }
+    const cached = state.timelineDatasets.get(target);
+    if (cached) {
+      state.dataset = cached;
+      syncSelectionWithVisibleNodes();
+      renderShell();
+      return;
+    }
     const ctx = context();
+    if (!ctx.sessionId || state.timelineLoading) return;
+    const generation = state.requestGeneration;
+    const sessionId = ctx.sessionId;
+    state.timelineLoading = true;
+    renderContent();
+    try {
+      const payload = await request(`${apiBase(sessionId)}/revisions/${encodeURIComponent(target)}`);
+      if (generation !== state.requestGeneration || sessionId !== context().sessionId || !state.open) return;
+      const dataset = payload.dataset || null;
+      if (dataset) {
+        // Cache historical datasets with a small LRU bound to keep memory in check.
+        if (state.timelineDatasets.size >= 5) {
+          const oldest = state.timelineDatasets.keys().next().value;
+          state.timelineDatasets.delete(oldest);
+        }
+        state.timelineDatasets.set(target, dataset);
+        state.dataset = dataset;
+        syncSelectionWithVisibleNodes();
+      }
+    } catch (error) {
+      state.error = error?.message || '历史版本图谱加载失败';
+    } finally {
+      if (generation === state.requestGeneration && sessionId === context().sessionId) {
+        state.timelineLoading = false;
+        if (state.open) renderShell();
+      }
+    }
+  }
+
+  async function compareLatestRevisions() {    const ctx = context();
     if (!ctx.sessionId || state.revisions.length < 2) return;
     const [latest, previous] = state.revisions;
     const generation = state.requestGeneration;
@@ -887,6 +1005,10 @@
       state.revision = Number(payload.revision || 0);
       state.dataset = payload.dataset || null;
       state.run = payload.active_run || null;
+      state.timelineRevision = 0;
+      state.timelineLoading = false;
+      state.timelineDatasets = new Map();
+      if (state.dataset && state.revision) state.timelineDatasets.set(state.revision, state.dataset);
       state.impactIds = new Set();
       state.impactItems = [];
       state.testSuggestions = [];
@@ -1200,6 +1322,10 @@
     state.revisions = [];
     state.historyLoading = false;
     state.revisionCompare = null;
+    state.timelineRevision = 0;
+    state.timelineMetric = 'nodes';
+    state.timelineDatasets = new Map();
+    state.timelineLoading = false;
     state.projectName = '';
     state.storageKey = '';
     state.revision = 0;
