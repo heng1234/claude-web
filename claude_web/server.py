@@ -8182,21 +8182,14 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
         set_session_runtime_origin(session_id, "")
         set_session_native_user_offset(session_id, 0)
 
-    use_agent_sdk = code_workspace and runtime_origin != _RUNTIME_ORIGIN_CLI
+    use_agent_sdk = runtime_origin != _RUNTIME_ORIGIN_CLI and _claude_agent_bridge.enabled
     if use_agent_sdk:
-        if not _claude_agent_bridge.enabled and runtime_origin == _RUNTIME_ORIGIN_AGENT_SDK:
+        if not await _claude_agent_bridge.ensure_started():
             await discard_git_checkpoint(checkpoint, work_dir)
             raise HTTPException(
-                status_code=409,
-                detail="This Code session is owned by Claude Agent SDK; CLI fallback is disabled to protect session continuity.",
+                status_code=503,
+                detail=_claude_agent_bridge.last_error or "Claude Agent SDK is unavailable",
             )
-        if _claude_agent_bridge.enabled:
-            if not await _claude_agent_bridge.ensure_started():
-                await discard_git_checkpoint(checkpoint, work_dir)
-                raise HTTPException(
-                    status_code=503,
-                    detail=_claude_agent_bridge.last_error or "Claude Agent SDK is unavailable",
-                )
             agent_params = {
                 "cwd": work_dir,
                 "content": _agent_sdk_message_content(full_message, req.images or []),
@@ -8208,6 +8201,17 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 "browserEnabled": effective_browser_enabled,
                 "runtimeEpoch": remote_session_id,
             }
+            # Inject system prompt (and for chat mode: memories + pinned docs).
+            # Code mode keeps Claude Code's built-in system prompt intact so we
+            # only append the user/template override. Chat mode has no built-in
+            # prompt so we compose the full context here.
+            _sdk_system_prompt = compose_system_prompt(
+                [] if code_workspace else load_enabled_memories(work_dir, session_id),
+                req.system_prompt,
+                None if code_workspace else load_session_pinned_docs(session_id),
+            )
+            if _sdk_system_prompt:
+                agent_params["systemPromptAppend"] = _sdk_system_prompt
             # Inject enabled connectors with secrets decrypted just for this run,
             # so encrypted connectors actually connect (the on-disk .mcp.json the
             # CLI reads only holds cwsecret:// refs it can't resolve).
