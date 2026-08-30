@@ -19,11 +19,11 @@
         },
         {
           "type": "feature",
-          "text": "聊天模式统一走 Claude Agent SDK，CLI 自动降级兜底"
+          "text": "Code 模式接入 Claude Agent SDK（聊天模式仍走 CLI）"
         },
         {
           "type": "fix",
-          "text": "SDK daemon 注入 settings.json env；SDK 不可用时聊天模式回退 CLI"
+          "text": "SDK daemon 注入 settings.json env（透传 ANTHROPIC_AUTH_TOKEN/BASE_URL）"
         },
         {
           "type": "fix",
