@@ -2,7 +2,19 @@
 
 所有重要变更按版本记录。应用内的 What's New 和帮助面板使用 `static/changelog.json`，这里是给 GitHub / Git diff 浏览的 Markdown 版本。
 
-当前稳定版本：`2.2.4`。
+当前稳定版本：`2.3.0`。
+
+## v2.3.0 - 2026-08-30
+
+- **FEATURE** 连接器中心：远程 MCP + 内置连接器目录 + 本机加密密钥存储，支持一键连（豆包式全屏市场，品牌 logo + 详情/授权分步弹窗），目录接入企微/飞书/钉钉/邮箱，分层标签区分「一键授权 / 需密钥 / 仅通知」，运行时注入加密密钥
+- **FEATURE** Agent 模板：可复用的会话预设（系统提示 / 模型 / 目录），前端面板 + 编辑器 + 一键应用，内置多套模板，模型下拉与目录选择，代码模式透传系统提示
+- **FEATURE** Skills Market：从 GitHub 拉取 skill 市场，支持搜索与一键安装；扩展内置 Agent 模板；配套安全加固
+- **FEATURE** 聊天模式统一走 Claude Agent SDK，CLI 自动降级兜底
+- **FIX** SDK daemon 注入 settings.json env；agent 模板弹窗加宽；聊天模式在 SDK 不可用时回退 CLI
+- **FIX** UX 审计修复：清理 SDK 死代码、修复应用流程竞态、导入校验、导出 URL、连接器反馈
+- **FIX** daemon 按会话加锁，消除跨会话串行导致的 turn 未入队错误
+- **FIX** 前端丢帧不再误判重发 / 删气泡
+- **CHORE** 忽略 nohup.out 与 .playwright-mcp 调试产物
 
 ## v2.2.4 - 2026-08-22
 

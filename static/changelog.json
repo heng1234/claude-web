@@ -2,6 +2,40 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.3.0",
+      "date": "2026-08-30",
+      "highlights": [
+        {
+          "type": "feature",
+          "text": "连接器中心：远程 MCP + 内置目录 + 本机加密密钥，豆包式全屏市场一键连，接入企微/飞书/钉钉/邮箱，分层区分一键授权/需密钥/仅通知"
+        },
+        {
+          "type": "feature",
+          "text": "Agent 模板：可复用会话预设（系统提示/模型/目录），面板+编辑器+一键应用，内置多套模板，代码模式透传系统提示"
+        },
+        {
+          "type": "feature",
+          "text": "Skills Market：从 GitHub 拉取 skill 市场，搜索与一键安装"
+        },
+        {
+          "type": "feature",
+          "text": "聊天模式统一走 Claude Agent SDK，CLI 自动降级兜底"
+        },
+        {
+          "type": "fix",
+          "text": "SDK daemon 注入 settings.json env；SDK 不可用时聊天模式回退 CLI"
+        },
+        {
+          "type": "fix",
+          "text": "UX 审计修复：SDK 死代码清理、应用流程竞态、导入校验、导出 URL、连接器反馈"
+        },
+        {
+          "type": "fix",
+          "text": "daemon 按会话加锁，消除跨会话串行导致的 turn 未入队错误；前端丢帧不再误判重发/删气泡"
+        }
+      ]
+    },
+    {
       "version": "2.2.4",
       "date": "2026-08-22",
       "highlights": [
