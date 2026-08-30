@@ -36,3 +36,7 @@ Thumbs.db
 
 # Logs
 *.log
+nohup.out
+
+# Debug / tooling artifacts
+.playwright-mcp/
