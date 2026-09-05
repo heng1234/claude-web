@@ -372,6 +372,52 @@
     background: color-mix(in srgb, var(--text) 6%, transparent);
     color: var(--text);
   }
+  /* 会话头部：标题占左，操作按钮靠右成组 */
+  #sessionSectionTitle { margin-right: auto; }
+  #sessionMultiSelectBtn[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+  }
+  /* 批量操作条 */
+  .cw-session-batch-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 4px 2px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  .cw-session-batch-bar.hidden { display: none; }
+  .cw-session-batch-count { color: var(--text-muted); }
+  .cw-session-batch-actions { display: flex; gap: 6px; margin-left: auto; }
+  .cw-session-batch-btn {
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .cw-session-batch-btn:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+  .cw-session-batch-btn.danger { border-color: #ef4444; color: #ef4444; }
+  .cw-session-batch-btn.danger:hover { background: color-mix(in srgb, #ef4444 12%, transparent); }
+  .cw-session-batch-btn:disabled { opacity: .45; cursor: not-allowed; }
+  /* 多选态：列表项前的勾选框 */
+  .cw-session-select-box {
+    flex: 0 0 auto;
+    width: 17px;
+    height: 17px;
+    margin-right: 7px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  body:not(.cw-batch-mode) .cw-session-select-box { display: none; }
   .cw-workspace-card {
     display: none;
     margin: 8px 14px 12px;
@@ -5604,6 +5650,31 @@
     background: #fff;
     box-shadow: 0 18px 42px rgba(38, 31, 26, .12);
   }
+  /* Header 版「更多」菜单：向下弹出（区别于 composer 的向上弹出） */
+  .cw-header-tools { position: relative; display: inline-flex; }
+  .cw-header-tools-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    left: auto;
+    bottom: auto;
+    z-index: 50;
+    min-width: 208px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface, #fff);
+    box-shadow: 0 18px 42px rgba(38, 31, 26, .18);
+  }
+  .cw-more-tool-group-label {
+    padding: 8px 9px 3px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-subtle, #9a938c);
+  }
+  .cw-more-tool-group + .cw-more-tool-group { margin-top: 2px; }
   .cw-more-tool-item {
     display: flex;
     align-items: center;
@@ -8199,12 +8270,22 @@ async function switchLang(lang) {
   <div class="flex-1 overflow-y-auto px-2 py-1" id="sessionList">
     <div class="cw-session-head">
       <span id="sessionSectionTitle" data-i18n="html.recent">最近</span>
+      <button type="button" id="sessionMultiSelectBtn" class="session-more-btn" title="多选" aria-label="多选" aria-pressed="false" data-i18n-title="ui.multi_select" data-i18n-aria="ui.multi_select">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      </button>
       <button type="button" id="sessionMoreBtn" class="session-more-btn" title="历史对话" aria-label="历史对话" data-i18n-title="html.history" data-i18n-aria="html.history">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 2"/></svg>
       </button>
     </div>
     <div id="sessionItems">
       <div class="text-xs text-center py-6" style="color:var(--text-subtle);" data-i18n="misc.loading_sessions">加载中...</div>
+    </div>
+    <div id="sessionBatchBar" class="cw-session-batch-bar hidden" role="toolbar" aria-label="批量操作" data-i18n-aria="ui.multi_select">
+      <span id="sessionBatchCount" class="cw-session-batch-count">已选 0 项</span>
+      <span class="cw-session-batch-actions">
+        <button type="button" id="sessionBatchDeleteBtn" class="cw-session-batch-btn danger" disabled data-i18n="ui.delete_selected">删除所选</button>
+        <button type="button" id="sessionBatchCancelBtn" class="cw-session-batch-btn" data-i18n="misc.cancel">取消</button>
+      </span>
     </div>
   </div>
 
@@ -8274,30 +8355,52 @@ async function switchLang(lang) {
       </div>
     </div>
     <div class="flex items-center gap-1 flex-shrink-0">
-      <button id="cwProjectMapBtn" class="sb-icon-btn cw-code-only" title="打开 Project Map" aria-label="打开 Project Map" aria-pressed="false" data-i18n-title="html.open_project_map" data-i18n-aria="html.open_project_map">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="7" cy="19" r="2"/><circle cx="12" cy="12" r="2.25"/><path d="m6.8 7 3.4 3.4M13.8 10.8l3.4-4.2M13.9 13.4l2.7 3M10.3 13.6l-2.1 3.5"/></svg>
-      </button>
-      <button id="cwOpenCodeFileBtn" class="sb-icon-btn cw-code-only" title="打开项目文件" aria-label="打开项目文件" data-i18n-title="html.open_project_files" data-i18n-aria="html.open_project_files">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h7v11.5A2.5 2.5 0 0 1 16.5 20h-10A2.5 2.5 0 0 1 4 17.5z"/><path d="M12 10v6M9 13h6"/></svg>
-      </button>
       <button id="connectorBtn" class="sb-icon-btn" title="连接器 · 一键连接应用与 MCP" aria-label="连接器" data-i18n-title="html.connector_hub_full" data-i18n-aria="html.connector_hub">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8V5a2 2 0 0 1 2-2h1M17 8V5a2 2 0 0 0-2-2h-1"/><rect x="5" y="8" width="14" height="6" rx="2"/><path d="M9 14v3a3 3 0 0 0 6 0v-3"/></svg>
       </button>
       <button id="agentTemplateBtn" class="sb-icon-btn" title="Agent 模板 · 可复用会话预设" aria-label="Agent 模板" data-i18n-title="html.agent_template_hub_full" data-i18n-aria="html.agent_template_hub">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/><path d="M18.5 4.5l.9 1.8 1.8.9-1.8.9-.9 1.8-.9-1.8-1.8-.9 1.8-.9z"/></svg>
       </button>
-      <button id="scheduledTasksBtn" class="sb-icon-btn" title="定时任务 · 按计划自动运行" aria-label="定时任务" data-i18n-title="html.scheduled_tasks_full" data-i18n-aria="html.scheduled_tasks">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-      </button>
-      <button id="roundtableBtn" class="sb-icon-btn cw-code-only" title="圆桌讨论 · 多角色协作" aria-label="圆桌讨论" data-i18n-title="html.roundtable_full" data-i18n-aria="html.roundtable">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="7" r="2"/><circle cx="19" cy="7" r="2"/><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/></svg>
-      </button>
-      <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions" aria-label="配置中心" data-i18n-title="html.config_center_full" data-i18n-aria="html.config_center">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h10"/><path d="M8 12h10"/><path d="M8 18h10"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
-      </button>
-      <button id="headerMoreBtn" class="sb-icon-btn" title="工作目录 / 权限策略" aria-label="工作目录 / 权限策略" data-i18n-title="html.workdir_permissions" data-i18n-aria="html.workdir_permissions">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z"/></svg>
-      </button>
+      <div class="cw-header-tools">
+        <button id="headerToolsBtn" class="sb-icon-btn" type="button" title="更多工具" aria-label="更多工具" aria-haspopup="menu" aria-expanded="false" data-i18n-title="html.more_tools" data-i18n-aria="html.more_tools">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+        </button>
+        <div id="headerToolsMenu" class="cw-header-tools-menu hidden" role="menu" aria-label="更多工具" data-i18n-aria="html.more_tools">
+          <div class="cw-more-tool-group cw-code-only">
+            <div class="cw-more-tool-group-label" data-i18n="html.tools_group_workspace">工作区</div>
+            <button id="cwProjectMapBtn" class="cw-more-tool-item" type="button" role="menuitem" aria-pressed="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="7" cy="19" r="2"/><circle cx="12" cy="12" r="2.25"/><path d="m6.8 7 3.4 3.4M13.8 10.8l3.4-4.2M13.9 13.4l2.7 3M10.3 13.6l-2.1 3.5"/></svg>
+              <span data-i18n="html.open_project_map">Project Map</span>
+            </button>
+            <button id="cwOpenCodeFileBtn" class="cw-more-tool-item" type="button" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h7v11.5A2.5 2.5 0 0 1 16.5 20h-10A2.5 2.5 0 0 1 4 17.5z"/><path d="M12 10v6M9 13h6"/></svg>
+              <span data-i18n="html.open_project_files">打开项目文件</span>
+            </button>
+            <button id="roundtableBtn" class="cw-more-tool-item" type="button" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="7" r="2"/><circle cx="19" cy="7" r="2"/><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/></svg>
+              <span data-i18n="html.roundtable">圆桌讨论</span>
+            </button>
+          </div>
+          <div class="cw-more-tool-group">
+            <div class="cw-more-tool-group-label" data-i18n="html.tools_group_automation">自动化</div>
+            <button id="scheduledTasksBtn" class="cw-more-tool-item" type="button" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              <span data-i18n="html.scheduled_tasks">定时任务</span>
+            </button>
+          </div>
+          <div class="cw-more-tool-group">
+            <div class="cw-more-tool-group-label" data-i18n="html.tools_group_config">配置</div>
+            <button id="configCenterBtn" class="cw-more-tool-item" type="button" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h10"/><path d="M8 12h10"/><path d="M8 18h10"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
+              <span data-i18n="html.config_center">配置中心</span>
+            </button>
+            <button id="headerMoreBtn" class="cw-more-tool-item" type="button" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z"/></svg>
+              <span data-i18n="html.workdir_permissions">工作目录 / 权限策略</span>
+            </button>
+          </div>
+        </div>
+      </div>
       <button id="helpBtn" class="sb-icon-btn relative" title="帮助 / 快捷键 / 更新日志" aria-label="帮助" data-i18n-title="html.help_shortcuts_changelog" data-i18n-aria="html.help">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.7 2.7 0 0 1 5 1.4c0 1.8-2.5 2.1-2.5 3.6"/><path d="M12 17h.01"/></svg>
         <span id="helpBadge" class="hidden absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style="background:#ef4444;"></span>
@@ -19229,8 +19332,19 @@ function toggleSessionActionMenu(btn, root = sessionItems) {
   }
 }
 
-async function deleteSessionById(targetId) {
-  if (!targetId || !confirm(t('dialogs.delete_session_confirm'))) return false;
+async function deleteSessionById(targetId, options = {}) {
+  const { skipConfirm = false, optimistic = true } = options;
+  if (!targetId) return false;
+  if (!skipConfirm && !confirm(t('dialogs.delete_session_confirm'))) return false;
+  // 乐观更新：先把列表项从 DOM 移除，用户立刻看到反馈；失败再回滚刷新
+  let removedNodes = [];
+  if (optimistic) {
+    removedNodes = Array.from(
+      sessionItems.querySelectorAll(`[data-id="${(window.CSS && CSS.escape) ? CSS.escape(targetId) : targetId}"]`)
+    ).map(el => el.closest('.session-item, .cw-project-session-shell, .cw-flat-session') || el);
+    removedNodes.forEach(n => { n.style.display = 'none'; });
+  }
+  const rollback = () => { removedNodes.forEach(n => { n.style.display = ''; }); };
   // Abort a background turn if this session is running but not in the foreground
   const bgState = sessionStates.get(targetId);
   if (bgState && bgState.controller) {
@@ -19248,7 +19362,7 @@ async function deleteSessionById(targetId) {
     } while (r.status === 409 && Date.now() < deadline);
   }
   if (r.status === 409 && targetId === sessionId) {
-    if (!confirm(t('x.gen_stop_delete'))) return false;
+    if (!confirm(t('x.gen_stop_delete'))) { rollback(); return false; }
     try {
       await fetch('/api/chat/stop/' + targetId, { method:'POST' });
       if (currentController) currentController.abort();
@@ -19261,7 +19375,8 @@ async function deleteSessionById(targetId) {
   }
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
-    alert(t('errors.unknown_error') + ': ' + (data.detail || r.status));
+    rollback();
+    toast(t('toasts.delete_failed') + ': ' + (data.detail || r.status));
     return false;
   }
   // Clean up per-session state and LRU cache entry
@@ -19269,9 +19384,10 @@ async function deleteSessionById(targetId) {
   const lruIdx = sessionDomCacheOrder.indexOf(targetId);
   if (lruIdx !== -1) sessionDomCacheOrder.splice(lruIdx, 1);
   if (targetId === sessionId) startNewSession();
-  refreshSessions();
-  refreshStats();
-  refreshTags();
+  // 并行刷新，避免串行往返带来的延迟感
+  if (!options.deferRefresh) {
+    Promise.all([refreshSessions(), refreshStats(), refreshTags()]).catch(() => {});
+  }
   return true;
 }
 
@@ -19284,6 +19400,101 @@ function bindSessionDeleteActions(root = sessionItems) {
     });
   });
 }
+
+// ===== 批量删除会话 =====
+let sessionBatchMode = false;
+const sessionBatchSelected = new Set();
+const sessionMultiSelectBtn = $('sessionMultiSelectBtn');
+const sessionBatchBar = $('sessionBatchBar');
+const sessionBatchCount = $('sessionBatchCount');
+const sessionBatchDeleteBtn = $('sessionBatchDeleteBtn');
+const sessionBatchCancelBtn = $('sessionBatchCancelBtn');
+
+function updateSessionBatchBar() {
+  const n = sessionBatchSelected.size;
+  if (sessionBatchCount) sessionBatchCount.textContent = t('ui.selected_count').replace('{n}', n);
+  if (sessionBatchDeleteBtn) sessionBatchDeleteBtn.disabled = n === 0;
+}
+
+// 找列表项的稳定外层容器（勾选框注入到这里，避免破坏 button 内部布局）
+function sessionItemShell(el) {
+  return el.closest('.cw-project-session-shell') || el.closest('.session-item') || el.parentElement || el;
+}
+
+function toggleBatchSelection(id, checked) {
+  if (checked) sessionBatchSelected.add(id);
+  else sessionBatchSelected.delete(id);
+  updateSessionBatchBar();
+}
+
+// 给每个列表项注入勾选框（幂等：已注入则跳过）；仅在批量模式渲染时调用
+function injectBatchCheckboxes(root = sessionItems) {
+  if (!sessionBatchMode) return;
+  root.querySelectorAll('[data-id]').forEach(el => {
+    const id = el.dataset.id;
+    if (!id) return;
+    const shell = sessionItemShell(el);
+    if (shell.querySelector(':scope > .cw-session-select-box')) return;
+    if (getComputedStyle(shell).position === 'static') shell.style.position = 'relative';
+    shell.style.display = shell.style.display || 'flex';
+    shell.style.alignItems = 'center';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'cw-session-select-box';
+    box.checked = sessionBatchSelected.has(id);
+    box.setAttribute('aria-label', t('ui.multi_select'));
+    box.dataset.batchId = id;
+    box.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleBatchSelection(id, box.checked);
+    });
+    shell.insertBefore(box, shell.firstChild);
+  });
+}
+
+function setSessionBatchMode(on) {
+  sessionBatchMode = on;
+  sessionBatchSelected.clear();
+  document.body.classList.toggle('cw-batch-mode', on);
+  sessionMultiSelectBtn?.setAttribute('aria-pressed', on ? 'true' : 'false');
+  sessionBatchBar?.classList.toggle('hidden', !on);
+  updateSessionBatchBar();
+  refreshSessions();
+}
+
+sessionMultiSelectBtn?.addEventListener('click', () => setSessionBatchMode(!sessionBatchMode));
+sessionBatchCancelBtn?.addEventListener('click', () => setSessionBatchMode(false));
+
+// 批量模式下，点列表项 = 切换选中（拦截打开会话）
+sessionItems?.addEventListener('click', (e) => {
+  if (!sessionBatchMode) return;
+  if (e.target.closest('.cw-session-select-box')) return;   // 勾选框自身已处理
+  if (e.target.closest('[data-session-menu]') || e.target.closest('.cw-session-actions')) return; // 保留操作菜单
+  const item = e.target.closest('[data-id]');
+  if (!item || !item.dataset.id) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const shell = sessionItemShell(item);
+  const box = shell.querySelector(':scope > .cw-session-select-box');
+  if (box) { box.checked = !box.checked; toggleBatchSelection(item.dataset.id, box.checked); }
+}, true);
+
+sessionBatchDeleteBtn?.addEventListener('click', async () => {
+  const ids = Array.from(sessionBatchSelected);
+  if (!ids.length) return;
+  if (!confirm(t('ui.batch_delete_confirm').replace('{n}', ids.length))) return;
+  sessionBatchDeleteBtn.disabled = true;
+  toast(t('toasts.generating'), { sticky: true });
+  let ok = 0, failed = 0;
+  for (const id of ids) {
+    const done = await deleteSessionById(id, { skipConfirm: true, optimistic: true, deferRefresh: true });
+    done ? ok++ : failed++;
+  }
+  toast.dismiss();
+  toast(t('ui.batch_deleted').replace('{n}', ok) + (failed ? ` (${t('toasts.delete_failed')}: ${failed})` : ''));
+  setSessionBatchMode(false);
+  Promise.all([refreshStats(), refreshTags()]).catch(() => {});
+});
 
 function renderProjectGroup(group, options = {}) {
   const key = codeProjectKey(group.cwd);
@@ -19380,6 +19591,7 @@ function renderCodeProjectSessionList(list) {
   });
   bindSessionMenuToggles(sessionItems);
   bindSessionDeleteActions(sessionItems);
+  injectBatchCheckboxes(sessionItems);
   sessionItems.querySelectorAll('[data-project-collapse]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -19514,6 +19726,7 @@ async function refreshSessions() {
         refreshSessions(); refreshTags();
       });
     });
+    injectBatchCheckboxes(sessionItems);
   } catch (e) { console.warn(e); }
 }
 
@@ -19831,13 +20044,30 @@ titleLabel.addEventListener('dblclick', async () => {
 suggestTitleBtn.addEventListener('click', async () => {
   if (!sessionId) return;
   suggestTitleBtn.textContent = '⏳';
+  toast(t('ui.title_generating'), { sticky: true });
   try {
     const r = await fetch('/api/sessions/' + sessionId + '/suggest-title', { method:'POST' });
-    if (!r.ok) { alert(t('errors.unknown_error')); return; }
+    if (!r.ok) {
+      // 按后端状态码给出可理解的具体提示，而不是一句通用错误
+      const msg = r.status === 404 ? t('ui.title_empty_session')
+        : r.status === 400 ? t('ui.title_no_content')
+        : r.status === 504 ? t('ui.title_timeout')
+        : t('ui.title_failed');
+      toast.dismiss();
+      toast(msg);
+      return;
+    }
     const d = await r.json();
-    titleLabel.textContent = d.title;
+    const newTitle = (d.title || '').trim();
+    if (!newTitle) { toast.dismiss(); toast(t('ui.title_failed')); return; }
+    titleLabel.textContent = newTitle;
+    toast.dismiss();
+    toast(t('ui.title_updated'));
     refreshSessions();
-  } catch (e) { alert(t('errors.unknown_error') + ': ' + e.message); }
+  } catch (e) {
+    toast.dismiss();
+    toast(t('ui.title_failed') + ': ' + e.message);
+  }
   finally { suggestTitleBtn.textContent = '🪄'; }
 });
 
@@ -25469,6 +25699,35 @@ if (chatInner && window.MutationObserver) {
 headerMoreBtn.addEventListener('click', () => {
   switchConversationWorkspaceMode(true);
   setProjectManagerOpen(cwProjectManagerPanel?.classList.contains('hidden'));
+});
+
+// Header「更多工具」下拉菜单：收纳低频/工作区专属入口，避免顶栏图标过多
+const headerToolsBtn = $('headerToolsBtn');
+const headerToolsMenu = $('headerToolsMenu');
+function setHeaderToolsOpen(open) {
+  if (!headerToolsMenu || !headerToolsBtn) return;
+  headerToolsMenu.classList.toggle('hidden', !open);
+  headerToolsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+headerToolsBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setHeaderToolsOpen(headerToolsMenu?.classList.contains('hidden'));
+});
+// 点击任一菜单项后收起菜单（各项自身的业务 handler 另行绑定，互不影响）
+headerToolsMenu?.querySelectorAll('.cw-more-tool-item').forEach((item) => {
+  item.addEventListener('click', () => setHeaderToolsOpen(false));
+});
+// 点击菜单外部或按 Esc 关闭
+document.addEventListener('click', (e) => {
+  if (!headerToolsMenu || headerToolsMenu.classList.contains('hidden')) return;
+  if (e.target.closest('#headerToolsMenu') || e.target.closest('#headerToolsBtn')) return;
+  setHeaderToolsOpen(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && headerToolsMenu && !headerToolsMenu.classList.contains('hidden')) {
+    setHeaderToolsOpen(false);
+    headerToolsBtn?.focus();
+  }
 });
 
 function setMoreToolsOpen(open) {

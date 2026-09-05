@@ -894,7 +894,10 @@ class ProjectMapFrontendBoundaryTest(unittest.TestCase):
         index = (
             Path(__file__).parents[1] / "claude_web" / "static" / "index.html"
         ).read_text(encoding="utf-8")
-        self.assertIn('id="cwProjectMapBtn" class="sb-icon-btn cw-code-only"', index)
+        # Project Map 入口已收进 header「更多工具」菜单，仍是工作模式专属：
+        # 按钮本身为菜单项，且位于带 cw-code-only 的菜单分组内（Chat 模式整组隐藏）。
+        self.assertIn('id="cwProjectMapBtn" class="cw-more-tool-item"', index)
+        self.assertIn('<div class="cw-more-tool-group cw-code-only">', index)
         self.assertNotIn('<script src="/assets/project-map.js"', index)
         self.assertNotIn('<link rel="stylesheet" href="/assets/project-map.css"', index)
         self.assertIn("if (!codeMode) return;", index)
