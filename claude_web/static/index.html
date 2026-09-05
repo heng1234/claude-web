@@ -372,6 +372,52 @@
     background: color-mix(in srgb, var(--text) 6%, transparent);
     color: var(--text);
   }
+  /* 会话头部：标题占左，操作按钮靠右成组 */
+  #sessionSectionTitle { margin-right: auto; }
+  #sessionMultiSelectBtn[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+  }
+  /* 批量操作条 */
+  .cw-session-batch-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 4px 2px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  .cw-session-batch-bar.hidden { display: none; }
+  .cw-session-batch-count { color: var(--text-muted); }
+  .cw-session-batch-actions { display: flex; gap: 6px; margin-left: auto; }
+  .cw-session-batch-btn {
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .cw-session-batch-btn:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+  .cw-session-batch-btn.danger { border-color: #ef4444; color: #ef4444; }
+  .cw-session-batch-btn.danger:hover { background: color-mix(in srgb, #ef4444 12%, transparent); }
+  .cw-session-batch-btn:disabled { opacity: .45; cursor: not-allowed; }
+  /* 多选态：列表项前的勾选框 */
+  .cw-session-select-box {
+    flex: 0 0 auto;
+    width: 17px;
+    height: 17px;
+    margin-right: 7px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  body:not(.cw-batch-mode) .cw-session-select-box { display: none; }
   .cw-workspace-card {
     display: none;
     margin: 8px 14px 12px;
@@ -5604,6 +5650,31 @@
     background: #fff;
     box-shadow: 0 18px 42px rgba(38, 31, 26, .12);
   }
+  /* Header 版「更多」菜单：向下弹出（区别于 composer 的向上弹出） */
+  .cw-header-tools { position: relative; display: inline-flex; }
+  .cw-header-tools-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    left: auto;
+    bottom: auto;
+    z-index: 50;
+    min-width: 208px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface, #fff);
+    box-shadow: 0 18px 42px rgba(38, 31, 26, .18);
+  }
+  .cw-more-tool-group-label {
+    padding: 8px 9px 3px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-subtle, #9a938c);
+  }
+  .cw-more-tool-group + .cw-more-tool-group { margin-top: 2px; }
   .cw-more-tool-item {
     display: flex;
     align-items: center;
@@ -8120,7 +8191,7 @@ async function switchLang(lang) {
 </script>
 </head>
 <body class="h-screen flex">
-<div id="cwConversationSearch" class="cw-conversation-search hidden cw-code-only" role="search" aria-label="搜索当前 Code 会话" data-i18n-aria="html.aria_search_code_session">
+<div id="cwConversationSearch" class="cw-conversation-search hidden cw-code-only" role="search" aria-label="搜索当前工作区会话" data-i18n-aria="html.aria_search_code_session">
   <input id="cwConversationSearchInput" type="search" autocomplete="off" placeholder="搜索当前会话" data-i18n-placeholder="nav.search_sessions" aria-label="搜索当前会话内容" data-i18n-aria="nav.search_sessions" />
   <span id="cwConversationSearchCount" class="cw-conversation-search-count" aria-live="polite">0 / 0</span>
   <button type="button" id="cwConversationSearchPrev" title="上一个匹配" aria-label="上一个匹配" data-i18n-title="html.prev_match" data-i18n-aria="html.prev_match">↑</button>
@@ -8184,7 +8255,7 @@ async function switchLang(lang) {
     </button>
     <button type="button" class="cw-nav-row" id="cwCodeNav" data-cw-view="code">
       <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg></span>
-      <span data-i18n="nav.code_mode">代码工作区</span>
+      <span data-i18n="nav.code_mode">工作模式</span>
     </button>
   </nav>
 
@@ -8199,12 +8270,22 @@ async function switchLang(lang) {
   <div class="flex-1 overflow-y-auto px-2 py-1" id="sessionList">
     <div class="cw-session-head">
       <span id="sessionSectionTitle" data-i18n="html.recent">最近</span>
+      <button type="button" id="sessionMultiSelectBtn" class="session-more-btn" title="多选" aria-label="多选" aria-pressed="false" data-i18n-title="ui.multi_select" data-i18n-aria="ui.multi_select">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      </button>
       <button type="button" id="sessionMoreBtn" class="session-more-btn" title="历史对话" aria-label="历史对话" data-i18n-title="html.history" data-i18n-aria="html.history">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 2"/></svg>
       </button>
     </div>
     <div id="sessionItems">
       <div class="text-xs text-center py-6" style="color:var(--text-subtle);" data-i18n="misc.loading_sessions">加载中...</div>
+    </div>
+    <div id="sessionBatchBar" class="cw-session-batch-bar hidden" role="toolbar" aria-label="批量操作" data-i18n-aria="ui.multi_select">
+      <span id="sessionBatchCount" class="cw-session-batch-count">已选 0 项</span>
+      <span class="cw-session-batch-actions">
+        <button type="button" id="sessionBatchDeleteBtn" class="cw-session-batch-btn danger" disabled data-i18n="ui.delete_selected">删除所选</button>
+        <button type="button" id="sessionBatchCancelBtn" class="cw-session-batch-btn" data-i18n="misc.cancel">取消</button>
+      </span>
     </div>
   </div>
 
@@ -8274,24 +8355,52 @@ async function switchLang(lang) {
       </div>
     </div>
     <div class="flex items-center gap-1 flex-shrink-0">
-      <button id="cwProjectMapBtn" class="sb-icon-btn cw-code-only" title="打开 Project Map" aria-label="打开 Project Map" aria-pressed="false" data-i18n-title="html.open_project_map" data-i18n-aria="html.open_project_map">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="7" cy="19" r="2"/><circle cx="12" cy="12" r="2.25"/><path d="m6.8 7 3.4 3.4M13.8 10.8l3.4-4.2M13.9 13.4l2.7 3M10.3 13.6l-2.1 3.5"/></svg>
-      </button>
-      <button id="cwOpenCodeFileBtn" class="sb-icon-btn cw-code-only" title="打开项目文件" aria-label="打开项目文件" data-i18n-title="html.open_project_files" data-i18n-aria="html.open_project_files">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h7v11.5A2.5 2.5 0 0 1 16.5 20h-10A2.5 2.5 0 0 1 4 17.5z"/><path d="M12 10v6M9 13h6"/></svg>
-      </button>
       <button id="connectorBtn" class="sb-icon-btn" title="连接器 · 一键连接应用与 MCP" aria-label="连接器" data-i18n-title="html.connector_hub_full" data-i18n-aria="html.connector_hub">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8V5a2 2 0 0 1 2-2h1M17 8V5a2 2 0 0 0-2-2h-1"/><rect x="5" y="8" width="14" height="6" rx="2"/><path d="M9 14v3a3 3 0 0 0 6 0v-3"/></svg>
       </button>
       <button id="agentTemplateBtn" class="sb-icon-btn" title="Agent 模板 · 可复用会话预设" aria-label="Agent 模板" data-i18n-title="html.agent_template_hub_full" data-i18n-aria="html.agent_template_hub">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/><path d="M18.5 4.5l.9 1.8 1.8.9-1.8.9-.9 1.8-.9-1.8-1.8-.9 1.8-.9z"/></svg>
       </button>
-      <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions" aria-label="配置中心" data-i18n-title="html.config_center_full" data-i18n-aria="html.config_center">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h10"/><path d="M8 12h10"/><path d="M8 18h10"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
-      </button>
-      <button id="headerMoreBtn" class="sb-icon-btn" title="工作目录 / 权限策略" aria-label="工作目录 / 权限策略" data-i18n-title="html.workdir_permissions" data-i18n-aria="html.workdir_permissions">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z"/></svg>
-      </button>
+      <div class="cw-header-tools">
+        <button id="headerToolsBtn" class="sb-icon-btn" type="button" title="更多工具" aria-label="更多工具" aria-haspopup="menu" aria-expanded="false" data-i18n-title="html.more_tools" data-i18n-aria="html.more_tools">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+        </button>
+        <div id="headerToolsMenu" class="cw-header-tools-menu hidden" role="menu" aria-label="更多工具" data-i18n-aria="html.more_tools">
+          <div class="cw-more-tool-group cw-code-only">
+            <div class="cw-more-tool-group-label" data-i18n="html.tools_group_workspace">工作区</div>
+            <button id="cwProjectMapBtn" class="cw-more-tool-item" type="button" role="menuitem" aria-pressed="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="7" cy="19" r="2"/><circle cx="12" cy="12" r="2.25"/><path d="m6.8 7 3.4 3.4M13.8 10.8l3.4-4.2M13.9 13.4l2.7 3M10.3 13.6l-2.1 3.5"/></svg>
+              <span data-i18n="html.open_project_map">Project Map</span>
+            </button>
+            <button id="cwOpenCodeFileBtn" class="cw-more-tool-item" type="button" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h7v11.5A2.5 2.5 0 0 1 16.5 20h-10A2.5 2.5 0 0 1 4 17.5z"/><path d="M12 10v6M9 13h6"/></svg>
+              <span data-i18n="html.open_project_files">打开项目文件</span>
+            </button>
+            <button id="roundtableBtn" class="cw-more-tool-item" type="button" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="7" r="2"/><circle cx="19" cy="7" r="2"/><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/></svg>
+              <span data-i18n="html.roundtable">圆桌讨论</span>
+            </button>
+          </div>
+          <div class="cw-more-tool-group">
+            <div class="cw-more-tool-group-label" data-i18n="html.tools_group_automation">自动化</div>
+            <button id="scheduledTasksBtn" class="cw-more-tool-item" type="button" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              <span data-i18n="html.scheduled_tasks">定时任务</span>
+            </button>
+          </div>
+          <div class="cw-more-tool-group">
+            <div class="cw-more-tool-group-label" data-i18n="html.tools_group_config">配置</div>
+            <button id="configCenterBtn" class="cw-more-tool-item" type="button" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h10"/><path d="M8 12h10"/><path d="M8 18h10"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
+              <span data-i18n="html.config_center">配置中心</span>
+            </button>
+            <button id="headerMoreBtn" class="cw-more-tool-item" type="button" role="menuitem">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z"/></svg>
+              <span data-i18n="html.workdir_permissions">工作目录 / 权限策略</span>
+            </button>
+          </div>
+        </div>
+      </div>
       <button id="helpBtn" class="sb-icon-btn relative" title="帮助 / 快捷键 / 更新日志" aria-label="帮助" data-i18n-title="html.help_shortcuts_changelog" data-i18n-aria="html.help">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.7 2.7 0 0 1 5 1.4c0 1.8-2.5 2.1-2.5 3.6"/><path d="M12 17h.01"/></svg>
         <span id="helpBadge" class="hidden absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style="background:#ef4444;"></span>
@@ -8391,7 +8500,7 @@ async function switchLang(lang) {
     <div id="welcome" class="empty-hero">
       <div class="empty-logo">C</div>
       <div class="empty-title" data-i18n="html.chat_greeting">今天想聊点什么？</div>
-      <div class="empty-subtitle" data-i18n="html.chat_intro">默认是普通聊天，界面保持轻一点；需要项目上下文、权限策略或 Git 状态时，再切到 Code 模式。</div>
+      <div class="empty-subtitle" data-i18n="html.chat_intro">默认是普通聊天，界面保持轻一点；需要项目上下文、权限策略或 Git 状态时，再切到工作模式。</div>
       <div class="empty-cards">
         <div class="empty-card" data-prompt="帮我解释下面这段文字，提炼核心意思、关键结论和可能的隐含前提：">
           <div class="empty-card-icon">🔍</div>
@@ -8449,7 +8558,7 @@ async function switchLang(lang) {
         <span class="cw-context-compaction-spinner" aria-hidden="true"></span>
         <span id="cwContextCompactionText" data-i18n="status.compacting">上下文接近上限，正在压缩…</span>
       </div>
-      <div id="cwSessionStatsBar" class="cw-session-stats-bar hidden" aria-label="Code 会话状态" data-i18n-aria="html.code_session_status">
+      <div id="cwSessionStatsBar" class="cw-session-stats-bar hidden" aria-label="工作区会话状态" data-i18n-aria="html.code_session_status">
         <button type="button" class="cw-stats-item" id="cwStatsTasks" title="暂无任务" disabled data-i18n-title="html.no_tasks">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="m17 8 2 2 4-4"/></svg>
           <span class="cw-stats-label" data-i18n="tools.task_running">任务</span>
@@ -8578,7 +8687,7 @@ async function switchLang(lang) {
                         <span class="cw-mode-option-copy"><span class="cw-mode-option-title" data-i18n="html.workspace_presets">工作区预设</span><span class="cw-mode-option-description" data-i18n="html.workspace_presets_desc">保存项目、模型、模式和验证命令</span></span>
                       </button>
                       <button type="button" id="cwWorktreesBtn" class="cw-mode-option" role="menuitem">
-                        <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Git Worktrees</span><span class="cw-mode-option-description" data-i18n="html.worktrees_desc">为并行任务创建隔离的 Code 会话</span></span>
+                        <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Git Worktrees</span><span class="cw-mode-option-description" data-i18n="html.worktrees_desc">为并行任务创建隔离的工作区会话</span></span>
                       </button>
                     </span>
                   </span>
@@ -8726,7 +8835,7 @@ async function switchLang(lang) {
     </aside>
     <div id="cwCodeInspectorBody" class="cw-code-inspector-body"><div class="cw-code-inspector-empty" data-i18n="html.open_file_from_desc">从回答、工具调用、改动列表或文件树中打开文件</div></div>
   </div>
-  <div id="cwCodeInspectorStatus" class="cw-code-inspector-status"><span data-i18n="html.code_readonly_preview">Code 项目内只读预览</span><span></span></div>
+  <div id="cwCodeInspectorStatus" class="cw-code-inspector-status"><span data-i18n="html.code_readonly_preview">工作区项目内只读预览</span><span></span></div>
   <div id="cwCodeInspectorExternalMenu" class="cw-code-inspector-external hidden" role="menu"></div>
 </aside>
 
@@ -8765,7 +8874,7 @@ async function switchLang(lang) {
         <input id="agentLoopTestCommand" type="text" placeholder="留空时自动检测：npm test、make test 或 pytest" class="w-full px-3 py-2 text-sm"  data-i18n-placeholder="html.ph_test_autodetect" />
       </div>
       <div id=”agentLoopChatWarning” class=”rounded p-3 text-xs hidden” style=”background:var(--surface-2); border:1px solid var(--accent); color:var(--text-muted);”>
-        <span data-i18n="html.agent_loop_warn_1">⚠️ Agent Loop 是代码工作区能力：启动后当前会话会切换到</span><strong data-i18n="html.code_workspace_mode">代码工作区模式</strong><span data-i18n="html.agent_loop_warn_2">（启用文件读写、命令执行等全部工具）。原聊天记录会保留，但界面与可用工具会随之改变。</span>
+        <span data-i18n="html.agent_loop_warn_1">⚠️ Agent Loop 是工作区能力：启动后当前会话会切换到</span><strong data-i18n="html.code_workspace_mode">工作区模式</strong><span data-i18n="html.agent_loop_warn_2">（启用文件读写、命令执行等全部工具）。原聊天记录会保留，但界面与可用工具会随之改变。</span>
       </div>
       <div class=”rounded p-3 text-xs” style=”background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);” data-i18n="html.agent_loop_warn_3">
         Loop 会在后端持续运行并复用当前权限策略和工作目录；预算只计算每轮新增提示和模型输出，不重复计算已有会话与缓存上下文。每轮失败最多自动重试 2 次，连续遇到相同测试失败会暂停。需要中断时点输入框上方的”停止”。
@@ -8889,7 +8998,7 @@ async function switchLang(lang) {
             <div class="settings-inline">
               <label class="settings-check"><input type="checkbox" id="codeWebSearchDefault" /> <span data-i18n="tools.web_search">默认开启 Web 工具</span></label>
             </div>
-            <div class="settings-hint" data-i18n="html.web_tools_desc">控制 Code 模式里的 WebSearch / WebFetch；关闭后仍可通过 Bash 使用 curl、npm、pip 等命令。</div>
+            <div class="settings-hint" data-i18n="html.web_tools_desc">控制工作模式里的 WebSearch / WebFetch；关闭后仍可通过 Bash 使用 curl、npm、pip 等命令。</div>
           </div>
           <div class="settings-section">
             <div id="agentSdkCard" class="agent-sdk-card" data-status="checking">
@@ -9413,7 +9522,7 @@ async function switchLang(lang) {
         </div>
         <div class="min-w-0">
           <div id="codeReviewTitle" class="cw-code-review-title" data-i18n="html.session_changes">本会话改动</div>
-          <div id="codeReviewSummary" class="cw-code-review-sub" data-i18n="html.review_changes_desc">审查 Claude 在 Code 模式中产生的文件修改</div>
+          <div id="codeReviewSummary" class="cw-code-review-sub" data-i18n="html.review_changes_desc">审查 Claude 在工作模式中产生的文件修改</div>
         </div>
       </div>
       <div class="cw-review-batch-actions">
@@ -9432,7 +9541,7 @@ async function switchLang(lang) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             <span data-i18n="html.run_verification">运行验证</span>
           </div>
-          <div class="cw-validation-help" data-i18n="html.run_verification_desc">留空会自动检测 npm、Make、pytest 或 unittest；结果会保存到当前 Code 会话。</div>
+          <div class="cw-validation-help" data-i18n="html.run_verification_desc">留空会自动检测 npm、Make、pytest 或 unittest；结果会保存到当前工作区会话。</div>
         </div>
         <div class="cw-validation-form">
           <select id="codeValidationMode" class="cw-validation-mode" aria-label="项目验证策略" data-i18n-aria="html.project_verify_policy">
@@ -9512,14 +9621,14 @@ async function switchLang(lang) {
 
 <div id="cwWorkspacePresetsModal" class="modal-backdrop hidden cw-code-only">
   <div class="modal-box lg p-0" role="dialog" aria-modal="true" aria-labelledby="cwWorkspacePresetsTitle" style="max-width:720px;overflow:hidden;">
-    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorkspacePresetsTitle" class="cw-code-review-title" data-i18n="html.code_workspace_presets">Code 工作区预设</div><div class="cw-code-review-sub" data-i18n="html.presets_restore_desc">一键恢复项目、模型、运行模式、轻上下文和验证策略</div></div><button data-close class="cw-code-review-close" aria-label="关闭工作区预设" data-i18n-aria="html.close_workspace_presets">×</button></div>
+    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorkspacePresetsTitle" class="cw-code-review-title" data-i18n="html.code_workspace_presets">工作区预设</div><div class="cw-code-review-sub" data-i18n="html.presets_restore_desc">一键恢复项目、模型、运行模式、轻上下文和验证策略</div></div><button data-close class="cw-code-review-close" aria-label="关闭工作区预设" data-i18n-aria="html.close_workspace_presets">×</button></div>
     <div class="cw-code-review-body"><div id="cwWorkspacePresetsList" class="cw-code-list"></div><div class="cw-code-form-row"><input id="cwWorkspacePresetName" maxlength="80" placeholder="预设名称，例如：claude-web 开发" aria-label="预设名称"  data-i18n-placeholder="html.ph_preset_name"  data-i18n-aria="html.preset_name" /><button type="button" id="cwWorkspacePresetSave" data-i18n="html.save_current_config">保存当前配置</button></div></div>
   </div>
 </div>
 
 <div id="cwWorktreesModal" class="modal-backdrop hidden cw-code-only">
   <div class="modal-box lg p-0" role="dialog" aria-modal="true" aria-labelledby="cwWorktreesTitle" style="max-width:860px;overflow:hidden;">
-    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorktreesTitle" class="cw-code-review-title">Git Worktrees</div><div class="cw-code-review-sub" data-i18n="html.worktree_note">每个 Worktree 使用独立目录与派生 Code 会话；删除不会自动删除 Git 分支</div></div><button data-close class="cw-code-review-close" aria-label="关闭 Worktrees" data-i18n-aria="html.close_worktrees">×</button></div>
+    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorktreesTitle" class="cw-code-review-title">Git Worktrees</div><div class="cw-code-review-sub" data-i18n="html.worktree_note">每个 Worktree 使用独立目录与派生工作区会话；删除不会自动删除 Git 分支</div></div><button data-close class="cw-code-review-close" aria-label="关闭 Worktrees" data-i18n-aria="html.close_worktrees">×</button></div>
     <div class="cw-code-review-body">
       <div id="cwWorktreesList" class="cw-code-list"></div>
       <div class="cw-worktree-form" aria-label="新建 Worktree" data-i18n-aria="html.new_worktree">
@@ -9699,7 +9808,7 @@ async function switchLang(lang) {
           <div class="at-field-label" data-i18n="html.agent_template_mode">适用模式</div>
           <select id="atMode" class="cw-input w-full">
             <option value="both">🌐 通用（代码+聊天）</option>
-            <option value="code">💻 仅代码模式</option>
+            <option value="code">💻 仅工作模式</option>
             <option value="chat">💬 仅聊天模式</option>
           </select>
         </div>
@@ -9757,9 +9866,126 @@ async function switchLang(lang) {
   </div>
 </div>
 
+<!-- Scheduled Tasks modal -->
+<div id="scheduledTasksModal" class="modal-backdrop hidden">
+  <div class="modal-box" style="display:flex;flex-direction:column;overflow:hidden;padding:0;">
+    <div class="cw-market-head">
+      <div class="text-lg font-semibold flex items-center gap-2">
+        <span>⏰</span><span data-i18n="html.scheduled_tasks_title">定时任务</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="scheduledTaskNewBtn" class="btn btn-primary text-xs" style="padding:6px 12px;" data-i18n="html.scheduled_task_new">＋ 新建任务</button>
+        <button data-close class="text-xl leading-none" style="color:var(--text-subtle);">×</button>
+      </div>
+    </div>
+    <div class="text-xs px-1 pb-2" style="color:var(--text-subtle);" data-i18n="html.scheduled_tasks_desc">按 cron 计划自动触发一个 Claude 回合。可每次开新会话，或注入到已有会话。服务重启后仍生效。</div>
+    <div class="cw-market-body">
+      <div id="scheduledTaskList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Scheduled Task editor -->
+<div id="scheduledTaskEditor" class="modal-backdrop hidden">
+  <div class="modal-box p-0" style="max-width:600px;overflow:hidden;">
+    <div class="at-editor-header">
+      <div class="at-editor-header-left">
+        <div class="at-editor-header-icon">⏰</div>
+        <div id="scheduledTaskEditorTitle" class="at-editor-title" data-i18n="html.scheduled_task_new">＋ 新建任务</div>
+      </div>
+      <button data-close class="at-editor-close">×</button>
+    </div>
+    <div class="at-editor-body">
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title" data-i18n="html.scheduled_task_basics">基础</span></div>
+        <div>
+          <div class="at-field-label"><span data-i18n="html.scheduled_task_name">名称</span><span style="color:#ef4444;">*</span></div>
+          <input id="stName" class="cw-input w-full" maxlength="80" placeholder="例如：每日晨报" />
+        </div>
+        <div class="mt-3">
+          <div class="at-field-label"><span data-i18n="html.scheduled_task_cron">Cron 表达式</span><span style="color:#ef4444;">*</span></div>
+          <input id="stCron" class="cw-input w-full" placeholder="0 9 * * *" />
+          <div class="text-xs mt-1" style="color:var(--text-subtle);" data-i18n="html.scheduled_task_cron_hint">5 字段：分 时 日 月 周。例：0 9 * * 1-5 = 工作日 09:00。</div>
+          <div id="stCronPreview" class="text-xs mt-1" style="color:var(--text-subtle);"></div>
+        </div>
+        <div class="mt-3">
+          <div class="at-field-label"><span data-i18n="html.scheduled_task_message">消息内容</span><span style="color:#ef4444;">*</span></div>
+          <textarea id="stMessage" class="cw-input w-full" rows="3" placeholder="要发送给 Claude 的内容"></textarea>
+        </div>
+      </div>
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title" data-i18n="html.scheduled_task_execution">执行方式</span></div>
+        <div>
+          <div class="at-field-label" data-i18n="html.scheduled_task_exec_model">执行模型</div>
+          <select id="stExecModel" class="cw-input w-full">
+            <option value="new_session" data-i18n="html.scheduled_task_exec_new">每次开新会话</option>
+            <option value="bound_session" data-i18n="html.scheduled_task_exec_bound">注入到指定会话</option>
+          </select>
+        </div>
+        <div id="stBoundSessionWrap" class="mt-3 hidden">
+          <div class="at-field-label" data-i18n="html.scheduled_task_bound_session">绑定会话 ID</div>
+          <input id="stBoundSession" class="cw-input w-full" placeholder="session id" />
+        </div>
+        <div class="mt-3">
+          <div class="at-field-label" data-i18n="html.scheduled_task_cwd">工作目录（可选）</div>
+          <input id="stCwd" class="cw-input w-full" placeholder="/path/to/project" />
+        </div>
+        <div class="flex gap-3 mt-3">
+          <div class="flex-1">
+            <div class="at-field-label" data-i18n="html.scheduled_task_model">模型（可选）</div>
+            <input id="stModel" class="cw-input w-full" placeholder="claude-opus-4-8" />
+          </div>
+          <div class="flex-1">
+            <div class="at-field-label" data-i18n="html.scheduled_task_permission">权限模式</div>
+            <select id="stPermission" class="cw-input w-full">
+              <option value="default">default</option>
+              <option value="acceptEdits">acceptEdits</option>
+              <option value="bypassPermissions">bypassPermissions</option>
+              <option value="plan">plan</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="at-editor-footer">
+        <button id="stSaveBtn" class="at-save-btn">
+          <span>💾</span><span data-i18n="html.scheduled_task_save">保存任务</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Roundtable (multi-role discussion) modal -->
+<div id="roundtableModal" class="modal-backdrop hidden">
+  <div class="modal-box p-0" style="max-width:620px;overflow:hidden;">
+    <div class="at-editor-header">
+      <div class="at-editor-header-left">
+        <div class="at-editor-header-icon">🎙️</div>
+        <div class="at-editor-title" data-i18n="html.roundtable_title">圆桌讨论</div>
+      </div>
+      <button data-close class="at-editor-close">×</button>
+    </div>
+    <div class="at-editor-body">
+      <div class="text-xs pb-2" style="color:var(--text-subtle);" data-i18n="html.roundtable_desc">选择多个角色，让他们就同一议题各抒己见，最后由主持人综合。仅工作模式可用，每个角色通过 Task 分派并单独可视化。</div>
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title" data-i18n="html.roundtable_pick_roles">选择角色（可多选）</span></div>
+        <div id="roundtableRoleGrid" class="cw-market-grid"></div>
+      </div>
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title" data-i18n="html.roundtable_topic">讨论议题</span></div>
+        <textarea id="roundtableTopic" class="cw-input w-full" rows="3" placeholder="例如：是否为订单服务引入消息队列？请从各自专业角度评估。"></textarea>
+      </div>
+      <div class="at-editor-footer">
+        <button id="roundtableStartBtn" class="at-save-btn">
+          <span>🎙️</span><span data-i18n="html.roundtable_start">开始讨论</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MCP Management modal -->
-<div id="mcpModal" class="modal-backdrop hidden">
-  <div class="modal-box lg p-5" style="max-width:680px;">
+<div id="mcpModal" class="modal-backdrop hidden">  <div class="modal-box lg p-5" style="max-width:680px;">
     <div class="flex items-center justify-between mb-4">
       <div class="text-lg font-semibold" data-i18n="html.connector_panel_title">🔌 连接器 / MCP</div>
       <button data-close class="text-xl">×</button>
@@ -13776,7 +14002,7 @@ function renderCodeContextLedger(payload = {}) {
       <div><div class="cw-context-ledger-title">${escapeHtml(type)} · ${escapeHtml(source)}</div><div class="cw-context-ledger-meta">${escapeHtml(when)}${escapeHtml(revision)} · v${escapeHtml(String(item.version || '1'))}</div></div>
       <div class="cw-context-ledger-token">${_fmtTokens(item.token_estimate || 0)}<div class="cw-context-ledger-meta cw-context-ledger-state${item.stale ? ' stale' : ''}">${escapeHtml(lifecycle + stale)}</div></div>
     </div>`;
-  }).join('') : '<div class="cw-activity-empty">当前 Code 会话还没有账本描述符。</div>';
+  }).join('') : '<div class="cw-activity-empty">当前工作区会话还没有账本描述符。</div>';
 }
 
 async function refreshCodeContextLedger(options = {}) {
@@ -14406,7 +14632,7 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
   if (connectionLost) {
     nativeTurnRecoveryRunningSessionId = targetSessionId;
     syncActiveCodeRunControls();
-    showReconnectStatus(`正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}`);
+    showReconnectStatus(t('x.reconnecting_attempt').replace('{n}', reconnectAttempt).replace('{max}', maxReconnectAttempts));
   }
 
   // Chat-mode turns have no SDK permission loop, but their events are persisted
@@ -14519,13 +14745,13 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
         nativeTurnRecoveryRunningSessionId = null;
         syncActiveCodeRunControls();
         hideThinking(asstContainer, { force: true });
-        showReconnectStatus(`连接暂未恢复 · 已尝试 ${maxReconnectAttempts} 次`);
+        showReconnectStatus(t('x.reconnect_gave_up').replace('{max}', maxReconnectAttempts));
         addSystemAction(t('x.no_auto_rerun'), t('code.reconnect'), () => reconnectCurrentCodeSession());
         renderCodeMessageQueue();
         return;
       }
       reconnectAttempt += 1;
-      showReconnectStatus(`正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}`);
+      showReconnectStatus(t('x.reconnecting_attempt').replace('{n}', reconnectAttempt).replace('{max}', maxReconnectAttempts));
       nativeTurnRecoveryTimer = setTimeout(poll, Math.min(3200, 650 * reconnectAttempt));
     }
   };
@@ -15264,7 +15490,7 @@ function nativeReconnectStatusText(obj) {
   const attempt = Number(obj.attempt ?? obj.retry_count ?? obj.retryCount ?? 0);
   const max = Number(obj.max_attempts ?? obj.maxAttempts ?? obj.max_retries ?? 0);
   if (/reconnect|retry/i.test(raw) && attempt > 0) {
-    return `正在重新连接 ${attempt}/${max > 0 ? max : 5}`;
+    return t('x.reconnecting_attempt').replace('{n}', attempt).replace('{max}', max > 0 ? max : 5);
   }
   return raw;
 }
@@ -15274,10 +15500,10 @@ function nativeApiRetryStatusText(obj) {
   const attempt = Math.max(1, Number(obj.attempt || 1));
   const maxRetries = Math.max(attempt, Number(obj.max_retries || obj.maxRetries || 10));
   const delayMs = Math.max(0, Number(obj.retry_delay_ms || obj.retryDelayMs || 0));
-  const delay = delayMs > 0 ? ` · ${Math.max(1, Math.ceil(delayMs / 1000))} 秒后` : '';
+  const delay = delayMs > 0 ? t('x.api_retry_delay').replace('{n}', Math.max(1, Math.ceil(delayMs / 1000))) : '';
   const status = Number(obj.error_status || obj.status || 0);
   const reason = status === 429 ? t('x.req_throttled') : t('x.req_temp_fail');
-  return `${reason}，正在重试 ${attempt}/${maxRetries}${delay}`;
+  return t('x.api_retrying').replace('{reason}', reason).replace('{n}', attempt).replace('{max}', maxRetries).replace('{delay}', delay);
 }
 
 function codeEventStoredByServer(obj) {
@@ -15434,7 +15660,9 @@ function handleEvent(obj, container, options = {}) {
   if (obj.type === 'system' && obj.subtype === 'stopped') {
     hideThinking(container, { force: true });
     finishPendingToolUses(t('status.aborted'), 'stopped');
-    if (replay) addSystemInfo(obj.message || t('status.aborted'));
+    // The persisted backend message is a fixed Chinese string ("已中止"); prefer
+    // the localized label so replayed history matches the viewer's locale.
+    if (replay) addSystemInfo(t('status.aborted'));
     return container;
   }
   if (obj.type === 'system' && obj.subtype === 'status') {
@@ -19104,8 +19332,19 @@ function toggleSessionActionMenu(btn, root = sessionItems) {
   }
 }
 
-async function deleteSessionById(targetId) {
-  if (!targetId || !confirm(t('dialogs.delete_session_confirm'))) return false;
+async function deleteSessionById(targetId, options = {}) {
+  const { skipConfirm = false, optimistic = true } = options;
+  if (!targetId) return false;
+  if (!skipConfirm && !confirm(t('dialogs.delete_session_confirm'))) return false;
+  // 乐观更新：先把列表项从 DOM 移除，用户立刻看到反馈；失败再回滚刷新
+  let removedNodes = [];
+  if (optimistic) {
+    removedNodes = Array.from(
+      sessionItems.querySelectorAll(`[data-id="${(window.CSS && CSS.escape) ? CSS.escape(targetId) : targetId}"]`)
+    ).map(el => el.closest('.session-item, .cw-project-session-shell, .cw-flat-session') || el);
+    removedNodes.forEach(n => { n.style.display = 'none'; });
+  }
+  const rollback = () => { removedNodes.forEach(n => { n.style.display = ''; }); };
   // Abort a background turn if this session is running but not in the foreground
   const bgState = sessionStates.get(targetId);
   if (bgState && bgState.controller) {
@@ -19123,7 +19362,7 @@ async function deleteSessionById(targetId) {
     } while (r.status === 409 && Date.now() < deadline);
   }
   if (r.status === 409 && targetId === sessionId) {
-    if (!confirm(t('x.gen_stop_delete'))) return false;
+    if (!confirm(t('x.gen_stop_delete'))) { rollback(); return false; }
     try {
       await fetch('/api/chat/stop/' + targetId, { method:'POST' });
       if (currentController) currentController.abort();
@@ -19136,7 +19375,8 @@ async function deleteSessionById(targetId) {
   }
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
-    alert(t('errors.unknown_error') + ': ' + (data.detail || r.status));
+    rollback();
+    toast(t('toasts.delete_failed') + ': ' + (data.detail || r.status));
     return false;
   }
   // Clean up per-session state and LRU cache entry
@@ -19144,9 +19384,10 @@ async function deleteSessionById(targetId) {
   const lruIdx = sessionDomCacheOrder.indexOf(targetId);
   if (lruIdx !== -1) sessionDomCacheOrder.splice(lruIdx, 1);
   if (targetId === sessionId) startNewSession();
-  refreshSessions();
-  refreshStats();
-  refreshTags();
+  // 并行刷新，避免串行往返带来的延迟感
+  if (!options.deferRefresh) {
+    Promise.all([refreshSessions(), refreshStats(), refreshTags()]).catch(() => {});
+  }
   return true;
 }
 
@@ -19159,6 +19400,101 @@ function bindSessionDeleteActions(root = sessionItems) {
     });
   });
 }
+
+// ===== 批量删除会话 =====
+let sessionBatchMode = false;
+const sessionBatchSelected = new Set();
+const sessionMultiSelectBtn = $('sessionMultiSelectBtn');
+const sessionBatchBar = $('sessionBatchBar');
+const sessionBatchCount = $('sessionBatchCount');
+const sessionBatchDeleteBtn = $('sessionBatchDeleteBtn');
+const sessionBatchCancelBtn = $('sessionBatchCancelBtn');
+
+function updateSessionBatchBar() {
+  const n = sessionBatchSelected.size;
+  if (sessionBatchCount) sessionBatchCount.textContent = t('ui.selected_count').replace('{n}', n);
+  if (sessionBatchDeleteBtn) sessionBatchDeleteBtn.disabled = n === 0;
+}
+
+// 找列表项的稳定外层容器（勾选框注入到这里，避免破坏 button 内部布局）
+function sessionItemShell(el) {
+  return el.closest('.cw-project-session-shell') || el.closest('.session-item') || el.parentElement || el;
+}
+
+function toggleBatchSelection(id, checked) {
+  if (checked) sessionBatchSelected.add(id);
+  else sessionBatchSelected.delete(id);
+  updateSessionBatchBar();
+}
+
+// 给每个列表项注入勾选框（幂等：已注入则跳过）；仅在批量模式渲染时调用
+function injectBatchCheckboxes(root = sessionItems) {
+  if (!sessionBatchMode) return;
+  root.querySelectorAll('[data-id]').forEach(el => {
+    const id = el.dataset.id;
+    if (!id) return;
+    const shell = sessionItemShell(el);
+    if (shell.querySelector(':scope > .cw-session-select-box')) return;
+    if (getComputedStyle(shell).position === 'static') shell.style.position = 'relative';
+    shell.style.display = shell.style.display || 'flex';
+    shell.style.alignItems = 'center';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'cw-session-select-box';
+    box.checked = sessionBatchSelected.has(id);
+    box.setAttribute('aria-label', t('ui.multi_select'));
+    box.dataset.batchId = id;
+    box.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleBatchSelection(id, box.checked);
+    });
+    shell.insertBefore(box, shell.firstChild);
+  });
+}
+
+function setSessionBatchMode(on) {
+  sessionBatchMode = on;
+  sessionBatchSelected.clear();
+  document.body.classList.toggle('cw-batch-mode', on);
+  sessionMultiSelectBtn?.setAttribute('aria-pressed', on ? 'true' : 'false');
+  sessionBatchBar?.classList.toggle('hidden', !on);
+  updateSessionBatchBar();
+  refreshSessions();
+}
+
+sessionMultiSelectBtn?.addEventListener('click', () => setSessionBatchMode(!sessionBatchMode));
+sessionBatchCancelBtn?.addEventListener('click', () => setSessionBatchMode(false));
+
+// 批量模式下，点列表项 = 切换选中（拦截打开会话）
+sessionItems?.addEventListener('click', (e) => {
+  if (!sessionBatchMode) return;
+  if (e.target.closest('.cw-session-select-box')) return;   // 勾选框自身已处理
+  if (e.target.closest('[data-session-menu]') || e.target.closest('.cw-session-actions')) return; // 保留操作菜单
+  const item = e.target.closest('[data-id]');
+  if (!item || !item.dataset.id) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const shell = sessionItemShell(item);
+  const box = shell.querySelector(':scope > .cw-session-select-box');
+  if (box) { box.checked = !box.checked; toggleBatchSelection(item.dataset.id, box.checked); }
+}, true);
+
+sessionBatchDeleteBtn?.addEventListener('click', async () => {
+  const ids = Array.from(sessionBatchSelected);
+  if (!ids.length) return;
+  if (!confirm(t('ui.batch_delete_confirm').replace('{n}', ids.length))) return;
+  sessionBatchDeleteBtn.disabled = true;
+  toast(t('toasts.generating'), { sticky: true });
+  let ok = 0, failed = 0;
+  for (const id of ids) {
+    const done = await deleteSessionById(id, { skipConfirm: true, optimistic: true, deferRefresh: true });
+    done ? ok++ : failed++;
+  }
+  toast.dismiss();
+  toast(t('ui.batch_deleted').replace('{n}', ok) + (failed ? ` (${t('toasts.delete_failed')}: ${failed})` : ''));
+  setSessionBatchMode(false);
+  Promise.all([refreshStats(), refreshTags()]).catch(() => {});
+});
 
 function renderProjectGroup(group, options = {}) {
   const key = codeProjectKey(group.cwd);
@@ -19232,7 +19568,7 @@ function renderCodeProjectSessionList(list) {
   }
 
   if (!projectGroups.length && !generalSessions.length) {
-    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">暂无代码工作区会话</div>';
+    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">暂无工作区会话</div>';
     return;
   }
 
@@ -19255,6 +19591,7 @@ function renderCodeProjectSessionList(list) {
   });
   bindSessionMenuToggles(sessionItems);
   bindSessionDeleteActions(sessionItems);
+  injectBatchCheckboxes(sessionItems);
   sessionItems.querySelectorAll('[data-project-collapse]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -19389,6 +19726,7 @@ async function refreshSessions() {
         refreshSessions(); refreshTags();
       });
     });
+    injectBatchCheckboxes(sessionItems);
   } catch (e) { console.warn(e); }
 }
 
@@ -19706,13 +20044,30 @@ titleLabel.addEventListener('dblclick', async () => {
 suggestTitleBtn.addEventListener('click', async () => {
   if (!sessionId) return;
   suggestTitleBtn.textContent = '⏳';
+  toast(t('ui.title_generating'), { sticky: true });
   try {
     const r = await fetch('/api/sessions/' + sessionId + '/suggest-title', { method:'POST' });
-    if (!r.ok) { alert(t('errors.unknown_error')); return; }
+    if (!r.ok) {
+      // 按后端状态码给出可理解的具体提示，而不是一句通用错误
+      const msg = r.status === 404 ? t('ui.title_empty_session')
+        : r.status === 400 ? t('ui.title_no_content')
+        : r.status === 504 ? t('ui.title_timeout')
+        : t('ui.title_failed');
+      toast.dismiss();
+      toast(msg);
+      return;
+    }
     const d = await r.json();
-    titleLabel.textContent = d.title;
+    const newTitle = (d.title || '').trim();
+    if (!newTitle) { toast.dismiss(); toast(t('ui.title_failed')); return; }
+    titleLabel.textContent = newTitle;
+    toast.dismiss();
+    toast(t('ui.title_updated'));
     refreshSessions();
-  } catch (e) { alert(t('errors.unknown_error') + ': ' + e.message); }
+  } catch (e) {
+    toast.dismiss();
+    toast(t('ui.title_failed') + ': ' + e.message);
+  }
   finally { suggestTitleBtn.textContent = '🪄'; }
 });
 
@@ -20120,7 +20475,7 @@ function renderCodeReviewPanel() {
     codeReviewSummary.textContent = `${new Set(activeFiles.map(file => file.path)).size} 个当前文件 · +${add} / -${del} · ${sets.length} 个变更集`;
   }
   if (!sets.length) {
-    codeReviewList.innerHTML = '<div class="cw-review-empty">当前 Code 会话还没有检测到文件修改。</div>';
+    codeReviewList.innerHTML = '<div class="cw-review-empty">当前工作区会话还没有检测到文件修改。</div>';
   } else {
     codeReviewList.innerHTML = sets.map(set => {
       const setAdd = set.files.reduce((sum, file) => sum + (file.additions || 0), 0);
@@ -22994,8 +23349,8 @@ async function refreshCodeWorktrees() {
       const canOpen = item.status === 'active' && item.exists;
       const deleteReason = codeWorktreeDeleteReason(item);
       const canDelete = !item.runtime_active && !item.dirty && item.worktree_session_id !== sessionId && item.status === 'active' && item.exists;
-      return `<div class="cw-code-list-row" data-code-worktree="${escapeHtml(item.id)}"><div><strong>${escapeHtml(item.slug)} · ${escapeHtml(item.branch)}</strong><small>${escapeHtml(codeWorktreeStatusLabel(item))} · 基于 ${escapeHtml(item.base_ref || 'HEAD')} · ${escapeHtml(item.path || '')}</small></div><div class="cw-code-list-actions"><button type="button" data-open-code-worktree="${escapeHtml(item.id)}" ${canOpen ? '' : 'disabled'} title="${canOpen ? '打开独立的派生 Code 会话' : 'Worktree 当前不可打开'}">打开</button><button type="button" class="danger" data-remove-code-worktree="${escapeHtml(item.id)}" ${canDelete ? '' : 'disabled'} title="${escapeHtml(deleteReason)}" data-i18n="misc.delete">删除</button></div></div>`;
-    }).join('') : '<div class="cw-activity-empty">还没有 Worktree。新建后会创建独立目录和派生 Code 会话。</div>';
+      return `<div class="cw-code-list-row" data-code-worktree="${escapeHtml(item.id)}"><div><strong>${escapeHtml(item.slug)} · ${escapeHtml(item.branch)}</strong><small>${escapeHtml(codeWorktreeStatusLabel(item))} · 基于 ${escapeHtml(item.base_ref || 'HEAD')} · ${escapeHtml(item.path || '')}</small></div><div class="cw-code-list-actions"><button type="button" data-open-code-worktree="${escapeHtml(item.id)}" ${canOpen ? '' : 'disabled'} title="${canOpen ? '打开独立的派生工作区会话' : 'Worktree 当前不可打开'}">打开</button><button type="button" class="danger" data-remove-code-worktree="${escapeHtml(item.id)}" ${canDelete ? '' : 'disabled'} title="${escapeHtml(deleteReason)}" data-i18n="misc.delete">删除</button></div></div>`;
+    }).join('') : '<div class="cw-activity-empty">还没有 Worktree。新建后会创建独立目录和派生工作区会话。</div>';
     cwWorktreesList.querySelectorAll('[data-open-code-worktree]').forEach(button => button.addEventListener('click', async () => {
       const item = worktrees.find(entry => entry.id === button.dataset.openCodeWorktree);
       if (!item) return;
@@ -25346,6 +25701,35 @@ headerMoreBtn.addEventListener('click', () => {
   setProjectManagerOpen(cwProjectManagerPanel?.classList.contains('hidden'));
 });
 
+// Header「更多工具」下拉菜单：收纳低频/工作区专属入口，避免顶栏图标过多
+const headerToolsBtn = $('headerToolsBtn');
+const headerToolsMenu = $('headerToolsMenu');
+function setHeaderToolsOpen(open) {
+  if (!headerToolsMenu || !headerToolsBtn) return;
+  headerToolsMenu.classList.toggle('hidden', !open);
+  headerToolsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+headerToolsBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setHeaderToolsOpen(headerToolsMenu?.classList.contains('hidden'));
+});
+// 点击任一菜单项后收起菜单（各项自身的业务 handler 另行绑定，互不影响）
+headerToolsMenu?.querySelectorAll('.cw-more-tool-item').forEach((item) => {
+  item.addEventListener('click', () => setHeaderToolsOpen(false));
+});
+// 点击菜单外部或按 Esc 关闭
+document.addEventListener('click', (e) => {
+  if (!headerToolsMenu || headerToolsMenu.classList.contains('hidden')) return;
+  if (e.target.closest('#headerToolsMenu') || e.target.closest('#headerToolsBtn')) return;
+  setHeaderToolsOpen(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && headerToolsMenu && !headerToolsMenu.classList.contains('hidden')) {
+    setHeaderToolsOpen(false);
+    headerToolsBtn?.focus();
+  }
+});
+
 function setMoreToolsOpen(open) {
   if (!composerMoreToolsMenu || !composerMoreToolsBtn) return;
   if (open) {
@@ -26551,7 +26935,224 @@ async function autoEnableTemplateConnectors(ids) {
   }
 }
 
-// Minimal per-connector dialog: shows ONLY the fields the user must supply
+// ---- Scheduled tasks ------------------------------------------------------
+let scheduledTasks = [];
+let scheduledTaskEditId = null;
+const scheduledTasksModal = $('scheduledTasksModal');
+const scheduledTaskEditor = $('scheduledTaskEditor');
+
+$('scheduledTasksBtn')?.addEventListener('click', () => {
+  if (mobileQuestionMode) { toast(t('mobile.no_mcp_manage')); return; }
+  openModal(scheduledTasksModal);
+  loadScheduledTasks();
+});
+
+function fmtScheduledTs(ts) {
+  if (!ts) return '—';
+  try { return new Date(ts * 1000).toLocaleString(); } catch (_) { return '—'; }
+}
+
+async function loadScheduledTasks() {
+  const list = $('scheduledTaskList');
+  if (list) list.innerHTML = `<div class="text-sm text-center py-10" style="color:var(--text-subtle);">${escapeHtml(t('misc.loading') || '加载中…')}</div>`;
+  try {
+    const r = await fetch('/api/scheduled-tasks');
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    const data = await r.json();
+    scheduledTasks = Array.isArray(data.tasks) ? data.tasks : [];
+    renderScheduledTaskList();
+  } catch (e) {
+    if (list) list.innerHTML = `<div class="text-sm text-center py-10" style="color:#ef4444;">${escapeHtml(t('errors.unknown_error') || '加载失败')}: ${escapeHtml(String(e.message || e))}</div>`;
+  }
+}
+
+function renderScheduledTaskList() {
+  const list = $('scheduledTaskList');
+  if (!list) return;
+  if (!scheduledTasks.length) {
+    list.innerHTML = `<div class="text-sm text-center py-10" style="color:var(--text-subtle);">${escapeHtml(t('html.scheduled_task_empty') || '还没有定时任务，点右上角「新建任务」开始。')}</div>`;
+    return;
+  }
+  list.innerHTML = scheduledTasks.map(task => {
+    const enabled = !!task.enabled;
+    const statusLabel = task.last_status
+      ? escapeHtml(task.last_status) + (task.last_error ? ' · ' + escapeHtml(String(task.last_error).slice(0, 80)) : '')
+      : (t('html.scheduled_task_never_run') || '尚未运行');
+    const execLabel = task.execution_model === 'bound_session'
+      ? (t('html.scheduled_task_exec_bound') || '注入到指定会话')
+      : (t('html.scheduled_task_exec_new') || '每次开新会话');
+    return `<div class="cw-code-list-row" data-st-id="${escapeHtml(task.id)}">
+      <div class="min-w-0">
+        <strong>${escapeHtml(task.name)}</strong>
+        <small><code>${escapeHtml(task.cron_expr)}</code> · ${escapeHtml(execLabel)} · ${(t('html.scheduled_task_next') || '下次')}: ${escapeHtml(fmtScheduledTs(task.next_run_at))} · ${statusLabel}</small>
+      </div>
+      <div class="cw-code-list-actions">
+        <button type="button" data-st-toggle="${escapeHtml(task.id)}">${enabled ? (t('html.scheduled_task_disable') || '停用') : (t('html.scheduled_task_enable') || '启用')}</button>
+        <button type="button" data-st-run="${escapeHtml(task.id)}">${t('html.scheduled_task_run_now') || '立即运行'}</button>
+        <button type="button" data-st-edit="${escapeHtml(task.id)}" data-i18n="misc.edit">编辑</button>
+        <button type="button" class="danger" data-st-delete="${escapeHtml(task.id)}" data-i18n="misc.delete">删除</button>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-st-toggle]').forEach(b => b.addEventListener('click', () => toggleScheduledTask(b.dataset.stToggle)));
+  list.querySelectorAll('[data-st-run]').forEach(b => b.addEventListener('click', () => runScheduledTaskNow(b.dataset.stRun)));
+  list.querySelectorAll('[data-st-edit]').forEach(b => b.addEventListener('click', () => openScheduledTaskEditor(b.dataset.stEdit)));
+  list.querySelectorAll('[data-st-delete]').forEach(b => b.addEventListener('click', () => deleteScheduledTask(b.dataset.stDelete)));
+}
+
+function stSyncBoundVisibility() {
+  const wrap = $('stBoundSessionWrap');
+  if (wrap) wrap.classList.toggle('hidden', $('stExecModel')?.value !== 'bound_session');
+}
+$('stExecModel')?.addEventListener('change', stSyncBoundVisibility);
+
+function openScheduledTaskEditor(id) {
+  const task = id ? scheduledTasks.find(x => String(x.id) === String(id)) : null;
+  scheduledTaskEditId = task ? task.id : null;
+  $('scheduledTaskEditorTitle').textContent = task
+    ? (t('html.scheduled_task_edit') || '编辑任务')
+    : (t('html.scheduled_task_new') || '＋ 新建任务');
+  $('stName').value = task ? (task.name || '') : '';
+  $('stCron').value = task ? (task.cron_expr || '') : '';
+  $('stMessage').value = task ? (task.message || '') : '';
+  $('stExecModel').value = task ? (task.execution_model || 'new_session') : 'new_session';
+  $('stBoundSession').value = task ? (task.bound_session_id || '') : '';
+  $('stCwd').value = task ? (task.cwd || '') : (codeMode ? (cwdInput?.value || '') : '');
+  $('stModel').value = task ? (task.model || '') : '';
+  $('stPermission').value = task ? (task.permission_mode || 'default') : 'default';
+  stSyncBoundVisibility();
+  openModal(scheduledTaskEditor);
+}
+$('scheduledTaskNewBtn')?.addEventListener('click', () => openScheduledTaskEditor(null));
+
+$('stSaveBtn')?.addEventListener('click', async () => {
+  const body = {
+    name: $('stName').value.trim(),
+    cron_expr: $('stCron').value.trim(),
+    message: $('stMessage').value.trim(),
+    execution_model: $('stExecModel').value,
+    bound_session_id: $('stBoundSession').value.trim(),
+    cwd: $('stCwd').value.trim(),
+    model: $('stModel').value.trim(),
+    permission_mode: $('stPermission').value,
+    workspace_mode: 'code',
+  };
+  if (!body.name || !body.cron_expr || !body.message) {
+    toast(t('html.scheduled_task_required') || '名称、Cron 和消息为必填项');
+    return;
+  }
+  try {
+    const url = scheduledTaskEditId ? '/api/scheduled-tasks/' + encodeURIComponent(scheduledTaskEditId) : '/api/scheduled-tasks';
+    const method = scheduledTaskEditId ? 'PATCH' : 'POST';
+    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    closeModal(scheduledTaskEditor);
+    loadScheduledTasks();
+    toast(t('html.scheduled_task_saved') || '已保存');
+  } catch (e) {
+    toast((t('errors.unknown_error') || '保存失败') + ': ' + String(e.message || e));
+  }
+});
+
+async function toggleScheduledTask(id) {
+  const task = scheduledTasks.find(x => String(x.id) === String(id));
+  if (!task) return;
+  try {
+    const r = await fetch('/api/scheduled-tasks/' + encodeURIComponent(id) + '/toggle', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !task.enabled }),
+    });
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    loadScheduledTasks();
+  } catch (e) { toast(String(e.message || e)); }
+}
+
+async function runScheduledTaskNow(id) {
+  try {
+    const r = await fetch('/api/scheduled-tasks/' + encodeURIComponent(id) + '/run', { method: 'POST' });
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    toast(t('html.scheduled_task_triggered') || '已触发，稍后刷新查看状态');
+  } catch (e) { toast(String(e.message || e)); }
+}
+
+async function deleteScheduledTask(id) {
+  if (!confirm(t('html.scheduled_task_confirm_delete') || '确定删除这个定时任务？')) return;
+  try {
+    const r = await fetch('/api/scheduled-tasks/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    loadScheduledTasks();
+  } catch (e) { toast(String(e.message || e)); }
+}
+
+// ---- Roundtable (multi-role discussion) -----------------------------------
+let roundtableRoles = [];
+const roundtableSelected = new Set();
+const roundtableModal = $('roundtableModal');
+
+$('roundtableBtn')?.addEventListener('click', () => {
+  if (!codeMode) { toast(t('html.roundtable_code_only') || '圆桌讨论仅在工作模式可用'); return; }
+  if (mobileQuestionMode) { toast(t('mobile.no_mcp_manage')); return; }
+  roundtableSelected.clear();
+  $('roundtableTopic').value = '';
+  openModal(roundtableModal);
+  loadRoundtableRoles();
+});
+
+async function loadRoundtableRoles() {
+  const grid = $('roundtableRoleGrid');
+  if (grid) grid.innerHTML = `<div class="text-sm py-6" style="color:var(--text-subtle);">${escapeHtml(t('misc.loading') || '加载中…')}</div>`;
+  try {
+    const r = await fetch('/api/agent-templates?mode=code');
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    const data = await r.json();
+    roundtableRoles = Array.isArray(data.templates) ? data.templates : [];
+    renderRoundtableRoles();
+  } catch (e) {
+    if (grid) grid.innerHTML = `<div class="text-sm py-6" style="color:#ef4444;">${escapeHtml(t('errors.unknown_error') || '加载失败')}: ${escapeHtml(String(e.message || e))}</div>`;
+  }
+}
+
+function renderRoundtableRoles() {
+  const grid = $('roundtableRoleGrid');
+  if (!grid) return;
+  if (!roundtableRoles.length) {
+    grid.innerHTML = `<div class="text-sm py-6" style="color:var(--text-subtle);">${escapeHtml(t('html.roundtable_no_roles') || '还没有可用角色，请先在 Agent 模板中创建。')}</div>`;
+    return;
+  }
+  grid.innerHTML = roundtableRoles.map(role => {
+    const on = roundtableSelected.has(String(role.id));
+    return `<button type="button" data-rt-role="${escapeHtml(String(role.id))}" style="text-align:left;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:12px 14px;cursor:pointer;${on ? 'outline:2px solid var(--accent);border-color:var(--accent);' : ''}">
+      <div class="text-base">${escapeHtml(role.icon || '🧩')} <strong>${escapeHtml(role.name || '')}</strong>${on ? ' ✓' : ''}</div>
+      <div class="text-xs mt-1" style="color:var(--text-subtle);">${escapeHtml((role.system_prompt || '').slice(0, 60))}</div>
+    </button>`;
+  }).join('');
+  grid.querySelectorAll('[data-rt-role]').forEach(b => b.addEventListener('click', () => {
+    const id = String(b.dataset.rtRole);
+    if (roundtableSelected.has(id)) roundtableSelected.delete(id); else roundtableSelected.add(id);
+    renderRoundtableRoles();
+  }));
+}
+
+$('roundtableStartBtn')?.addEventListener('click', async () => {
+  const roleIds = Array.from(roundtableSelected);
+  const topic = $('roundtableTopic').value.trim();
+  if (roleIds.length < 2) { toast(t('html.roundtable_need_two') || '请至少选择 2 个角色'); return; }
+  if (!topic) { toast(t('html.roundtable_need_topic') || '请填写讨论议题'); return; }
+  try {
+    const r = await fetch('/api/roundtable/compose', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role_ids: roleIds, topic, workspace_mode: 'code' }),
+    });
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    const data = await r.json();
+    closeModal(roundtableModal);
+    await sendRaw(data.message, data.display_message, [], {});
+  } catch (e) {
+    toast((t('errors.unknown_error') || '发起讨论失败') + ': ' + String(e.message || e));
+  }
+});
+
+
 // (secret keys, or an inline URL/args placeholder). URL/transport/command stay hidden.
 function openConnectorDialog(c, scope) {
   const transport = (c.transport || 'stdio').toLowerCase();

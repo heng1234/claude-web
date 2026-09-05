@@ -1,6 +1,7 @@
 import asyncio
 import os
 import tempfile
+import time
 import unittest
 import uuid
 from pathlib import Path
@@ -52,6 +53,35 @@ class CodeWorkspaceLoopTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as raised:
             server._reserve_code_turn(self.session_id, second)
         self.assertEqual(409, raised.exception.status_code)
+
+    async def test_stale_starting_turn_row_is_reaped_so_crashed_turn_can_retry(self):
+        # A 'starting' row is written before the turn actually runs. If the
+        # process dies between the INSERT and accept/release, the row is never
+        # cleared. Without reaping it, a retry of the same client_turn_id would
+        # hit the idempotency 409 and the client would silently drop the queued
+        # message — the user's turn would vanish without ever executing.
+        turn_id = "queue-" + uuid.uuid4().hex
+        reserved = server._reserve_code_turn(self.session_id, turn_id)
+        self.assertEqual(turn_id, reserved)
+        # Simulate a crash: the row is stuck 'starting' and older than the TTL.
+        stale = time.time() - server._CODE_TURN_STARTING_TTL_SECONDS - 5
+        with server.db_connect() as conn:
+            conn.execute(
+                "UPDATE code_turn_requests SET updated_at = ? WHERE id = ? AND session_id = ?",
+                (stale, turn_id, self.session_id),
+            )
+        # A fresh reserve for a *different* id triggers the reap and must succeed.
+        other = "queue-" + uuid.uuid4().hex
+        self.assertEqual(other, server._reserve_code_turn(self.session_id, other))
+        with server.db_connect() as conn:
+            remaining = conn.execute(
+                "SELECT id FROM code_turn_requests WHERE session_id = ? AND state = 'starting'",
+                (self.session_id,),
+            ).fetchall()
+        # The crashed row is gone; retrying the original id now proceeds instead
+        # of hitting the idempotency 409.
+        self.assertNotIn(turn_id, {row["id"] for row in remaining})
+        self.assertEqual(turn_id, server._reserve_code_turn(self.session_id, turn_id))
 
     async def test_auto_approval_and_project_validation_settings_are_session_and_project_scoped(self):
         enabled = await server.set_code_session_auto_approve(
@@ -299,7 +329,7 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         for relative in ("static/index.html", "claude_web/static/index.html"):
             source = (root / relative).read_text(encoding="utf-8")
             self.assertIn("let prePlanPermissionMode = null", source)
-            self.assertIn("targetMode = prePlanPermissionMode || 'acceptEdits'", source)
+            self.assertIn("targetMode = prePlanPermissionMode || permSelect.value || 'acceptEdits'", source)
             self.assertIn("await entry.pausePromise", source)
             self.assertIn("?reason=plan_ready", source)
             self.assertNotIn("function stopCurrentRunForPlan() {", source)
@@ -389,7 +419,7 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         self.assertIn("const missingAuthoritativeTerminal", source)
         self.assertIn("obj.subtype === 'stopped'", source)
         self.assertIn("String(pending.toolName || '') === 'ExitPlanMode'", source)
-        self.assertIn("setContextCompactionStatus(true, 'Claude Code 正在原生压缩上下文…', targetSessionId)", source)
+        self.assertIn("setContextCompactionStatus(true, t('ui.native_compacting'), targetSessionId)", source)
         self.assertIn("const modalReturnFocus = new WeakMap()", source)
         self.assertIn("if (!typingTarget && !openDialog", source)
 
@@ -399,7 +429,7 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("function isNativeAbortDiagnosticResult(result)", source)
         self.assertIn("if (isNativeAbortDiagnosticResult(obj)) return container", source)
-        self.assertIn("连接在响应中途断开", source)
+        self.assertIn("return t('x.conn_drop_recover')", source)
         server_source = (Path(__file__).parents[1] / "claude_web" / "server.py").read_text(encoding="utf-8")
         self.assertIn("def _agent_sdk_final_text_event(", server_source)
         self.assertIn("def _strip_agent_sdk_api_error_text(", server_source)
@@ -413,9 +443,9 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         self.assertIn("A browser EOF is not an authoritative SDK terminal signal", source)
         self.assertIn("expectTerminal: true", source)
         self.assertIn("state.turn_state", source)
-        self.assertIn("没有自动重放本轮，以免重复修改文件", source)
+        self.assertIn("addErrorBlock(t('x.sdk_no_final'))", source)
         self.assertNotIn("code: 'sdk_turn_incomplete'", source)
-        self.assertIn("上一回合仍在后台运行，当前消息已保留在队列中", source)
+        self.assertIn("toast(t('x.prev_bg_queued'))", source)
         self.assertIn("result?.busy ? 'queued' : 'paused'", source)
         self.assertIn("function reconnectCurrentCodeSession(options = {})", source)
         self.assertIn("function reconnectAndContinueCurrentCodeSession()", source)
@@ -427,8 +457,8 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         self.assertIn("await setPersistedQueueState(entry, 'dispatching')", source)
         self.assertIn("subtype.toLowerCase() !== 'success'", source)
         self.assertIn("stream idle timeout", source)
-        self.assertIn("正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}", source)
-        self.assertIn("当前任务不会自动重复执行", source)
+        self.assertIn("t('x.reconnecting_attempt').replace('{n}', reconnectAttempt).replace('{max}', maxReconnectAttempts)", source)
+        self.assertIn("t('x.no_auto_rerun')", source)
 
     def test_code_generation_status_persists_until_authoritative_turn_end(self):
         source = (
@@ -445,7 +475,7 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         self.assertIn("function ensureThinkingElapsedTimer(el, startedAt = Date.now())", source)
         self.assertNotIn("if (!el.isConnected)", source)
         self.assertIn("function nativeApiRetryStatusText(obj)", source)
-        self.assertIn("return `${reason}，正在重试", source)
+        self.assertIn("t('x.api_retrying').replace('{reason}', reason)", source)
         self.assertIn("nativeTurnRecoveryRunningSessionId !== run.sessionId", source)
 
     def test_dropped_terminal_frames_do_not_trigger_a_duplicate_resend(self):
