@@ -1257,6 +1257,18 @@
 
   /* ===== Agent Template Editor modal ===== */
   #agentTemplateEditor .modal-box { border-radius: 16px; }
+  .at-card {
+    border: 1px solid var(--border); border-radius: 12px;
+    background: color-mix(in srgb, var(--surface) 55%, var(--bg));
+    padding: 14px 16px;
+  }
+  .at-card-head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+    padding-bottom: 10px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .at-card-title {
+    font-size: 12px; font-weight: 700; letter-spacing: .02em; color: var(--text);
+  }
   .at-editor-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 20px 24px 18px;
@@ -1277,7 +1289,7 @@
     font-size: 16px; color: var(--text-muted); cursor: pointer; transition: background .15s;
   }
   .at-editor-close:hover { background: var(--hover); color: var(--text); }
-  .at-editor-body { padding: 20px 24px; overflow-y: auto; max-height: 66vh; display: flex; flex-direction: column; gap: 16px; }
+  .at-editor-body { padding: 18px 22px; overflow-y: auto; max-height: 70vh; display: flex; flex-direction: column; gap: 14px; }
   .at-field-label {
     font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
     color: var(--text-muted); margin-bottom: 5px; display: flex; align-items: center; gap: 4px;
@@ -2941,21 +2953,35 @@
     }
     .cfg-hook-add-btn { align-self: flex-end; }
   }
+  #cfgSkillMarketList {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
   .cfg-skill-card {
     display: flex;
-    gap: 12px;
-    padding: 12px 13px;
-    margin-bottom: 9px;
+    flex-direction: column;
+    gap: 8px;
+    padding: 13px 14px;
     border: 1px solid #e7e0d8;
     border-radius: 12px;
     background: #faf9f7;
-    align-items: flex-start;
+    transition: border-color .15s, box-shadow .15s;
   }
+  .cfg-skill-card:hover {
+    border-color: color-mix(in srgb, var(--accent, #d97757) 45%, #e7e0d8);
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+  }
+  .cfg-skill-card.hidden { display: none; }
   .cfg-skill-card .meta { flex: 1; min-width: 0; }
-  .cfg-skill-card .name { font-weight: 720; font-size: 13px; color: #332f2b; }
-  .cfg-skill-card .desc { color: #817a72; font-size: 12.5px; margin-top: 4px; line-height: 1.5; }
+  .cfg-skill-card .name { font-weight: 720; font-size: 13px; color: #332f2b; word-break: break-word; }
+  .cfg-skill-card .desc {
+    color: #817a72; font-size: 12px; margin-top: 5px; line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
   .cfg-skill-card .mp { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #9a928b; margin-top: 5px; }
-  .cfg-skill-card .actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .cfg-skill-card .actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
   .cfg-skill-subtabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
   .cfg-skill-subtab { background: none; border: none; padding: 4px 12px; font-size: 13px; color: var(--text-subtle); cursor: pointer; border-radius: 6px 6px 0 0; }
   .cfg-skill-subtab.active { color: var(--text); font-weight: 600; border-bottom: 2px solid var(--text); }
@@ -9611,7 +9637,7 @@ async function switchLang(lang) {
 
 <!-- Agent Template editor -->
 <div id="agentTemplateEditor" class="modal-backdrop hidden">
-  <div class="modal-box p-0" style="max-width:600px;overflow:hidden;">
+  <div class="modal-box p-0" style="max-width:680px;overflow:hidden;">
     <!-- header -->
     <div class="at-editor-header">
       <div class="at-editor-header-left">
@@ -9627,8 +9653,10 @@ async function switchLang(lang) {
         <span>🔒</span>
         <span data-i18n="html.agent_template_readonly_hint">内置模板只读，可克隆后修改。</span>
       </div>
-      <!-- icon + name row -->
-      <div class="flex gap-3 items-end">
+      <!-- identity card -->
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title">身份</span></div>
+        <div class="flex gap-3 items-end">
         <div>
           <div class="at-field-label" data-i18n="html.agent_template_icon">图标</div>
           <div class="at-icon-input-wrap">
@@ -9642,26 +9670,30 @@ async function switchLang(lang) {
           </div>
           <input id="atName" class="cw-input w-full at-name-input" maxlength="80" placeholder="例如：代码审查员" />
         </div>
+        </div>
       </div>
-      <div class="at-section-divider"></div>
-      <!-- system prompt -->
+      <!-- behavior card -->
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title">行为</span></div>
+        <!-- system prompt -->
       <div>
         <div class="at-field-label">
           <span data-i18n="html.agent_template_system_prompt">系统提示</span>
-          <span class="at-label-hint">append-system-prompt</span>
         </div>
         <textarea id="atSystemPrompt" class="cw-input w-full at-system-prompt" rows="5" placeholder="定义这个 Agent 的角色、风格与约束…" style="resize:vertical;"></textarea>
       </div>
       <!-- default task -->
-      <div>
+      <div style="margin-top:14px;">
         <div class="at-field-label">
           <span data-i18n="html.agent_template_default_task">默认任务</span>
-          <span class="at-label-hint">新建会话时预填输入框，可空</span>
         </div>
         <textarea id="atDefaultTask" class="cw-input w-full" rows="2" style="resize:vertical;font-size:13px;"></textarea>
       </div>
-      <div class="at-section-divider"></div>
-      <!-- mode + permission -->
+      </div>
+      <!-- config card -->
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title">配置</span></div>
+        <!-- mode + permission -->
       <div class="at-grid-2">
         <div>
           <div class="at-field-label" data-i18n="html.agent_template_mode">适用模式</div>
@@ -9682,11 +9714,10 @@ async function switchLang(lang) {
         </div>
       </div>
       <!-- model + cwd -->
-      <div class="at-grid-2">
+      <div class="at-grid-2" style="margin-top:14px;">
         <div>
           <div class="at-field-label">
             <span data-i18n="html.agent_template_model">模型</span>
-            <span class="at-label-hint">空=默认</span>
           </div>
           <select id="atModel" class="cw-input w-full">
             <option value="">默认（跟随全局）</option>
@@ -9699,17 +9730,16 @@ async function switchLang(lang) {
         <div>
           <div class="at-field-label">
             <span data-i18n="html.agent_template_cwd">工作目录</span>
-            <span class="at-label-hint">可空</span>
           </div>
           <input id="atCwd" class="cw-input w-full" list="atCwdList" placeholder="~/project 或留空" />
           <datalist id="atCwdList"></datalist>
         </div>
       </div>
-      <!-- connectors -->
-      <div>
-        <div class="at-field-label">
-          <span data-i18n="html.agent_template_connectors">绑定连接器</span>
-          <span class="at-label-hint">新建会话时自动启用</span>
+      </div>
+      <!-- connectors card -->
+      <div class="at-card">
+        <div class="at-card-head">
+          <span class="at-card-title" data-i18n="html.agent_template_connectors">绑定连接器</span>
         </div>
         <div id="atConnectors" class="cw-at-connectors"></div>
       </div>
@@ -14376,7 +14406,7 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
   if (connectionLost) {
     nativeTurnRecoveryRunningSessionId = targetSessionId;
     syncActiveCodeRunControls();
-    showReconnectStatus(`正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}`);
+    showReconnectStatus(t('x.reconnecting_attempt').replace('{n}', reconnectAttempt).replace('{max}', maxReconnectAttempts));
   }
 
   // Chat-mode turns have no SDK permission loop, but their events are persisted
@@ -14489,13 +14519,13 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
         nativeTurnRecoveryRunningSessionId = null;
         syncActiveCodeRunControls();
         hideThinking(asstContainer, { force: true });
-        showReconnectStatus(`连接暂未恢复 · 已尝试 ${maxReconnectAttempts} 次`);
+        showReconnectStatus(t('x.reconnect_gave_up').replace('{max}', maxReconnectAttempts));
         addSystemAction(t('x.no_auto_rerun'), t('code.reconnect'), () => reconnectCurrentCodeSession());
         renderCodeMessageQueue();
         return;
       }
       reconnectAttempt += 1;
-      showReconnectStatus(`正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}`);
+      showReconnectStatus(t('x.reconnecting_attempt').replace('{n}', reconnectAttempt).replace('{max}', maxReconnectAttempts));
       nativeTurnRecoveryTimer = setTimeout(poll, Math.min(3200, 650 * reconnectAttempt));
     }
   };
@@ -15234,7 +15264,7 @@ function nativeReconnectStatusText(obj) {
   const attempt = Number(obj.attempt ?? obj.retry_count ?? obj.retryCount ?? 0);
   const max = Number(obj.max_attempts ?? obj.maxAttempts ?? obj.max_retries ?? 0);
   if (/reconnect|retry/i.test(raw) && attempt > 0) {
-    return `正在重新连接 ${attempt}/${max > 0 ? max : 5}`;
+    return t('x.reconnecting_attempt').replace('{n}', attempt).replace('{max}', max > 0 ? max : 5);
   }
   return raw;
 }
@@ -15244,10 +15274,10 @@ function nativeApiRetryStatusText(obj) {
   const attempt = Math.max(1, Number(obj.attempt || 1));
   const maxRetries = Math.max(attempt, Number(obj.max_retries || obj.maxRetries || 10));
   const delayMs = Math.max(0, Number(obj.retry_delay_ms || obj.retryDelayMs || 0));
-  const delay = delayMs > 0 ? ` · ${Math.max(1, Math.ceil(delayMs / 1000))} 秒后` : '';
+  const delay = delayMs > 0 ? t('x.api_retry_delay').replace('{n}', Math.max(1, Math.ceil(delayMs / 1000))) : '';
   const status = Number(obj.error_status || obj.status || 0);
   const reason = status === 429 ? t('x.req_throttled') : t('x.req_temp_fail');
-  return `${reason}，正在重试 ${attempt}/${maxRetries}${delay}`;
+  return t('x.api_retrying').replace('{reason}', reason).replace('{n}', attempt).replace('{max}', maxRetries).replace('{delay}', delay);
 }
 
 function codeEventStoredByServer(obj) {
@@ -15404,7 +15434,9 @@ function handleEvent(obj, container, options = {}) {
   if (obj.type === 'system' && obj.subtype === 'stopped') {
     hideThinking(container, { force: true });
     finishPendingToolUses(t('status.aborted'), 'stopped');
-    if (replay) addSystemInfo(obj.message || t('status.aborted'));
+    // The persisted backend message is a fixed Chinese string ("已中止"); prefer
+    // the localized label so replayed history matches the viewer's locale.
+    if (replay) addSystemInfo(t('status.aborted'));
     return container;
   }
   if (obj.type === 'system' && obj.subtype === 'status') {
@@ -26953,10 +26985,10 @@ async function renderSkillMarket() {
       const name = cfgEscape(s.name);
       const desc = cfgEscape(s.description || '');
       const installed = !!s.installed;
-      html += `<div class="cfg-skill-card" data-market-name="${name}" data-desc="${desc}">
+      html += `<div class="cfg-skill-card" data-market-name="${name}" data-skill-name="${name}" data-desc="${desc}">
         <div class="meta">
           <div class="name">${name}</div>
-          <div class="desc">${desc || '<em>无描述</em>'}</div>
+          <div class="desc" data-original="${desc}"${desc ? ` title="${desc}"` : ''}>${desc || '<em>无描述</em>'}</div>
         </div>
         <div class="actions">
           ${installed

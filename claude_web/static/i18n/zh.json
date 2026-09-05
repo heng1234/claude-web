@@ -594,6 +594,10 @@
     "safe_rebuild": "可以安全重建 SDK 会话连接后继续",
     "prev_no_final": "上一轮缺少最终结果，请先重建会话连接或确认后继续",
     "no_auto_rerun": "当前任务不会自动重复执行",
+    "reconnecting_attempt": "正在重新连接 {n}/{max}",
+    "reconnect_gave_up": "连接暂未恢复 · 已尝试 {max} 次",
+    "api_retrying": "{reason}，正在重试 {n}/{max}{delay}",
+    "api_retry_delay": " · {n} 秒后",
     "tool_denied_rules": "工具请求被权限规则拒绝，未进入可交互的 Web 审批回路。",
     "adjust_perm_retry": "可以调整当前权限模式后重试；Code 原生会话中的可审批请求会直接显示允许/拒绝按钮。",
     "switch_agent_auto": "或切换为「代理模式」或「自动模式」。",
@@ -1433,6 +1437,8 @@
     "agent_template_open_market": "现在去连接器中心配置？",
     "agent_template_import_failed": "导入失败",
     "agent_template_invalid_file": "无效的模板文件，缺少必填字段",
-    "agent_template_connectors_enabled": "已自动启用连接器："
+    "agent_template_connectors_enabled": "已自动启用连接器：",
+    "agent_template_readonly_hint": "内置模板只读，可克隆后修改。",
+    "agent_template_confirm_apply": "应用模板会开启一个新会话，当前会话将保留在历史记录中。确定继续？"
   }
 }

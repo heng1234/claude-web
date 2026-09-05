@@ -8020,6 +8020,16 @@ _CODE_TURN_ALREADY_ACCEPTED_DETAIL = (
     "this queued turn was already dispatched; not replaying it"
 )
 
+# A reserved 'starting' row transitions to 'accepted' (or is released on error)
+# within the open_turn() acknowledgement window — a few seconds at most. A row
+# still 'starting' minutes later is an orphan left by a crash/hard disconnect
+# between the INSERT and the accept/release: the turn never actually ran. Left
+# in place it would make a legitimate retry of the same client_turn_id hit the
+# idempotency 409, and the client would silently retire the queue entry — the
+# user's message would vanish without ever executing. Reap these on the next
+# reserve so the retry can proceed.
+_CODE_TURN_STARTING_TTL_SECONDS = 120
+
 
 def _reserve_code_turn(session_id: str, client_turn_id: Optional[str]) -> str:
     if not client_turn_id:
@@ -8031,6 +8041,10 @@ def _reserve_code_turn(session_id: str, client_turn_id: Optional[str]) -> str:
             conn.execute(
                 "DELETE FROM code_turn_requests WHERE state = 'accepted' AND updated_at < ?",
                 (now - 30 * 24 * 60 * 60,),
+            )
+            conn.execute(
+                "DELETE FROM code_turn_requests WHERE state = 'starting' AND updated_at < ?",
+                (now - _CODE_TURN_STARTING_TTL_SECONDS,),
             )
             conn.execute(
                 "INSERT INTO code_turn_requests (id, session_id, state, created_at, updated_at) VALUES (?, ?, 'starting', ?, ?)",
@@ -8332,28 +8346,25 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             turn_id=turn_id,
             reconnect_params=agent_params,
         )
-        # An explicit CLAUDE_WEB_CODE_RUNTIME=cli setting may select the legacy
-        # runtime only for a new/unowned Code session. Once pinned, ownership is
-        # never changed implicitly.
-        if runtime_origin == _RUNTIME_ORIGIN_AGENT_SDK:
-            await discard_git_checkpoint(checkpoint, work_dir)
-            raise HTTPException(
-                status_code=409,
-                detail="This Code session is owned by Claude Agent SDK and cannot be opened with Claude CLI.",
-            )
+
+    # An explicit CLAUDE_WEB_CODE_RUNTIME=cli setting may select the legacy
+    # runtime only for a new/unowned Code session. Once pinned, ownership is
+    # never changed implicitly. This check MUST run before the user_input is
+    # persisted: a rejected turn that already appended its event leaves an
+    # orphaned user_input in history, which the client's recovery/replay path
+    # later re-dispatches as a fresh turn — the "finished then resent" bug.
+    if code_workspace and runtime_origin == _RUNTIME_ORIGIN_AGENT_SDK:
+        await discard_git_checkpoint(checkpoint, work_dir)
+        raise HTTPException(
+            status_code=409,
+            detail="This Code session is owned by Claude Agent SDK and cannot be opened with Claude CLI.",
+        )
 
     if code_workspace:
         reserved_turn_id = _reserve_code_turn(session_id, req.client_turn_id)
     await async_append_event(session_id, user_event)
     if code_workspace:
         _mark_code_turn_accepted(session_id, reserved_turn_id)
-    if code_workspace:
-        if runtime_origin == _RUNTIME_ORIGIN_AGENT_SDK:
-            await discard_git_checkpoint(checkpoint, work_dir)
-            raise HTTPException(
-                status_code=409,
-                detail="This Code session is owned by Claude Agent SDK and cannot be opened with Claude CLI.",
-            )
         set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_CLI)
 
     async def generate():

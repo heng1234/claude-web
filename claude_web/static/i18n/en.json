@@ -594,6 +594,10 @@
     "safe_rebuild": "You can safely rebuild the SDK session connection and continue",
     "prev_no_final": "Previous turn lacks a final result; rebuild the session or confirm before continuing",
     "no_auto_rerun": "The current task will not be re-run automatically",
+    "reconnecting_attempt": "Reconnecting {n}/{max}",
+    "reconnect_gave_up": "Connection not restored yet · tried {max} times",
+    "api_retrying": "{reason}, retrying {n}/{max}{delay}",
+    "api_retry_delay": " · in {n}s",
     "tool_denied_rules": "The tool request was denied by permission rules and never reached the interactive web approval loop.",
     "adjust_perm_retry": "Adjust the permission mode and retry; approvable requests in native Code sessions show Allow/Deny buttons directly.",
     "switch_agent_auto": "Or switch to Agent Mode or Auto Mode.",
@@ -1433,6 +1437,8 @@
     "agent_template_open_market": "Open the connector hub now?",
     "agent_template_import_failed": "Import failed",
     "agent_template_invalid_file": "Invalid template file, missing required fields",
-    "agent_template_connectors_enabled": "Auto-enabled connectors: "
+    "agent_template_connectors_enabled": "Auto-enabled connectors: ",
+    "agent_template_readonly_hint": "Built-in templates are read-only; clone one to edit.",
+    "agent_template_confirm_apply": "Applying a template starts a new session; the current session stays in your history. Continue?"
   }
 }

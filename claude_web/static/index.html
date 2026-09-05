@@ -14406,7 +14406,7 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
   if (connectionLost) {
     nativeTurnRecoveryRunningSessionId = targetSessionId;
     syncActiveCodeRunControls();
-    showReconnectStatus(`正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}`);
+    showReconnectStatus(t('x.reconnecting_attempt').replace('{n}', reconnectAttempt).replace('{max}', maxReconnectAttempts));
   }
 
   // Chat-mode turns have no SDK permission loop, but their events are persisted
@@ -14519,13 +14519,13 @@ function startNativeTurnRecovery(targetSessionId, initialEventCount, initialCont
         nativeTurnRecoveryRunningSessionId = null;
         syncActiveCodeRunControls();
         hideThinking(asstContainer, { force: true });
-        showReconnectStatus(`连接暂未恢复 · 已尝试 ${maxReconnectAttempts} 次`);
+        showReconnectStatus(t('x.reconnect_gave_up').replace('{max}', maxReconnectAttempts));
         addSystemAction(t('x.no_auto_rerun'), t('code.reconnect'), () => reconnectCurrentCodeSession());
         renderCodeMessageQueue();
         return;
       }
       reconnectAttempt += 1;
-      showReconnectStatus(`正在重新连接 ${reconnectAttempt}/${maxReconnectAttempts}`);
+      showReconnectStatus(t('x.reconnecting_attempt').replace('{n}', reconnectAttempt).replace('{max}', maxReconnectAttempts));
       nativeTurnRecoveryTimer = setTimeout(poll, Math.min(3200, 650 * reconnectAttempt));
     }
   };
@@ -15264,7 +15264,7 @@ function nativeReconnectStatusText(obj) {
   const attempt = Number(obj.attempt ?? obj.retry_count ?? obj.retryCount ?? 0);
   const max = Number(obj.max_attempts ?? obj.maxAttempts ?? obj.max_retries ?? 0);
   if (/reconnect|retry/i.test(raw) && attempt > 0) {
-    return `正在重新连接 ${attempt}/${max > 0 ? max : 5}`;
+    return t('x.reconnecting_attempt').replace('{n}', attempt).replace('{max}', max > 0 ? max : 5);
   }
   return raw;
 }
@@ -15274,10 +15274,10 @@ function nativeApiRetryStatusText(obj) {
   const attempt = Math.max(1, Number(obj.attempt || 1));
   const maxRetries = Math.max(attempt, Number(obj.max_retries || obj.maxRetries || 10));
   const delayMs = Math.max(0, Number(obj.retry_delay_ms || obj.retryDelayMs || 0));
-  const delay = delayMs > 0 ? ` · ${Math.max(1, Math.ceil(delayMs / 1000))} 秒后` : '';
+  const delay = delayMs > 0 ? t('x.api_retry_delay').replace('{n}', Math.max(1, Math.ceil(delayMs / 1000))) : '';
   const status = Number(obj.error_status || obj.status || 0);
   const reason = status === 429 ? t('x.req_throttled') : t('x.req_temp_fail');
-  return `${reason}，正在重试 ${attempt}/${maxRetries}${delay}`;
+  return t('x.api_retrying').replace('{reason}', reason).replace('{n}', attempt).replace('{max}', maxRetries).replace('{delay}', delay);
 }
 
 function codeEventStoredByServer(obj) {
@@ -15434,7 +15434,9 @@ function handleEvent(obj, container, options = {}) {
   if (obj.type === 'system' && obj.subtype === 'stopped') {
     hideThinking(container, { force: true });
     finishPendingToolUses(t('status.aborted'), 'stopped');
-    if (replay) addSystemInfo(obj.message || t('status.aborted'));
+    // The persisted backend message is a fixed Chinese string ("已中止"); prefer
+    // the localized label so replayed history matches the viewer's locale.
+    if (replay) addSystemInfo(t('status.aborted'));
     return container;
   }
   if (obj.type === 'system' && obj.subtype === 'status') {
