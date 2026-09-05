@@ -9923,8 +9923,9 @@ async function switchLang(lang) {
           </select>
         </div>
         <div id="stBoundSessionWrap" class="mt-3 hidden">
-          <div class="at-field-label" data-i18n="html.scheduled_task_bound_session">绑定会话 ID</div>
-          <input id="stBoundSession" class="cw-input w-full" placeholder="session id" />
+          <div class="at-field-label" data-i18n="html.scheduled_task_bound_session">绑定会话</div>
+          <select id="stBoundSession" class="cw-input w-full"></select>
+          <div class="at-field-hint text-xs text-gray-400 mt-1" data-i18n="html.scheduled_task_bound_session_hint">选择一个已有会话，到点时消息会注入其中；会话忙碌或已删除则本次跳过。</div>
         </div>
         <div class="mt-3">
           <div class="at-field-label" data-i18n="html.scheduled_task_cwd">工作目录（可选）</div>
@@ -17136,6 +17137,39 @@ function hidePicker() {
   pickerQuery = '';
 }
 
+// 生成 @agent 选中后插入的引导文本：让模型用 Task 工具起一个对应角色的 subagent
+function buildAgentMentionText(item) {
+  const name = item.agentName || 'agent';
+  const role = (item.systemPrompt || '').trim().replace(/\s+/g, ' ').slice(0, 400);
+  const task = (item.defaultTask || '').trim();
+  const lines = [t('ui.agent_mention_lead').replace('{name}', name)];
+  if (role) lines.push(t('ui.agent_mention_role').replace('{role}', role));
+  lines.push(t('ui.agent_mention_task'));
+  let text = lines.join('\n');
+  if (task) text += '\n' + task;
+  return text + '\n';
+}
+
+// 仅工作模式：@ 时列出可复用的 Agent 模板，选中后引导用 Task 起 subagent
+function agentMentionItems(q) {
+  if (!codeMode) return [];
+  const query = (q || '').toLowerCase();
+  return (agentTemplates || [])
+    .filter(tpl => tpl && tpl.name)
+    .filter(tpl => !query
+      || tpl.name.toLowerCase().includes(query)
+      || (tpl.system_prompt || '').toLowerCase().includes(query))
+    .slice(0, 6)
+    .map(tpl => ({
+      kind: 'agent',
+      label: (tpl.icon ? tpl.icon + ' ' : '') + tpl.name,
+      meta: t('ui.agent_mention_meta'),
+      agentName: tpl.name,
+      systemPrompt: tpl.system_prompt || '',
+      defaultTask: tpl.default_task || '',
+    }));
+}
+
 async function maybeShowPicker() {
   const pos = input.selectionStart;
   const before = input.value.slice(0, pos);
@@ -17180,6 +17214,7 @@ async function maybeShowPicker() {
       const memories = memoriesResp.ok ? await memoriesResp.json() : [];
       pickerItems = [
         ...files.map(f => ({ kind: 'file', label: f.rel, meta: t('ui.file'), path: f.path, value: '@' + f.path + ' ' })),
+        ...agentMentionItems(q),
         ...sessions.map(s => ({ kind: 'session', label: s.title || s.id.slice(0, 8), meta: t('x.session_word'), id: s.id })),
         ...prompts.map(p => ({ kind: 'prompt', label: p.name, meta: t('settings.prompts'), content: p.content })),
         ...memories.map(m => ({ kind: 'memory', label: m.content.slice(0, 60), meta: t('x.memory_prefix') + m.scope, content: m.content })),
@@ -17278,6 +17313,8 @@ async function insertPickerSelection(i) {
         const d = r.ok ? await r.json() : null;
         insertText = d?.content || '';
       } catch {}
+    } else if (item.kind === 'agent') {
+      insertText = buildAgentMentionText(item);
     } else {
       insertText = item.content || '';
     }
@@ -25545,6 +25582,8 @@ function setCodeMode(enabled, options = {}) {
     setMoreToolsOpen(false);
     closeFeedbackPopover();
     decorateCodeFileLinks(chatInner);
+    // 预加载 Agent 模板，供 @ 联想列出智能体（幂等，已加载则跳过）
+    if (!agentTemplates.length) loadAgentTemplates();
   }
   document.body.classList.toggle('code-mode', codeMode);
   syncNativeCodeControls();
@@ -27006,6 +27045,37 @@ function stSyncBoundVisibility() {
 }
 $('stExecModel')?.addEventListener('change', stSyncBoundVisibility);
 
+// 填充「绑定会话」下拉：拉取会话列表，保留当前值（即使会话已删除也不丢值）
+async function populateBoundSessionSelect(currentId) {
+  const sel = $('stBoundSession');
+  if (!sel) return;
+  const cur = (currentId || '').trim();
+  const placeholder = t('html.scheduled_task_bound_placeholder') || '— 选择会话 —';
+  let sessions = [];
+  try {
+    const r = await fetch('/api/sessions');
+    if (r.ok) {
+      const all = await r.json();
+      sessions = (all || []).filter(s => !s.archived);
+    }
+  } catch { /* 网络失败时仅保留当前值兜底 */ }
+  const opts = [`<option value="">${escapeHtml(placeholder)}</option>`];
+  const seen = new Set();
+  for (const s of sessions) {
+    seen.add(s.id);
+    const mode = (s.workspace_mode === 'code') ? '🛠 ' : '💬 ';
+    const label = mode + (s.title || t('nav.new_session')) + ' · ' + s.id.slice(0, 8);
+    opts.push(`<option value="${escapeHtml(s.id)}">${escapeHtml(label)}</option>`);
+  }
+  // 当前绑定的会话若已不在列表（被删/归档），仍作为一项保留，避免编辑时静默丢值
+  if (cur && !seen.has(cur)) {
+    const missing = (t('html.scheduled_task_bound_missing') || '（已失效）') + ' ' + cur.slice(0, 8);
+    opts.push(`<option value="${escapeHtml(cur)}">${escapeHtml(missing)}</option>`);
+  }
+  sel.innerHTML = opts.join('');
+  sel.value = cur;
+}
+
 function openScheduledTaskEditor(id) {
   const task = id ? scheduledTasks.find(x => String(x.id) === String(id)) : null;
   scheduledTaskEditId = task ? task.id : null;
@@ -27016,7 +27086,7 @@ function openScheduledTaskEditor(id) {
   $('stCron').value = task ? (task.cron_expr || '') : '';
   $('stMessage').value = task ? (task.message || '') : '';
   $('stExecModel').value = task ? (task.execution_model || 'new_session') : 'new_session';
-  $('stBoundSession').value = task ? (task.bound_session_id || '') : '';
+  populateBoundSessionSelect(task ? (task.bound_session_id || '') : '');
   $('stCwd').value = task ? (task.cwd || '') : (codeMode ? (cwdInput?.value || '') : '');
   $('stModel').value = task ? (task.model || '') : '';
   $('stPermission').value = task ? (task.permission_mode || 'default') : 'default';

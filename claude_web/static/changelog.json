@@ -2,6 +2,20 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.4.1",
+      "date": "2026-09-05",
+      "highlights": [
+        {
+          "type": "feature",
+          "text": "工作模式 @ 联想新增「智能体」类：复用 Agent 模板，选中后插入引导文本让模型用 Task 起对应 subagent（仅工作模式）"
+        },
+        {
+          "type": "fix",
+          "text": "定时任务「绑定会话」从手填 ID 改为下拉选会话（显示标题 + 模式图标），会话已删除时仍保留原值不丢失"
+        }
+      ]
+    },
+    {
       "version": "2.4.0",
       "date": "2026-09-05",
       "highlights": [
