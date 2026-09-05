@@ -8120,7 +8120,7 @@ async function switchLang(lang) {
 </script>
 </head>
 <body class="h-screen flex">
-<div id="cwConversationSearch" class="cw-conversation-search hidden cw-code-only" role="search" aria-label="搜索当前 Code 会话" data-i18n-aria="html.aria_search_code_session">
+<div id="cwConversationSearch" class="cw-conversation-search hidden cw-code-only" role="search" aria-label="搜索当前工作区会话" data-i18n-aria="html.aria_search_code_session">
   <input id="cwConversationSearchInput" type="search" autocomplete="off" placeholder="搜索当前会话" data-i18n-placeholder="nav.search_sessions" aria-label="搜索当前会话内容" data-i18n-aria="nav.search_sessions" />
   <span id="cwConversationSearchCount" class="cw-conversation-search-count" aria-live="polite">0 / 0</span>
   <button type="button" id="cwConversationSearchPrev" title="上一个匹配" aria-label="上一个匹配" data-i18n-title="html.prev_match" data-i18n-aria="html.prev_match">↑</button>
@@ -8184,7 +8184,7 @@ async function switchLang(lang) {
     </button>
     <button type="button" class="cw-nav-row" id="cwCodeNav" data-cw-view="code">
       <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg></span>
-      <span data-i18n="nav.code_mode">代码工作区</span>
+      <span data-i18n="nav.code_mode">工作模式</span>
     </button>
   </nav>
 
@@ -8391,7 +8391,7 @@ async function switchLang(lang) {
     <div id="welcome" class="empty-hero">
       <div class="empty-logo">C</div>
       <div class="empty-title" data-i18n="html.chat_greeting">今天想聊点什么？</div>
-      <div class="empty-subtitle" data-i18n="html.chat_intro">默认是普通聊天，界面保持轻一点；需要项目上下文、权限策略或 Git 状态时，再切到 Code 模式。</div>
+      <div class="empty-subtitle" data-i18n="html.chat_intro">默认是普通聊天，界面保持轻一点；需要项目上下文、权限策略或 Git 状态时，再切到工作模式。</div>
       <div class="empty-cards">
         <div class="empty-card" data-prompt="帮我解释下面这段文字，提炼核心意思、关键结论和可能的隐含前提：">
           <div class="empty-card-icon">🔍</div>
@@ -8449,7 +8449,7 @@ async function switchLang(lang) {
         <span class="cw-context-compaction-spinner" aria-hidden="true"></span>
         <span id="cwContextCompactionText" data-i18n="status.compacting">上下文接近上限，正在压缩…</span>
       </div>
-      <div id="cwSessionStatsBar" class="cw-session-stats-bar hidden" aria-label="Code 会话状态" data-i18n-aria="html.code_session_status">
+      <div id="cwSessionStatsBar" class="cw-session-stats-bar hidden" aria-label="工作区会话状态" data-i18n-aria="html.code_session_status">
         <button type="button" class="cw-stats-item" id="cwStatsTasks" title="暂无任务" disabled data-i18n-title="html.no_tasks">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="m17 8 2 2 4-4"/></svg>
           <span class="cw-stats-label" data-i18n="tools.task_running">任务</span>
@@ -8578,7 +8578,7 @@ async function switchLang(lang) {
                         <span class="cw-mode-option-copy"><span class="cw-mode-option-title" data-i18n="html.workspace_presets">工作区预设</span><span class="cw-mode-option-description" data-i18n="html.workspace_presets_desc">保存项目、模型、模式和验证命令</span></span>
                       </button>
                       <button type="button" id="cwWorktreesBtn" class="cw-mode-option" role="menuitem">
-                        <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Git Worktrees</span><span class="cw-mode-option-description" data-i18n="html.worktrees_desc">为并行任务创建隔离的 Code 会话</span></span>
+                        <span class="cw-mode-option-copy"><span class="cw-mode-option-title">Git Worktrees</span><span class="cw-mode-option-description" data-i18n="html.worktrees_desc">为并行任务创建隔离的工作区会话</span></span>
                       </button>
                     </span>
                   </span>
@@ -8726,7 +8726,7 @@ async function switchLang(lang) {
     </aside>
     <div id="cwCodeInspectorBody" class="cw-code-inspector-body"><div class="cw-code-inspector-empty" data-i18n="html.open_file_from_desc">从回答、工具调用、改动列表或文件树中打开文件</div></div>
   </div>
-  <div id="cwCodeInspectorStatus" class="cw-code-inspector-status"><span data-i18n="html.code_readonly_preview">Code 项目内只读预览</span><span></span></div>
+  <div id="cwCodeInspectorStatus" class="cw-code-inspector-status"><span data-i18n="html.code_readonly_preview">工作区项目内只读预览</span><span></span></div>
   <div id="cwCodeInspectorExternalMenu" class="cw-code-inspector-external hidden" role="menu"></div>
 </aside>
 
@@ -8765,7 +8765,7 @@ async function switchLang(lang) {
         <input id="agentLoopTestCommand" type="text" placeholder="留空时自动检测：npm test、make test 或 pytest" class="w-full px-3 py-2 text-sm"  data-i18n-placeholder="html.ph_test_autodetect" />
       </div>
       <div id=”agentLoopChatWarning” class=”rounded p-3 text-xs hidden” style=”background:var(--surface-2); border:1px solid var(--accent); color:var(--text-muted);”>
-        <span data-i18n="html.agent_loop_warn_1">⚠️ Agent Loop 是代码工作区能力：启动后当前会话会切换到</span><strong data-i18n="html.code_workspace_mode">代码工作区模式</strong><span data-i18n="html.agent_loop_warn_2">（启用文件读写、命令执行等全部工具）。原聊天记录会保留，但界面与可用工具会随之改变。</span>
+        <span data-i18n="html.agent_loop_warn_1">⚠️ Agent Loop 是工作区能力：启动后当前会话会切换到</span><strong data-i18n="html.code_workspace_mode">工作区模式</strong><span data-i18n="html.agent_loop_warn_2">（启用文件读写、命令执行等全部工具）。原聊天记录会保留，但界面与可用工具会随之改变。</span>
       </div>
       <div class=”rounded p-3 text-xs” style=”background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);” data-i18n="html.agent_loop_warn_3">
         Loop 会在后端持续运行并复用当前权限策略和工作目录；预算只计算每轮新增提示和模型输出，不重复计算已有会话与缓存上下文。每轮失败最多自动重试 2 次，连续遇到相同测试失败会暂停。需要中断时点输入框上方的”停止”。
@@ -8889,7 +8889,7 @@ async function switchLang(lang) {
             <div class="settings-inline">
               <label class="settings-check"><input type="checkbox" id="codeWebSearchDefault" /> <span data-i18n="tools.web_search">默认开启 Web 工具</span></label>
             </div>
-            <div class="settings-hint" data-i18n="html.web_tools_desc">控制 Code 模式里的 WebSearch / WebFetch；关闭后仍可通过 Bash 使用 curl、npm、pip 等命令。</div>
+            <div class="settings-hint" data-i18n="html.web_tools_desc">控制工作模式里的 WebSearch / WebFetch；关闭后仍可通过 Bash 使用 curl、npm、pip 等命令。</div>
           </div>
           <div class="settings-section">
             <div id="agentSdkCard" class="agent-sdk-card" data-status="checking">
@@ -9413,7 +9413,7 @@ async function switchLang(lang) {
         </div>
         <div class="min-w-0">
           <div id="codeReviewTitle" class="cw-code-review-title" data-i18n="html.session_changes">本会话改动</div>
-          <div id="codeReviewSummary" class="cw-code-review-sub" data-i18n="html.review_changes_desc">审查 Claude 在 Code 模式中产生的文件修改</div>
+          <div id="codeReviewSummary" class="cw-code-review-sub" data-i18n="html.review_changes_desc">审查 Claude 在工作模式中产生的文件修改</div>
         </div>
       </div>
       <div class="cw-review-batch-actions">
@@ -9432,7 +9432,7 @@ async function switchLang(lang) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             <span data-i18n="html.run_verification">运行验证</span>
           </div>
-          <div class="cw-validation-help" data-i18n="html.run_verification_desc">留空会自动检测 npm、Make、pytest 或 unittest；结果会保存到当前 Code 会话。</div>
+          <div class="cw-validation-help" data-i18n="html.run_verification_desc">留空会自动检测 npm、Make、pytest 或 unittest；结果会保存到当前工作区会话。</div>
         </div>
         <div class="cw-validation-form">
           <select id="codeValidationMode" class="cw-validation-mode" aria-label="项目验证策略" data-i18n-aria="html.project_verify_policy">
@@ -9512,14 +9512,14 @@ async function switchLang(lang) {
 
 <div id="cwWorkspacePresetsModal" class="modal-backdrop hidden cw-code-only">
   <div class="modal-box lg p-0" role="dialog" aria-modal="true" aria-labelledby="cwWorkspacePresetsTitle" style="max-width:720px;overflow:hidden;">
-    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorkspacePresetsTitle" class="cw-code-review-title" data-i18n="html.code_workspace_presets">Code 工作区预设</div><div class="cw-code-review-sub" data-i18n="html.presets_restore_desc">一键恢复项目、模型、运行模式、轻上下文和验证策略</div></div><button data-close class="cw-code-review-close" aria-label="关闭工作区预设" data-i18n-aria="html.close_workspace_presets">×</button></div>
+    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorkspacePresetsTitle" class="cw-code-review-title" data-i18n="html.code_workspace_presets">工作区预设</div><div class="cw-code-review-sub" data-i18n="html.presets_restore_desc">一键恢复项目、模型、运行模式、轻上下文和验证策略</div></div><button data-close class="cw-code-review-close" aria-label="关闭工作区预设" data-i18n-aria="html.close_workspace_presets">×</button></div>
     <div class="cw-code-review-body"><div id="cwWorkspacePresetsList" class="cw-code-list"></div><div class="cw-code-form-row"><input id="cwWorkspacePresetName" maxlength="80" placeholder="预设名称，例如：claude-web 开发" aria-label="预设名称"  data-i18n-placeholder="html.ph_preset_name"  data-i18n-aria="html.preset_name" /><button type="button" id="cwWorkspacePresetSave" data-i18n="html.save_current_config">保存当前配置</button></div></div>
   </div>
 </div>
 
 <div id="cwWorktreesModal" class="modal-backdrop hidden cw-code-only">
   <div class="modal-box lg p-0" role="dialog" aria-modal="true" aria-labelledby="cwWorktreesTitle" style="max-width:860px;overflow:hidden;">
-    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorktreesTitle" class="cw-code-review-title">Git Worktrees</div><div class="cw-code-review-sub" data-i18n="html.worktree_note">每个 Worktree 使用独立目录与派生 Code 会话；删除不会自动删除 Git 分支</div></div><button data-close class="cw-code-review-close" aria-label="关闭 Worktrees" data-i18n-aria="html.close_worktrees">×</button></div>
+    <div class="cw-code-review-head"><div class="min-w-0"><div id="cwWorktreesTitle" class="cw-code-review-title">Git Worktrees</div><div class="cw-code-review-sub" data-i18n="html.worktree_note">每个 Worktree 使用独立目录与派生工作区会话；删除不会自动删除 Git 分支</div></div><button data-close class="cw-code-review-close" aria-label="关闭 Worktrees" data-i18n-aria="html.close_worktrees">×</button></div>
     <div class="cw-code-review-body">
       <div id="cwWorktreesList" class="cw-code-list"></div>
       <div class="cw-worktree-form" aria-label="新建 Worktree" data-i18n-aria="html.new_worktree">
@@ -9699,7 +9699,7 @@ async function switchLang(lang) {
           <div class="at-field-label" data-i18n="html.agent_template_mode">适用模式</div>
           <select id="atMode" class="cw-input w-full">
             <option value="both">🌐 通用（代码+聊天）</option>
-            <option value="code">💻 仅代码模式</option>
+            <option value="code">💻 仅工作模式</option>
             <option value="chat">💬 仅聊天模式</option>
           </select>
         </div>
@@ -13776,7 +13776,7 @@ function renderCodeContextLedger(payload = {}) {
       <div><div class="cw-context-ledger-title">${escapeHtml(type)} · ${escapeHtml(source)}</div><div class="cw-context-ledger-meta">${escapeHtml(when)}${escapeHtml(revision)} · v${escapeHtml(String(item.version || '1'))}</div></div>
       <div class="cw-context-ledger-token">${_fmtTokens(item.token_estimate || 0)}<div class="cw-context-ledger-meta cw-context-ledger-state${item.stale ? ' stale' : ''}">${escapeHtml(lifecycle + stale)}</div></div>
     </div>`;
-  }).join('') : '<div class="cw-activity-empty">当前 Code 会话还没有账本描述符。</div>';
+  }).join('') : '<div class="cw-activity-empty">当前工作区会话还没有账本描述符。</div>';
 }
 
 async function refreshCodeContextLedger(options = {}) {
@@ -19234,7 +19234,7 @@ function renderCodeProjectSessionList(list) {
   }
 
   if (!projectGroups.length && !generalSessions.length) {
-    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">暂无代码工作区会话</div>';
+    sessionItems.innerHTML = '<div class="text-xs text-center py-6" style="color:var(--text-subtle);">暂无工作区会话</div>';
     return;
   }
 
@@ -20122,7 +20122,7 @@ function renderCodeReviewPanel() {
     codeReviewSummary.textContent = `${new Set(activeFiles.map(file => file.path)).size} 个当前文件 · +${add} / -${del} · ${sets.length} 个变更集`;
   }
   if (!sets.length) {
-    codeReviewList.innerHTML = '<div class="cw-review-empty">当前 Code 会话还没有检测到文件修改。</div>';
+    codeReviewList.innerHTML = '<div class="cw-review-empty">当前工作区会话还没有检测到文件修改。</div>';
   } else {
     codeReviewList.innerHTML = sets.map(set => {
       const setAdd = set.files.reduce((sum, file) => sum + (file.additions || 0), 0);
@@ -22996,8 +22996,8 @@ async function refreshCodeWorktrees() {
       const canOpen = item.status === 'active' && item.exists;
       const deleteReason = codeWorktreeDeleteReason(item);
       const canDelete = !item.runtime_active && !item.dirty && item.worktree_session_id !== sessionId && item.status === 'active' && item.exists;
-      return `<div class="cw-code-list-row" data-code-worktree="${escapeHtml(item.id)}"><div><strong>${escapeHtml(item.slug)} · ${escapeHtml(item.branch)}</strong><small>${escapeHtml(codeWorktreeStatusLabel(item))} · 基于 ${escapeHtml(item.base_ref || 'HEAD')} · ${escapeHtml(item.path || '')}</small></div><div class="cw-code-list-actions"><button type="button" data-open-code-worktree="${escapeHtml(item.id)}" ${canOpen ? '' : 'disabled'} title="${canOpen ? '打开独立的派生 Code 会话' : 'Worktree 当前不可打开'}">打开</button><button type="button" class="danger" data-remove-code-worktree="${escapeHtml(item.id)}" ${canDelete ? '' : 'disabled'} title="${escapeHtml(deleteReason)}" data-i18n="misc.delete">删除</button></div></div>`;
-    }).join('') : '<div class="cw-activity-empty">还没有 Worktree。新建后会创建独立目录和派生 Code 会话。</div>';
+      return `<div class="cw-code-list-row" data-code-worktree="${escapeHtml(item.id)}"><div><strong>${escapeHtml(item.slug)} · ${escapeHtml(item.branch)}</strong><small>${escapeHtml(codeWorktreeStatusLabel(item))} · 基于 ${escapeHtml(item.base_ref || 'HEAD')} · ${escapeHtml(item.path || '')}</small></div><div class="cw-code-list-actions"><button type="button" data-open-code-worktree="${escapeHtml(item.id)}" ${canOpen ? '' : 'disabled'} title="${canOpen ? '打开独立的派生工作区会话' : 'Worktree 当前不可打开'}">打开</button><button type="button" class="danger" data-remove-code-worktree="${escapeHtml(item.id)}" ${canDelete ? '' : 'disabled'} title="${escapeHtml(deleteReason)}" data-i18n="misc.delete">删除</button></div></div>`;
+    }).join('') : '<div class="cw-activity-empty">还没有 Worktree。新建后会创建独立目录和派生工作区会话。</div>';
     cwWorktreesList.querySelectorAll('[data-open-code-worktree]').forEach(button => button.addEventListener('click', async () => {
       const item = worktrees.find(entry => entry.id === button.dataset.openCodeWorktree);
       if (!item) return;
