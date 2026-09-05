@@ -8289,6 +8289,9 @@ async function switchLang(lang) {
       <button id="scheduledTasksBtn" class="sb-icon-btn" title="定时任务 · 按计划自动运行" aria-label="定时任务" data-i18n-title="html.scheduled_tasks_full" data-i18n-aria="html.scheduled_tasks">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       </button>
+      <button id="roundtableBtn" class="sb-icon-btn cw-code-only" title="圆桌讨论 · 多角色协作" aria-label="圆桌讨论" data-i18n-title="html.roundtable_full" data-i18n-aria="html.roundtable">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="7" r="2"/><circle cx="19" cy="7" r="2"/><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/></svg>
+      </button>
       <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions" aria-label="配置中心" data-i18n-title="html.config_center_full" data-i18n-aria="html.config_center">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h10"/><path d="M8 12h10"/><path d="M8 18h10"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
       </button>
@@ -9849,9 +9852,37 @@ async function switchLang(lang) {
   </div>
 </div>
 
+<!-- Roundtable (multi-role discussion) modal -->
+<div id="roundtableModal" class="modal-backdrop hidden">
+  <div class="modal-box p-0" style="max-width:620px;overflow:hidden;">
+    <div class="at-editor-header">
+      <div class="at-editor-header-left">
+        <div class="at-editor-header-icon">🎙️</div>
+        <div class="at-editor-title" data-i18n="html.roundtable_title">圆桌讨论</div>
+      </div>
+      <button data-close class="at-editor-close">×</button>
+    </div>
+    <div class="at-editor-body">
+      <div class="text-xs pb-2" style="color:var(--text-subtle);" data-i18n="html.roundtable_desc">选择多个角色，让他们就同一议题各抒己见，最后由主持人综合。仅工作模式可用，每个角色通过 Task 分派并单独可视化。</div>
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title" data-i18n="html.roundtable_pick_roles">选择角色（可多选）</span></div>
+        <div id="roundtableRoleGrid" class="cw-market-grid"></div>
+      </div>
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title" data-i18n="html.roundtable_topic">讨论议题</span></div>
+        <textarea id="roundtableTopic" class="cw-input w-full" rows="3" placeholder="例如：是否为订单服务引入消息队列？请从各自专业角度评估。"></textarea>
+      </div>
+      <div class="at-editor-footer">
+        <button id="roundtableStartBtn" class="at-save-btn">
+          <span>🎙️</span><span data-i18n="html.roundtable_start">开始讨论</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MCP Management modal -->
-<div id="mcpModal" class="modal-backdrop hidden">
-  <div class="modal-box lg p-5" style="max-width:680px;">
+<div id="mcpModal" class="modal-backdrop hidden">  <div class="modal-box lg p-5" style="max-width:680px;">
     <div class="flex items-center justify-between mb-4">
       <div class="text-lg font-semibold" data-i18n="html.connector_panel_title">🔌 连接器 / MCP</div>
       <button data-close class="text-xl">×</button>
@@ -26793,6 +26824,74 @@ async function deleteScheduledTask(id) {
     loadScheduledTasks();
   } catch (e) { toast(String(e.message || e)); }
 }
+
+// ---- Roundtable (multi-role discussion) -----------------------------------
+let roundtableRoles = [];
+const roundtableSelected = new Set();
+const roundtableModal = $('roundtableModal');
+
+$('roundtableBtn')?.addEventListener('click', () => {
+  if (!codeMode) { toast(t('html.roundtable_code_only') || '圆桌讨论仅在工作模式可用'); return; }
+  if (mobileQuestionMode) { toast(t('mobile.no_mcp_manage')); return; }
+  roundtableSelected.clear();
+  $('roundtableTopic').value = '';
+  openModal(roundtableModal);
+  loadRoundtableRoles();
+});
+
+async function loadRoundtableRoles() {
+  const grid = $('roundtableRoleGrid');
+  if (grid) grid.innerHTML = `<div class="text-sm py-6" style="color:var(--text-subtle);">${escapeHtml(t('misc.loading') || '加载中…')}</div>`;
+  try {
+    const r = await fetch('/api/agent-templates?mode=code');
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    const data = await r.json();
+    roundtableRoles = Array.isArray(data.templates) ? data.templates : [];
+    renderRoundtableRoles();
+  } catch (e) {
+    if (grid) grid.innerHTML = `<div class="text-sm py-6" style="color:#ef4444;">${escapeHtml(t('errors.unknown_error') || '加载失败')}: ${escapeHtml(String(e.message || e))}</div>`;
+  }
+}
+
+function renderRoundtableRoles() {
+  const grid = $('roundtableRoleGrid');
+  if (!grid) return;
+  if (!roundtableRoles.length) {
+    grid.innerHTML = `<div class="text-sm py-6" style="color:var(--text-subtle);">${escapeHtml(t('html.roundtable_no_roles') || '还没有可用角色，请先在 Agent 模板中创建。')}</div>`;
+    return;
+  }
+  grid.innerHTML = roundtableRoles.map(role => {
+    const on = roundtableSelected.has(String(role.id));
+    return `<button type="button" data-rt-role="${escapeHtml(String(role.id))}" style="text-align:left;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:12px 14px;cursor:pointer;${on ? 'outline:2px solid var(--accent);border-color:var(--accent);' : ''}">
+      <div class="text-base">${escapeHtml(role.icon || '🧩')} <strong>${escapeHtml(role.name || '')}</strong>${on ? ' ✓' : ''}</div>
+      <div class="text-xs mt-1" style="color:var(--text-subtle);">${escapeHtml((role.system_prompt || '').slice(0, 60))}</div>
+    </button>`;
+  }).join('');
+  grid.querySelectorAll('[data-rt-role]').forEach(b => b.addEventListener('click', () => {
+    const id = String(b.dataset.rtRole);
+    if (roundtableSelected.has(id)) roundtableSelected.delete(id); else roundtableSelected.add(id);
+    renderRoundtableRoles();
+  }));
+}
+
+$('roundtableStartBtn')?.addEventListener('click', async () => {
+  const roleIds = Array.from(roundtableSelected);
+  const topic = $('roundtableTopic').value.trim();
+  if (roleIds.length < 2) { toast(t('html.roundtable_need_two') || '请至少选择 2 个角色'); return; }
+  if (!topic) { toast(t('html.roundtable_need_topic') || '请填写讨论议题'); return; }
+  try {
+    const r = await fetch('/api/roundtable/compose', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role_ids: roleIds, topic, workspace_mode: 'code' }),
+    });
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    const data = await r.json();
+    closeModal(roundtableModal);
+    await sendRaw(data.message, data.display_message, [], {});
+  } catch (e) {
+    toast((t('errors.unknown_error') || '发起讨论失败') + ': ' + String(e.message || e));
+  }
+});
 
 
 // (secret keys, or an inline URL/args placeholder). URL/transport/command stay hidden.

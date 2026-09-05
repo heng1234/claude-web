@@ -1469,6 +1469,17 @@
     "scheduled_task_required": "名称、Cron 和消息为必填项",
     "scheduled_task_saved": "已保存",
     "scheduled_task_triggered": "已触发，稍后刷新查看状态",
-    "scheduled_task_confirm_delete": "确定删除这个定时任务？"
+    "scheduled_task_confirm_delete": "确定删除这个定时任务？",
+    "roundtable": "圆桌讨论",
+    "roundtable_full": "圆桌讨论 · 多角色协作",
+    "roundtable_title": "圆桌讨论",
+    "roundtable_desc": "选择多个角色，让他们就同一议题各抒己见，最后由主持人综合。仅工作模式可用，每个角色通过 Task 分派并单独可视化。",
+    "roundtable_pick_roles": "选择角色（可多选）",
+    "roundtable_topic": "讨论议题",
+    "roundtable_start": "开始讨论",
+    "roundtable_code_only": "圆桌讨论仅在工作模式可用",
+    "roundtable_no_roles": "还没有可用角色，请先在 Agent 模板中创建。",
+    "roundtable_need_two": "请至少选择 2 个角色",
+    "roundtable_need_topic": "请填写讨论议题"
   }
 }

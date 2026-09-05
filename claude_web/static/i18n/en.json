@@ -1469,6 +1469,17 @@
     "scheduled_task_required": "Name, Cron and message are required",
     "scheduled_task_saved": "Saved",
     "scheduled_task_triggered": "Triggered; refresh later to see status",
-    "scheduled_task_confirm_delete": "Delete this scheduled task?"
+    "scheduled_task_confirm_delete": "Delete this scheduled task?",
+    "roundtable": "Roundtable",
+    "roundtable_full": "Roundtable · multi-role discussion",
+    "roundtable_title": "Roundtable Discussion",
+    "roundtable_desc": "Pick several roles to weigh in on one topic, then the moderator synthesizes. Workspace mode only; each role is dispatched via Task and visualized separately.",
+    "roundtable_pick_roles": "Pick roles (multi-select)",
+    "roundtable_topic": "Discussion topic",
+    "roundtable_start": "Start Discussion",
+    "roundtable_code_only": "Roundtable is available in Workspace mode only",
+    "roundtable_no_roles": "No roles yet. Create some in Agent Templates first.",
+    "roundtable_need_two": "Select at least 2 roles",
+    "roundtable_need_topic": "Please enter a topic"
   }
 }

@@ -2383,6 +2383,57 @@ def _scheduled_task_due(now_ts: float) -> list:
     return [_scheduled_task_row_to_dict(r) for r in rows]
 
 
+# ---------------------------------------------------------------------------
+# Multi-role roundtable discussion
+#
+# A roundtable is one ordinary Code-mode turn whose prompt asks Claude to act
+# as a moderator and dispatch each chosen role (an agent_template) via the Task
+# tool. The native subagent frames Task emits are what the existing
+# .subagent-panel visualization renders — no new frontend rendering needed.
+# Code-mode only: Chat mode (CLI) has no Task/subagent mechanism.
+# ---------------------------------------------------------------------------
+def _build_roundtable_prompt(roles: list, topic: str) -> str:
+    topic = (topic or "").strip()
+    if not roles:
+        raise ValueError("at least one role is required")
+    if not topic:
+        raise ValueError("topic is required")
+    lines = [
+        f"我们要就以下议题进行一次多角色圆桌讨论：\n\n【议题】{topic}\n",
+        f"参与讨论的共有 {len(roles)} 位角色。请你作为主持人，"
+        "**依次使用 Task 工具**把议题分派给每一位角色，让每位角色以其专长独立发表意见"
+        "（在 Task 的 prompt 中带上该角色的定位与本次议题）：\n",
+    ]
+    for idx, role in enumerate(roles, 1):
+        name = (role.get("name") or f"角色{idx}").strip()
+        icon = (role.get("icon") or "").strip()
+        sys_prompt = (role.get("system_prompt") or "").strip()
+        header = f"{idx}. {icon} {name}".strip()
+        lines.append(header)
+        if sys_prompt:
+            lines.append(f"   角色定位：{sys_prompt}")
+    lines.append(
+        "\n每位角色发言后，请你作为主持人**综合各方观点**，"
+        "指出共识、分歧与权衡，并给出一个可执行的结论或建议。"
+    )
+    return "\n".join(lines)
+
+
+def _roundtable_compose(role_ids: list, topic: str) -> dict:
+    if not role_ids:
+        raise ValueError("at least one role is required")
+    roles = []
+    for rid in role_ids:
+        tpl = _agent_template_get(rid)
+        if tpl is None:
+            raise KeyError(rid)
+        roles.append(tpl)
+    message = _build_roundtable_prompt(roles, topic)
+    role_names = "、".join((r.get("name") or "").strip() for r in roles if r.get("name"))
+    display_message = f"🎙️ 圆桌讨论（{role_names}）：{(topic or '').strip()}"
+    return {"message": message, "display_message": display_message}
+
+
 _SUMMARY_CACHE_LIMIT = 20000
 
 
@@ -3001,6 +3052,12 @@ class ScheduledTaskRequest(BaseModel):
 
 class ScheduledTaskToggleRequest(BaseModel):
     enabled: bool
+
+
+class RoundtableComposeRequest(BaseModel):
+    role_ids: List[str]
+    topic: str
+    workspace_mode: Optional[str] = "code"
 
 
 class ProjectPathRequest(BaseModel):
@@ -11582,6 +11639,22 @@ async def delete_scheduled_task(request: Request, task_id: str):
     _require_not_mobile_access(request)
     _scheduled_task_delete(task_id)
     return {"ok": True}
+
+
+@app.post("/api/roundtable/compose")
+async def compose_roundtable(request: Request, req: RoundtableComposeRequest):
+    _require_not_mobile_access(request)
+    # Roundtable relies on the Task/subagent mechanism, which only exists in
+    # Code (Agent SDK) mode; Chat mode (CLI) has no subagents.
+    if (req.workspace_mode or "code").strip().lower() != "code":
+        raise HTTPException(status_code=400, detail="roundtable is available in Workspace mode only")
+    try:
+        out = _roundtable_compose(req.role_ids, req.topic)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"role not found: {exc.args[0] if exc.args else ''}")
+    return {"ok": True, **out}
 
 
 @app.post("/api/sessions/{session_id}/changes/review")
