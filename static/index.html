@@ -8286,6 +8286,9 @@ async function switchLang(lang) {
       <button id="agentTemplateBtn" class="sb-icon-btn" title="Agent 模板 · 可复用会话预设" aria-label="Agent 模板" data-i18n-title="html.agent_template_hub_full" data-i18n-aria="html.agent_template_hub">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/><path d="M18.5 4.5l.9 1.8 1.8.9-1.8.9-.9 1.8-.9-1.8-1.8-.9 1.8-.9z"/></svg>
       </button>
+      <button id="scheduledTasksBtn" class="sb-icon-btn" title="定时任务 · 按计划自动运行" aria-label="定时任务" data-i18n-title="html.scheduled_tasks_full" data-i18n-aria="html.scheduled_tasks">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </button>
       <button id="configCenterBtn" class="sb-icon-btn" title="配置中心 · Hooks / Skills / MCP / Permissions" aria-label="配置中心" data-i18n-title="html.config_center_full" data-i18n-aria="html.config_center">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h10"/><path d="M8 12h10"/><path d="M8 18h10"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
       </button>
@@ -9751,6 +9754,95 @@ async function switchLang(lang) {
         <button id="atCancelBtn" data-close class="at-cancel-btn" data-i18n="misc.cancel">取消</button>
         <button id="atSaveBtn" class="at-save-btn" data-i18n="misc.save">
           <span>💾</span><span>保存模板</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scheduled Tasks modal -->
+<div id="scheduledTasksModal" class="modal-backdrop hidden">
+  <div class="modal-box" style="display:flex;flex-direction:column;overflow:hidden;padding:0;">
+    <div class="cw-market-head">
+      <div class="text-lg font-semibold flex items-center gap-2">
+        <span>⏰</span><span data-i18n="html.scheduled_tasks_title">定时任务</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="scheduledTaskNewBtn" class="btn btn-primary text-xs" style="padding:6px 12px;" data-i18n="html.scheduled_task_new">＋ 新建任务</button>
+        <button data-close class="text-xl leading-none" style="color:var(--text-subtle);">×</button>
+      </div>
+    </div>
+    <div class="text-xs px-1 pb-2" style="color:var(--text-subtle);" data-i18n="html.scheduled_tasks_desc">按 cron 计划自动触发一个 Claude 回合。可每次开新会话，或注入到已有会话。服务重启后仍生效。</div>
+    <div class="cw-market-body">
+      <div id="scheduledTaskList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Scheduled Task editor -->
+<div id="scheduledTaskEditor" class="modal-backdrop hidden">
+  <div class="modal-box p-0" style="max-width:600px;overflow:hidden;">
+    <div class="at-editor-header">
+      <div class="at-editor-header-left">
+        <div class="at-editor-header-icon">⏰</div>
+        <div id="scheduledTaskEditorTitle" class="at-editor-title" data-i18n="html.scheduled_task_new">＋ 新建任务</div>
+      </div>
+      <button data-close class="at-editor-close">×</button>
+    </div>
+    <div class="at-editor-body">
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title" data-i18n="html.scheduled_task_basics">基础</span></div>
+        <div>
+          <div class="at-field-label"><span data-i18n="html.scheduled_task_name">名称</span><span style="color:#ef4444;">*</span></div>
+          <input id="stName" class="cw-input w-full" maxlength="80" placeholder="例如：每日晨报" />
+        </div>
+        <div class="mt-3">
+          <div class="at-field-label"><span data-i18n="html.scheduled_task_cron">Cron 表达式</span><span style="color:#ef4444;">*</span></div>
+          <input id="stCron" class="cw-input w-full" placeholder="0 9 * * *" />
+          <div class="text-xs mt-1" style="color:var(--text-subtle);" data-i18n="html.scheduled_task_cron_hint">5 字段：分 时 日 月 周。例：0 9 * * 1-5 = 工作日 09:00。</div>
+          <div id="stCronPreview" class="text-xs mt-1" style="color:var(--text-subtle);"></div>
+        </div>
+        <div class="mt-3">
+          <div class="at-field-label"><span data-i18n="html.scheduled_task_message">消息内容</span><span style="color:#ef4444;">*</span></div>
+          <textarea id="stMessage" class="cw-input w-full" rows="3" placeholder="要发送给 Claude 的内容"></textarea>
+        </div>
+      </div>
+      <div class="at-card">
+        <div class="at-card-head"><span class="at-card-title" data-i18n="html.scheduled_task_execution">执行方式</span></div>
+        <div>
+          <div class="at-field-label" data-i18n="html.scheduled_task_exec_model">执行模型</div>
+          <select id="stExecModel" class="cw-input w-full">
+            <option value="new_session" data-i18n="html.scheduled_task_exec_new">每次开新会话</option>
+            <option value="bound_session" data-i18n="html.scheduled_task_exec_bound">注入到指定会话</option>
+          </select>
+        </div>
+        <div id="stBoundSessionWrap" class="mt-3 hidden">
+          <div class="at-field-label" data-i18n="html.scheduled_task_bound_session">绑定会话 ID</div>
+          <input id="stBoundSession" class="cw-input w-full" placeholder="session id" />
+        </div>
+        <div class="mt-3">
+          <div class="at-field-label" data-i18n="html.scheduled_task_cwd">工作目录（可选）</div>
+          <input id="stCwd" class="cw-input w-full" placeholder="/path/to/project" />
+        </div>
+        <div class="flex gap-3 mt-3">
+          <div class="flex-1">
+            <div class="at-field-label" data-i18n="html.scheduled_task_model">模型（可选）</div>
+            <input id="stModel" class="cw-input w-full" placeholder="claude-opus-4-8" />
+          </div>
+          <div class="flex-1">
+            <div class="at-field-label" data-i18n="html.scheduled_task_permission">权限模式</div>
+            <select id="stPermission" class="cw-input w-full">
+              <option value="default">default</option>
+              <option value="acceptEdits">acceptEdits</option>
+              <option value="bypassPermissions">bypassPermissions</option>
+              <option value="plan">plan</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="at-editor-footer">
+        <button id="stSaveBtn" class="at-save-btn">
+          <span>💾</span><span data-i18n="html.scheduled_task_save">保存任务</span>
         </button>
       </div>
     </div>
@@ -26553,7 +26645,156 @@ async function autoEnableTemplateConnectors(ids) {
   }
 }
 
-// Minimal per-connector dialog: shows ONLY the fields the user must supply
+// ---- Scheduled tasks ------------------------------------------------------
+let scheduledTasks = [];
+let scheduledTaskEditId = null;
+const scheduledTasksModal = $('scheduledTasksModal');
+const scheduledTaskEditor = $('scheduledTaskEditor');
+
+$('scheduledTasksBtn')?.addEventListener('click', () => {
+  if (mobileQuestionMode) { toast(t('mobile.no_mcp_manage')); return; }
+  openModal(scheduledTasksModal);
+  loadScheduledTasks();
+});
+
+function fmtScheduledTs(ts) {
+  if (!ts) return '—';
+  try { return new Date(ts * 1000).toLocaleString(); } catch (_) { return '—'; }
+}
+
+async function loadScheduledTasks() {
+  const list = $('scheduledTaskList');
+  if (list) list.innerHTML = `<div class="text-sm text-center py-10" style="color:var(--text-subtle);">${escapeHtml(t('misc.loading') || '加载中…')}</div>`;
+  try {
+    const r = await fetch('/api/scheduled-tasks');
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    const data = await r.json();
+    scheduledTasks = Array.isArray(data.tasks) ? data.tasks : [];
+    renderScheduledTaskList();
+  } catch (e) {
+    if (list) list.innerHTML = `<div class="text-sm text-center py-10" style="color:#ef4444;">${escapeHtml(t('errors.unknown_error') || '加载失败')}: ${escapeHtml(String(e.message || e))}</div>`;
+  }
+}
+
+function renderScheduledTaskList() {
+  const list = $('scheduledTaskList');
+  if (!list) return;
+  if (!scheduledTasks.length) {
+    list.innerHTML = `<div class="text-sm text-center py-10" style="color:var(--text-subtle);">${escapeHtml(t('html.scheduled_task_empty') || '还没有定时任务，点右上角「新建任务」开始。')}</div>`;
+    return;
+  }
+  list.innerHTML = scheduledTasks.map(task => {
+    const enabled = !!task.enabled;
+    const statusLabel = task.last_status
+      ? escapeHtml(task.last_status) + (task.last_error ? ' · ' + escapeHtml(String(task.last_error).slice(0, 80)) : '')
+      : (t('html.scheduled_task_never_run') || '尚未运行');
+    const execLabel = task.execution_model === 'bound_session'
+      ? (t('html.scheduled_task_exec_bound') || '注入到指定会话')
+      : (t('html.scheduled_task_exec_new') || '每次开新会话');
+    return `<div class="cw-code-list-row" data-st-id="${escapeHtml(task.id)}">
+      <div class="min-w-0">
+        <strong>${escapeHtml(task.name)}</strong>
+        <small><code>${escapeHtml(task.cron_expr)}</code> · ${escapeHtml(execLabel)} · ${(t('html.scheduled_task_next') || '下次')}: ${escapeHtml(fmtScheduledTs(task.next_run_at))} · ${statusLabel}</small>
+      </div>
+      <div class="cw-code-list-actions">
+        <button type="button" data-st-toggle="${escapeHtml(task.id)}">${enabled ? (t('html.scheduled_task_disable') || '停用') : (t('html.scheduled_task_enable') || '启用')}</button>
+        <button type="button" data-st-run="${escapeHtml(task.id)}">${t('html.scheduled_task_run_now') || '立即运行'}</button>
+        <button type="button" data-st-edit="${escapeHtml(task.id)}" data-i18n="misc.edit">编辑</button>
+        <button type="button" class="danger" data-st-delete="${escapeHtml(task.id)}" data-i18n="misc.delete">删除</button>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-st-toggle]').forEach(b => b.addEventListener('click', () => toggleScheduledTask(b.dataset.stToggle)));
+  list.querySelectorAll('[data-st-run]').forEach(b => b.addEventListener('click', () => runScheduledTaskNow(b.dataset.stRun)));
+  list.querySelectorAll('[data-st-edit]').forEach(b => b.addEventListener('click', () => openScheduledTaskEditor(b.dataset.stEdit)));
+  list.querySelectorAll('[data-st-delete]').forEach(b => b.addEventListener('click', () => deleteScheduledTask(b.dataset.stDelete)));
+}
+
+function stSyncBoundVisibility() {
+  const wrap = $('stBoundSessionWrap');
+  if (wrap) wrap.classList.toggle('hidden', $('stExecModel')?.value !== 'bound_session');
+}
+$('stExecModel')?.addEventListener('change', stSyncBoundVisibility);
+
+function openScheduledTaskEditor(id) {
+  const task = id ? scheduledTasks.find(x => String(x.id) === String(id)) : null;
+  scheduledTaskEditId = task ? task.id : null;
+  $('scheduledTaskEditorTitle').textContent = task
+    ? (t('html.scheduled_task_edit') || '编辑任务')
+    : (t('html.scheduled_task_new') || '＋ 新建任务');
+  $('stName').value = task ? (task.name || '') : '';
+  $('stCron').value = task ? (task.cron_expr || '') : '';
+  $('stMessage').value = task ? (task.message || '') : '';
+  $('stExecModel').value = task ? (task.execution_model || 'new_session') : 'new_session';
+  $('stBoundSession').value = task ? (task.bound_session_id || '') : '';
+  $('stCwd').value = task ? (task.cwd || '') : (codeMode ? (cwdInput?.value || '') : '');
+  $('stModel').value = task ? (task.model || '') : '';
+  $('stPermission').value = task ? (task.permission_mode || 'default') : 'default';
+  stSyncBoundVisibility();
+  openModal(scheduledTaskEditor);
+}
+$('scheduledTaskNewBtn')?.addEventListener('click', () => openScheduledTaskEditor(null));
+
+$('stSaveBtn')?.addEventListener('click', async () => {
+  const body = {
+    name: $('stName').value.trim(),
+    cron_expr: $('stCron').value.trim(),
+    message: $('stMessage').value.trim(),
+    execution_model: $('stExecModel').value,
+    bound_session_id: $('stBoundSession').value.trim(),
+    cwd: $('stCwd').value.trim(),
+    model: $('stModel').value.trim(),
+    permission_mode: $('stPermission').value,
+    workspace_mode: 'code',
+  };
+  if (!body.name || !body.cron_expr || !body.message) {
+    toast(t('html.scheduled_task_required') || '名称、Cron 和消息为必填项');
+    return;
+  }
+  try {
+    const url = scheduledTaskEditId ? '/api/scheduled-tasks/' + encodeURIComponent(scheduledTaskEditId) : '/api/scheduled-tasks';
+    const method = scheduledTaskEditId ? 'PATCH' : 'POST';
+    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    closeModal(scheduledTaskEditor);
+    loadScheduledTasks();
+    toast(t('html.scheduled_task_saved') || '已保存');
+  } catch (e) {
+    toast((t('errors.unknown_error') || '保存失败') + ': ' + String(e.message || e));
+  }
+});
+
+async function toggleScheduledTask(id) {
+  const task = scheduledTasks.find(x => String(x.id) === String(id));
+  if (!task) return;
+  try {
+    const r = await fetch('/api/scheduled-tasks/' + encodeURIComponent(id) + '/toggle', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !task.enabled }),
+    });
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    loadScheduledTasks();
+  } catch (e) { toast(String(e.message || e)); }
+}
+
+async function runScheduledTaskNow(id) {
+  try {
+    const r = await fetch('/api/scheduled-tasks/' + encodeURIComponent(id) + '/run', { method: 'POST' });
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    toast(t('html.scheduled_task_triggered') || '已触发，稍后刷新查看状态');
+  } catch (e) { toast(String(e.message || e)); }
+}
+
+async function deleteScheduledTask(id) {
+  if (!confirm(t('html.scheduled_task_confirm_delete') || '确定删除这个定时任务？')) return;
+  try {
+    const r = await fetch('/api/scheduled-tasks/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!r.ok) throw new Error(await mcpErrorMessage(r));
+    loadScheduledTasks();
+  } catch (e) { toast(String(e.message || e)); }
+}
+
+
 // (secret keys, or an inline URL/args placeholder). URL/transport/command stay hidden.
 function openConnectorDialog(c, scope) {
   const transport = (c.transport || 'stdio').toLowerCase();

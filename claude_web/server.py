@@ -21,6 +21,7 @@ import sys
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
+import datetime as _dt
 import time
 import urllib.error
 import urllib.request
@@ -1057,6 +1058,118 @@ async def _periodic_housekeeping() -> None:
             pass
 
 
+_SCHEDULER_INTERVAL_SECONDS = 30
+
+
+async def _consume_chat_stream(response) -> dict:
+    """Drain a _chat_response StreamingResponse to completion, returning a
+    summary {ok, error, text}. The turn only actually runs while the body
+    iterator is being consumed, so headless callers must drain it."""
+    assistant_text: List[str] = []
+    stream_error = None
+    streamed_ids: Set[str] = set()
+    async for chunk in response.body_iterator:
+        text = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else str(chunk)
+        for part in text.split("\n\n"):
+            line = next((ln for ln in part.splitlines() if ln.startswith("data: ")), "")
+            if not line:
+                continue
+            try:
+                obj = json.loads(line[6:])
+            except json.JSONDecodeError:
+                continue
+            if obj.get("type") in {"error", "permission_error"}:
+                stream_error = obj
+            assistant_text.append(_agent_loop_text_from_event(obj, streamed_ids))
+    return {
+        "ok": stream_error is None,
+        "error": stream_error,
+        "text": "".join(assistant_text).strip(),
+    }
+
+
+async def _run_scheduled_task(task: dict) -> None:
+    """Fire one scheduled task: build a ChatRequest and drive _chat_response.
+
+    new_session   -> a fresh session is created per run (isolated history).
+    bound_session -> the message is injected into an existing session; skipped
+                     (not failed) if that session is busy or missing, so a long
+                     manual turn never collides with the schedule.
+    """
+    tid = task["id"]
+    execution_model = task["execution_model"]
+    workspace_mode = task.get("workspace_mode") or "code"
+    if execution_model == "bound_session":
+        session_id = (task.get("bound_session_id") or "").strip()
+        if not session_id:
+            _scheduled_task_record_run(tid, status="skipped", error="no bound session")
+            return
+        if _scheduled_task_get(tid) is None:
+            return
+        with db_connect() as conn:
+            exists = conn.execute("SELECT cwd FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        if exists is None:
+            _scheduled_task_record_run(tid, status="skipped", error="bound session missing")
+            return
+        if _session_runtime_busy(session_id) or session_id in _compacting_sessions or _session_agent_loop_busy(session_id):
+            _scheduled_task_record_run(tid, status="skipped", error="session busy")
+            return
+        cwd = task.get("cwd") or (exists["cwd"] or "")
+        force_new = False
+    else:
+        session_id = str(uuid.uuid4())
+        cwd = task.get("cwd") or ""
+        upsert_session(session_id, task["name"], cwd, workspace_mode, task.get("permission_mode"))
+        if workspace_mode == "code":
+            set_session_runtime_origin(session_id, _RUNTIME_ORIGIN_AGENT_SDK)
+        force_new = True
+
+    chat_req = ChatRequest(
+        message=task["message"],
+        session_id=session_id,
+        cwd=cwd or None,
+        model=task.get("model") or None,
+        effort=task.get("effort") or None,
+        system_prompt=task.get("system_prompt") or None,
+        permission_mode=task.get("permission_mode") or None,
+        force_new=force_new,
+        workspace_mode=workspace_mode,
+    )
+    try:
+        response = await _chat_response(chat_req)
+        result = await _consume_chat_stream(response)
+        if result.get("ok"):
+            _scheduled_task_record_run(tid, status="ok")
+        else:
+            err = result.get("error") or {}
+            _scheduled_task_record_run(tid, status="error", error=str(err.get("message") or err))
+    except HTTPException as exc:
+        _scheduled_task_record_run(tid, status="error", error=str(exc.detail))
+    except Exception as exc:  # noqa: BLE001 - record and move on; loop must survive
+        _scheduled_task_record_run(tid, status="error", error=str(exc))
+
+
+async def _scheduler_loop() -> None:
+    """Background task: every ~30s fire any enabled scheduled tasks whose
+    next_run_at has passed. Tasks run serially so a burst can't spawn unbounded
+    concurrent turns. Each run reschedules itself via _scheduled_task_record_run."""
+    while True:
+        try:
+            await asyncio.sleep(_SCHEDULER_INTERVAL_SECONDS)
+            due = _scheduled_task_due(time.time())
+            for task in due:
+                # Re-check enabled state right before firing (it may have been
+                # toggled off during the sleep window).
+                fresh = _scheduled_task_get(task["id"])
+                if not fresh or not fresh.get("enabled"):
+                    continue
+                await _run_scheduled_task(fresh)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            pass
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     # Prune stale uploads in a background thread so startup isn't blocked on disk IO.
@@ -1067,6 +1180,7 @@ async def _lifespan(app: FastAPI):
     reaper_task = asyncio.create_task(_warm_reaper())
     terminal_reaper_task = asyncio.create_task(_code_terminal_reaper())
     housekeeping_task = asyncio.create_task(_periodic_housekeeping())
+    scheduler_task = asyncio.create_task(_scheduler_loop())
     bridge_start_task = asyncio.create_task(_claude_agent_bridge.ensure_started())
     # Ensure sessions.cwd index exists for fast lookups
     try:
@@ -1088,6 +1202,7 @@ async def _lifespan(app: FastAPI):
         reaper_task.cancel()
         terminal_reaper_task.cancel()
         housekeeping_task.cancel()
+        scheduler_task.cancel()
         try:
             await reaper_task
         except asyncio.CancelledError:
@@ -1098,6 +1213,10 @@ async def _lifespan(app: FastAPI):
             pass
         try:
             await housekeeping_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await scheduler_task
         except asyncio.CancelledError:
             pass
         await _shutdown_code_terminals()
@@ -1531,7 +1650,32 @@ def init_db() -> None:
             )
             """
         )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_session_usage_session ON session_usage(session_id, turn_idx)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                cron_expr TEXT NOT NULL,
+                message TEXT NOT NULL,
+                execution_model TEXT NOT NULL DEFAULT 'new_session',
+                bound_session_id TEXT NOT NULL DEFAULT '',
+                cwd TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                effort TEXT NOT NULL DEFAULT '',
+                permission_mode TEXT NOT NULL DEFAULT 'default',
+                system_prompt TEXT NOT NULL DEFAULT '',
+                workspace_mode TEXT NOT NULL DEFAULT 'code',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                last_run_at REAL,
+                last_status TEXT NOT NULL DEFAULT '',
+                last_error TEXT NOT NULL DEFAULT '',
+                next_run_at REAL,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_due ON scheduled_tasks(enabled, next_run_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session_usage_ts ON session_usage(ts)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_name ON tool_calls(tool_name)")
@@ -1927,6 +2071,316 @@ def _agent_template_export(tid: str) -> dict:
 def _agent_template_import(blob: dict) -> str:
     # Imported templates are always fresh, user-owned, editable copies.
     return _agent_template_create({**blob, "builtin": False})
+
+
+# ---------------------------------------------------------------------------
+# Scheduled tasks
+#
+# A self-contained 5-field cron (minute hour day-of-month month day-of-week)
+# drives background Claude turns. We roll our own parser rather than pull a
+# dependency: the grammar we support is small (*, */n, a-b, a,b) and pinning it
+# in-tree keeps scheduling behavior testable and dependency-free. Weekday uses
+# 0=Monday..6=Sunday (Python's date.weekday()); cron's traditional 0/7=Sunday
+# is normalized on parse.
+# ---------------------------------------------------------------------------
+_CRON_FIELD_BOUNDS = (
+    (0, 59),   # minute
+    (0, 23),   # hour
+    (1, 31),   # day of month
+    (1, 12),   # month
+    (0, 6),    # day of week (0=Mon..6=Sun after normalization)
+)
+
+
+def _cron_parse_field(token: str, low: int, high: int, *, is_weekday: bool = False) -> frozenset:
+    token = token.strip()
+    if not token:
+        raise ValueError("empty cron field")
+    values: set = set()
+    for part in token.split(","):
+        part = part.strip()
+        if not part:
+            raise ValueError("empty cron sub-field")
+        step = 1
+        if "/" in part:
+            base, _, step_s = part.partition("/")
+            if not step_s.isdigit() or int(step_s) < 1:
+                raise ValueError(f"invalid step: {part}")
+            step = int(step_s)
+            part = base.strip() or "*"
+        if part == "*":
+            start, end = low, high
+        elif "-" in part:
+            a, _, b = part.partition("-")
+            if not (a.strip().lstrip("-").isdigit() and b.strip().lstrip("-").isdigit()):
+                raise ValueError(f"invalid range: {part}")
+            start, end = int(a), int(b)
+        else:
+            if not part.lstrip("-").isdigit():
+                raise ValueError(f"invalid value: {part}")
+            start = end = int(part)
+        for v in range(start, end + 1, step):
+            norm = v
+            if is_weekday and norm == 7:
+                norm = 0  # cron Sunday=7 -> our Sunday=6? handled below via mapping
+            values.add(norm)
+    # Validate bounds against the ORIGINAL cron domain, then map weekday to
+    # Python's 0=Mon convention.
+    if is_weekday:
+        mapped: set = set()
+        for v in values:
+            if v < 0 or v > 7:
+                raise ValueError(f"weekday out of range: {v}")
+            cron_dow = 0 if v == 7 else v          # 0/7 = Sunday
+            py_dow = 6 if cron_dow == 0 else cron_dow - 1  # Sun->6, Mon->0
+            mapped.add(py_dow)
+        return frozenset(mapped)
+    for v in values:
+        if v < low or v > high:
+            raise ValueError(f"value {v} out of range [{low},{high}]")
+    return frozenset(values)
+
+
+def _cron_parse(expr: str) -> tuple:
+    """Parse a 5-field cron expression into a tuple of frozensets.
+
+    Returns (minutes, hours, days, months, weekdays) where weekdays use
+    0=Monday..6=Sunday. Raises ValueError on any malformed field.
+    """
+    if not isinstance(expr, str):
+        raise ValueError("cron expression must be a string")
+    fields = expr.split()
+    if len(fields) != 5:
+        raise ValueError("cron expression must have exactly 5 fields")
+    specs = []
+    for idx, (token, (low, high)) in enumerate(zip(fields, _CRON_FIELD_BOUNDS)):
+        specs.append(_cron_parse_field(token, low, high, is_weekday=(idx == 4)))
+    return tuple(specs)
+
+
+def _cron_matches(spec: tuple, *, minute: int, hour: int, day: int, month: int, weekday: int) -> bool:
+    minutes, hours, days, months, weekdays = spec
+    return (
+        minute in minutes
+        and hour in hours
+        and day in days
+        and month in months
+        and weekday in weekdays
+    )
+
+
+def _cron_next_run(expr: str, *, after: "_dt.datetime") -> "_dt.datetime":
+    """First minute strictly after `after` matching `expr` (local naive time)."""
+    spec = _cron_parse(expr)
+    # Start at the next whole minute after `after`.
+    candidate = after.replace(second=0, microsecond=0) + _dt.timedelta(minutes=1)
+    # Bound the search to ~4 years so a never-matching expression can't loop
+    # forever (e.g. Feb 30). 5-field cron always matches within this window if
+    # it matches at all.
+    limit = candidate + _dt.timedelta(days=366 * 4)
+    while candidate <= limit:
+        if _cron_matches(
+            spec,
+            minute=candidate.minute,
+            hour=candidate.hour,
+            day=candidate.day,
+            month=candidate.month,
+            weekday=candidate.weekday(),
+        ):
+            return candidate
+        candidate += _dt.timedelta(minutes=1)
+    raise ValueError(f"cron expression never matches: {expr}")
+
+
+_SCHEDULED_TASK_EXECUTION_MODELS = frozenset({"new_session", "bound_session"})
+
+
+def _scheduled_task_normalize(fields: dict) -> dict:
+    name = (fields.get("name") or "").strip()
+    if not name:
+        raise ValueError("name required")
+    cron_expr = (fields.get("cron_expr") or "").strip()
+    _cron_parse(cron_expr)  # validate; raises ValueError if malformed
+    message = (fields.get("message") or "").strip()
+    if not message:
+        raise ValueError("message required")
+    execution_model = (fields.get("execution_model") or "new_session").strip()
+    if execution_model not in _SCHEDULED_TASK_EXECUTION_MODELS:
+        raise ValueError(f"invalid execution_model: {execution_model}")
+    bound_session_id = (fields.get("bound_session_id") or "").strip()
+    if execution_model == "bound_session" and not bound_session_id:
+        raise ValueError("bound_session_id required for bound_session execution")
+    permission_mode = (fields.get("permission_mode") or "default").strip()
+    if permission_mode not in {"default", "acceptEdits", "bypassPermissions", "plan"}:
+        permission_mode = "default"
+    workspace_mode = (fields.get("workspace_mode") or "code").strip().lower()
+    if workspace_mode not in {"code", "chat"}:
+        workspace_mode = "code"
+    return {
+        "name": name,
+        "cron_expr": cron_expr,
+        "message": message,
+        "execution_model": execution_model,
+        "bound_session_id": bound_session_id if execution_model == "bound_session" else "",
+        "cwd": (fields.get("cwd") or "").strip(),
+        "model": (fields.get("model") or "").strip(),
+        "effort": (fields.get("effort") or "").strip(),
+        "permission_mode": permission_mode,
+        "system_prompt": (fields.get("system_prompt") or "").strip(),
+        "workspace_mode": workspace_mode,
+    }
+
+
+def _scheduled_task_row_to_dict(row) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "cron_expr": row["cron_expr"],
+        "message": row["message"],
+        "execution_model": row["execution_model"],
+        "bound_session_id": row["bound_session_id"],
+        "cwd": row["cwd"],
+        "model": row["model"],
+        "effort": row["effort"],
+        "permission_mode": row["permission_mode"],
+        "system_prompt": row["system_prompt"],
+        "workspace_mode": row["workspace_mode"],
+        "enabled": row["enabled"],
+        "last_run_at": row["last_run_at"],
+        "last_status": row["last_status"],
+        "last_error": row["last_error"],
+        "next_run_at": row["next_run_at"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _scheduled_task_next_run_ts(cron_expr: str, *, after_ts: Optional[float] = None) -> float:
+    after = _dt.datetime.fromtimestamp(after_ts) if after_ts else _dt.datetime.now()
+    return _cron_next_run(cron_expr, after=after).timestamp()
+
+
+def _scheduled_task_create(fields: dict) -> str:
+    norm = _scheduled_task_normalize(fields)
+    tid = uuid.uuid4().hex
+    now = time.time()
+    next_run = _scheduled_task_next_run_ts(norm["cron_expr"])
+    with db_connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO scheduled_tasks (
+                id, name, cron_expr, message, execution_model, bound_session_id,
+                cwd, model, effort, permission_mode, system_prompt, workspace_mode,
+                enabled, last_run_at, last_status, last_error, next_run_at,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, '', '', ?, ?, ?)
+            """,
+            (
+                tid, norm["name"], norm["cron_expr"], norm["message"],
+                norm["execution_model"], norm["bound_session_id"], norm["cwd"],
+                norm["model"], norm["effort"], norm["permission_mode"],
+                norm["system_prompt"], norm["workspace_mode"], next_run, now, now,
+            ),
+        )
+    return tid
+
+
+def _scheduled_task_get(tid: str) -> Optional[dict]:
+    with db_connect() as conn:
+        row = conn.execute("SELECT * FROM scheduled_tasks WHERE id = ?", (tid,)).fetchone()
+    return _scheduled_task_row_to_dict(row) if row else None
+
+
+def _scheduled_task_list() -> list:
+    with db_connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM scheduled_tasks ORDER BY created_at DESC"
+        ).fetchall()
+    return [_scheduled_task_row_to_dict(r) for r in rows]
+
+
+def _scheduled_task_update(tid: str, fields: dict) -> None:
+    norm = _scheduled_task_normalize(fields)
+    now = time.time()
+    next_run = _scheduled_task_next_run_ts(norm["cron_expr"])
+    with db_connect() as conn:
+        cur = conn.execute(
+            """
+            UPDATE scheduled_tasks SET
+                name = ?, cron_expr = ?, message = ?, execution_model = ?,
+                bound_session_id = ?, cwd = ?, model = ?, effort = ?,
+                permission_mode = ?, system_prompt = ?, workspace_mode = ?,
+                next_run_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                norm["name"], norm["cron_expr"], norm["message"],
+                norm["execution_model"], norm["bound_session_id"], norm["cwd"],
+                norm["model"], norm["effort"], norm["permission_mode"],
+                norm["system_prompt"], norm["workspace_mode"], next_run, now, tid,
+            ),
+        )
+        if cur.rowcount == 0:
+            raise KeyError(tid)
+
+
+def _scheduled_task_set_enabled(tid: str, enabled: bool) -> None:
+    now = time.time()
+    with db_connect() as conn:
+        row = conn.execute("SELECT cron_expr FROM scheduled_tasks WHERE id = ?", (tid,)).fetchone()
+        if row is None:
+            raise KeyError(tid)
+        # Re-arm next_run_at when re-enabling so a task disabled across its
+        # scheduled window doesn't fire immediately on re-enable.
+        next_run = _scheduled_task_next_run_ts(row["cron_expr"]) if enabled else None
+        conn.execute(
+            "UPDATE scheduled_tasks SET enabled = ?, next_run_at = ?, updated_at = ? WHERE id = ?",
+            (1 if enabled else 0, next_run, now, tid),
+        )
+
+
+def _scheduled_task_delete(tid: str) -> None:
+    with db_connect() as conn:
+        conn.execute("DELETE FROM scheduled_tasks WHERE id = ?", (tid,))
+
+
+def _scheduled_task_mark_next_run(tid: str, next_run_at: Optional[float]) -> None:
+    with db_connect() as conn:
+        conn.execute(
+            "UPDATE scheduled_tasks SET next_run_at = ?, updated_at = ? WHERE id = ?",
+            (next_run_at, time.time(), tid),
+        )
+
+
+def _scheduled_task_record_run(tid: str, *, status: str, error: str = "") -> None:
+    """Record a completed run and advance next_run_at from the current cron."""
+    now = time.time()
+    with db_connect() as conn:
+        row = conn.execute("SELECT cron_expr FROM scheduled_tasks WHERE id = ?", (tid,)).fetchone()
+        if row is None:
+            return
+        try:
+            next_run = _scheduled_task_next_run_ts(row["cron_expr"], after_ts=now)
+        except ValueError:
+            next_run = None
+        conn.execute(
+            """
+            UPDATE scheduled_tasks SET
+                last_run_at = ?, last_status = ?, last_error = ?,
+                next_run_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (now, status, error[:2000], next_run, now, tid),
+        )
+
+
+def _scheduled_task_due(now_ts: float) -> list:
+    with db_connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM scheduled_tasks WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ? ORDER BY next_run_at ASC",
+            (now_ts,),
+        ).fetchall()
+    return [_scheduled_task_row_to_dict(r) for r in rows]
 
 
 _SUMMARY_CACHE_LIMIT = 20000
@@ -2531,9 +2985,26 @@ class AgentTemplateRequest(BaseModel):
     mode: Optional[str] = "both"
 
 
+class ScheduledTaskRequest(BaseModel):
+    name: str
+    cron_expr: str
+    message: str
+    execution_model: Optional[str] = "new_session"
+    bound_session_id: Optional[str] = ""
+    cwd: Optional[str] = ""
+    model: Optional[str] = ""
+    effort: Optional[str] = ""
+    permission_mode: Optional[str] = "default"
+    system_prompt: Optional[str] = ""
+    workspace_mode: Optional[str] = "code"
+
+
+class ScheduledTaskToggleRequest(BaseModel):
+    enabled: bool
+
+
 class ProjectPathRequest(BaseModel):
     cwd: str
-
 
 class CodeDroppedPathItem(BaseModel):
     name: str = ""
@@ -11054,6 +11525,63 @@ async def import_agent_template(request: Request, req: AgentTemplateRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"ok": True, "id": new_id, "template": _agent_template_get(new_id)}
+
+
+@app.get("/api/scheduled-tasks")
+async def list_scheduled_tasks(request: Request):
+    _require_not_mobile_access(request)
+    return {"tasks": _scheduled_task_list()}
+
+
+@app.post("/api/scheduled-tasks")
+async def create_scheduled_task(request: Request, req: ScheduledTaskRequest):
+    _require_not_mobile_access(request)
+    try:
+        tid = _scheduled_task_create(req.dict())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True, "id": tid, "task": _scheduled_task_get(tid)}
+
+
+@app.patch("/api/scheduled-tasks/{task_id}")
+async def update_scheduled_task(request: Request, task_id: str, req: ScheduledTaskRequest):
+    _require_not_mobile_access(request)
+    try:
+        _scheduled_task_update(task_id, req.dict())
+    except KeyError:
+        raise HTTPException(status_code=404, detail="scheduled task not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True, "task": _scheduled_task_get(task_id)}
+
+
+@app.post("/api/scheduled-tasks/{task_id}/toggle")
+async def toggle_scheduled_task(request: Request, task_id: str, req: ScheduledTaskToggleRequest):
+    _require_not_mobile_access(request)
+    try:
+        _scheduled_task_set_enabled(task_id, req.enabled)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="scheduled task not found")
+    return {"ok": True, "task": _scheduled_task_get(task_id)}
+
+
+@app.post("/api/scheduled-tasks/{task_id}/run")
+async def run_scheduled_task_now(request: Request, task_id: str):
+    _require_not_mobile_access(request)
+    task = _scheduled_task_get(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="scheduled task not found")
+    # Fire in the background so the request returns immediately; the run records
+    # its own status via _scheduled_task_record_run.
+    asyncio.create_task(_run_scheduled_task(task))
+    return {"ok": True}
+
+
+@app.delete("/api/scheduled-tasks/{task_id}")
+async def delete_scheduled_task(request: Request, task_id: str):
+    _require_not_mobile_access(request)
+    _scheduled_task_delete(task_id)
+    return {"ok": True}
 
 
 @app.post("/api/sessions/{session_id}/changes/review")
