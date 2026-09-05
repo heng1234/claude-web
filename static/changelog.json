@@ -2,6 +2,36 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.4.0",
+      "date": "2026-09-05",
+      "highlights": [
+        {
+          "type": "feature",
+          "text": "定时任务管理：cron 调度 + 两种执行模型（新会话 / 复用现有会话），前端面板管理"
+        },
+        {
+          "type": "feature",
+          "text": "多角色圆桌讨论（仅工作模式）：多个角色按提示词分工协作讨论"
+        },
+        {
+          "type": "feature",
+          "text": "头部工具栏收纳菜单：10 个图标按钮收进 ⋯ 下拉菜单，分工作区/自动化/配置三组"
+        },
+        {
+          "type": "feature",
+          "text": "会话批量删除：多选模式 + 复选框 + 批量栏，聊天/工作两种模式通用"
+        },
+        {
+          "type": "fix",
+          "text": "会话删除改为乐观更新（立即隐藏 + 失败回滚 + 并行刷新），去掉阻塞 alert"
+        },
+        {
+          "type": "fix",
+          "text": "工作模式 AI 重命名点击无反应，改为按状态码分别提示并刷新列表"
+        }
+      ]
+    },
+    {
       "version": "2.3.0",
       "date": "2026-08-30",
       "highlights": [
