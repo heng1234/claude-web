@@ -2,6 +2,36 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.4.2",
+      "date": "2026-09-19",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "Windows：subprocess 调用显式指定 UTF-8 编码，修复中文系统 GBK 解码崩溃（Issue #12）"
+        },
+        {
+          "type": "fix",
+          "text": "Windows：导入 CLI 会话后发消息报 NotADirectoryError，从 JSONL 文件反查真实 cwd 写库（Issue #11）"
+        },
+        {
+          "type": "fix",
+          "text": "大文件（>200k 字符）改为路径引用而非内联，规避 32MB API 请求体上限"
+        },
+        {
+          "type": "fix",
+          "text": "@ 智能体选中后输入框只显示紧凑标记，发送时再展开完整 Task 引导文本，避免输入框撑大"
+        },
+        {
+          "type": "fix",
+          "text": "文件拖拽优先使用绝对路径；无法定位时提示更友好并给出操作建议"
+        },
+        {
+          "type": "fix",
+          "text": "session_auto_recovered 事件视为成功，恢复消息队列继续发送，修复空转问题"
+        }
+      ]
+    },
+    {
       "version": "2.4.1",
       "date": "2026-09-05",
       "highlights": [
