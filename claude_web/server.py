@@ -382,6 +382,8 @@ def _claude_cli_supports_chrome_flags() -> bool:
             help_argv,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         output = f"{result.stdout}\n{result.stderr}"
@@ -7045,6 +7047,72 @@ def _decode_claude_project_path(encoded: str) -> str:
     return encoded
 
 
+def _claude_projects_reverse_map() -> dict:
+    """Build mapping from encoded project identifiers to real paths.
+
+    Sources (in priority order):
+    1. ~/.claude.json projects key (partial coverage)
+    2. Session JSONL files containing real cwd in event records (complete coverage)
+
+    Returns dict mapping encoded identifier -> real absolute path
+    """
+    mapping = {}
+
+    # Source 1: ~/.claude.json projects key
+    try:
+        claude_config = Path.home() / ".claude.json"
+        if claude_config.exists():
+            with open(claude_config, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                projects = config.get("projects", {})
+                for real_path in projects.keys():
+                    # Encode the path the same way Claude CLI does
+                    encoded = real_path.replace(os.sep, "-")
+                    if not encoded.startswith("-"):
+                        encoded = "-" + encoded
+                    mapping[encoded] = real_path
+    except Exception:
+        pass
+
+    # Source 2: Session JSONL files (most reliable)
+    try:
+        if _CLAUDE_PROJECTS_DIR.exists() and _CLAUDE_PROJECTS_DIR.is_dir():
+            for project_dir in _CLAUDE_PROJECTS_DIR.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                encoded = project_dir.name
+                # Skip if we already have this mapping from ~/.claude.json
+                if encoded in mapping:
+                    continue
+                # Read first session file in this project directory
+                for session_file in project_dir.glob("*.jsonl"):
+                    try:
+                        with open(session_file, "r", encoding="utf-8") as f:
+                            for line in f:
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                try:
+                                    obj = json.loads(line)
+                                    if not isinstance(obj, dict):
+                                        continue
+                                    # Extract real cwd from event record
+                                    real_cwd = _extract_cli_cwd(obj, session_file)
+                                    if real_cwd and os.path.isabs(real_cwd):
+                                        mapping[encoded] = real_cwd
+                                        break  # Found real cwd for this project
+                                except json.JSONDecodeError:
+                                    continue
+                        if encoded in mapping:
+                            break  # Found mapping, no need to check other session files
+                    except Exception:
+                        continue
+    except Exception:
+        pass
+
+    return mapping
+
+
 def _extract_cli_cwd(obj: dict, path: Path) -> str:
     candidates = [
         obj.get("cwd"),
@@ -7380,6 +7448,9 @@ def import_cli_sessions(session_ids: List[str], cwd_filter: str = "", paths: Opt
         if preview and preview["session_id"] in requested:
             by_id[preview["session_id"]] = path
 
+    # Build reverse mapping from encoded project identifiers to real paths
+    project_reverse_map = _claude_projects_reverse_map()
+
     imported: List[dict] = []
     for remote_session_id in requested:
         path = by_id.get(remote_session_id)
@@ -7390,6 +7461,15 @@ def import_cli_sessions(session_ids: List[str], cwd_filter: str = "", paths: Opt
             continue
         if cwd_filter and not _path_matches_cwd(parsed.get("cwd") or "", cwd_filter):
             continue
+
+        # Resolve the real cwd: prefer the reverse map over the encoded identifier.
+        # Fallback to home directory so subprocess doesn't get an invalid path on Windows.
+        raw_cwd = parsed.get("cwd") or ""
+        encoded_identifier = path.parent.name
+        real_cwd = project_reverse_map.get(encoded_identifier) or raw_cwd
+        if not real_cwd or not os.path.isabs(real_cwd):
+            real_cwd = str(Path.home())
+
         existing_local_id = _find_existing_import(parsed["session_id"])
         local_id = existing_local_id or _choose_import_session_id(parsed["session_id"])
         now = time.time()
@@ -7408,7 +7488,7 @@ def import_cli_sessions(session_ids: List[str], cwd_filter: str = "", paths: Opt
                     (
                         local_id,
                         parsed["title"],
-                        parsed["cwd"],
+                        real_cwd,
                         parsed["created_at"],
                         parsed["updated_at"],
                         parsed["session_id"],
@@ -7430,7 +7510,7 @@ def import_cli_sessions(session_ids: List[str], cwd_filter: str = "", paths: Opt
                     """,
                     (
                         parsed["title"],
-                        parsed["cwd"],
+                        real_cwd,
                         max(parsed["updated_at"], now),
                         parsed["session_id"],
                         summarize_cache_from_events(events),
@@ -7442,7 +7522,7 @@ def import_cli_sessions(session_ids: List[str], cwd_filter: str = "", paths: Opt
             "id": local_id,
             "remote_session_id": parsed["session_id"],
             "title": parsed["title"],
-            "cwd": parsed["cwd"],
+            "cwd": real_cwd,
             "event_count": len(events),
             "already_imported": existing_local_id is not None,
         })
@@ -12686,6 +12766,8 @@ DOC_MIME_EXTS = {
 MAX_DOC_MB = 30
 # Soft cap kept for UI display; we no longer hard-truncate the document text on
 # upload. Anything beyond this just gets a "large document" hint in the response.
+# Kept low so large PDFs/Excel files are referenced by path rather than inlined,
+# avoiding the 32MB API request body limit.
 LARGE_DOC_CHARS_HINT = 200_000
 # Argv length safety margin. macOS allows ~256KB total argv; once the prompt
 # (UTF-8 bytes) crosses this we route through stdin to avoid E2BIG.
@@ -15965,9 +16047,24 @@ def _find_dropped_path_by_name(cwd: Path, name: str) -> Optional[Path]:
 
     # Finder drops in a normal browser expose only the basename. Search a
     # bounded depth under conventional roots; never crawl dependency/cache dirs.
-    visited = 0
-    max_visited = 8000
+    # Prioritise common source dirs so shallow projects are found fast.
+    _PRIORITY_SUBDIRS = ("src", "app", "lib", "components", "pages", "api", "utils", "services", "pkg", "internal")
+    priority_roots: List[Path] = []
     for root in roots:
+        for sub in _PRIORITY_SUBDIRS:
+            candidate = root / sub
+            if candidate.is_dir():
+                priority_roots.append(candidate)
+    search_order = priority_roots + roots
+
+    visited = 0
+    max_visited = 12000
+    seen_roots: Set[str] = set()
+    for root in search_order:
+        root_key = str(root)
+        if root_key in seen_roots:
+            continue
+        seen_roots.add(root_key)
         try:
             for current_root, dirs, files in os.walk(root):
                 current = Path(current_root)
@@ -15986,7 +16083,7 @@ def _find_dropped_path_by_name(cwd: Path, name: str) -> Optional[Path]:
                     return (current / clean_name).resolve()
                 if clean_name in files:
                     return (current / clean_name).resolve()
-                if depth >= 4:
+                if depth >= 5:
                     dirs[:] = []
         except OSError:
             continue
@@ -16852,6 +16949,8 @@ def _check_claude_cli() -> Optional[str]:
             claude_cli_argv("--version", allow_batch_shim=True),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         if result.returncode == 0:

@@ -16489,12 +16489,14 @@ async function handleCodePathDrop(dt) {
     if (!response.ok) throw new Error(data.detail || t('x.path_fail'));
     for (const item of (data.items || [])) {
       const label = `${item.name || pathBasename(item.path)}${item.kind === 'directory' ? '/' : ''}`;
-      insertCodeFileReference(item.path, label);
+      // Prefer absolute_path for display; fall back to relative path for project-scoped refs
+      const refPath = item.scope === 'project' ? item.path : (item.absolute_path || item.path);
+      insertCodeFileReference(refPath, label);
     }
     const unresolved = Array.isArray(data.unresolved) ? data.unresolved : [];
     if (unresolved.length) {
       const names = unresolved.map(item => item.name).filter(Boolean).slice(0, 3).join('、');
-      toast(`浏览器未提供 ${names || t('x.dragged_item')} 的完整路径，请从项目文件树拖入或用项目管理选择目录`);
+      toast(`无法定位 ${names || t('x.dragged_item')} 的完整路径。建议：\n1. 从左侧项目文件树拖入\n2. 或直接在输入框粘贴文件路径`, { timeout: 6000 });
     }
     if (!(data.items || []).length && !unresolved.length) toast(t('toasts.no_file_ref'));
   } catch (error) {
@@ -17137,17 +17139,43 @@ function hidePicker() {
   pickerQuery = '';
 }
 
-// 生成 @agent 选中后插入的引导文本：让模型用 Task 工具起一个对应角色的 subagent
-function buildAgentMentionText(item) {
+// @agent 选中后：输入框只插入紧凑标记「@角色名 」，职责等提示词隐藏；
+// 发送时由 expandAgentMentions() 展开成完整的 Task 引导文本交给模型。
+const pendingAgentMentions = new Map(); // agentName -> { name, systemPrompt, defaultTask }
+
+function buildAgentMentionMarker(item) {
   const name = item.agentName || 'agent';
-  const role = (item.systemPrompt || '').trim().replace(/\s+/g, ' ').slice(0, 400);
-  const task = (item.defaultTask || '').trim();
-  const lines = [t('ui.agent_mention_lead').replace('{name}', name)];
+  pendingAgentMentions.set(name, {
+    name,
+    systemPrompt: item.systemPrompt || '',
+    defaultTask: item.defaultTask || '',
+  });
+  return '@' + name + ' ';
+}
+
+// 把一段完整的 Task 引导文本拼出来（角色 + 职责 + 任务）
+function composeAgentMentionText(info) {
+  const role = (info.systemPrompt || '').trim().replace(/\s+/g, ' ');
+  const task = (info.defaultTask || '').trim();
+  const lines = [t('ui.agent_mention_lead').replace('{name}', info.name)];
   if (role) lines.push(t('ui.agent_mention_role').replace('{role}', role));
   lines.push(t('ui.agent_mention_task'));
   let text = lines.join('\n');
   if (task) text += '\n' + task;
-  return text + '\n';
+  return text;
+}
+
+// 发送前把可见的「@角色名」标记替换为完整引导文本；未命中的标记原样保留
+function expandAgentMentions(text) {
+  if (!pendingAgentMentions.size || !text) return text;
+  let out = text;
+  for (const [name, info] of pendingAgentMentions) {
+    const marker = '@' + name;
+    if (out.includes(marker)) {
+      out = out.split(marker).join(composeAgentMentionText(info));
+    }
+  }
+  return out;
 }
 
 // 仅工作模式：@ 时列出可复用的 Agent 模板，选中后引导用 Task 起 subagent
@@ -17213,11 +17241,11 @@ async function maybeShowPicker() {
       const prompts = promptsResp.ok ? await promptsResp.json() : [];
       const memories = memoriesResp.ok ? await memoriesResp.json() : [];
       pickerItems = [
-        ...files.map(f => ({ kind: 'file', label: f.rel, meta: t('ui.file'), path: f.path, value: '@' + f.path + ' ' })),
-        ...agentMentionItems(q),
-        ...sessions.map(s => ({ kind: 'session', label: s.title || s.id.slice(0, 8), meta: t('x.session_word'), id: s.id })),
-        ...prompts.map(p => ({ kind: 'prompt', label: p.name, meta: t('settings.prompts'), content: p.content })),
-        ...memories.map(m => ({ kind: 'memory', label: m.content.slice(0, 60), meta: t('x.memory_prefix') + m.scope, content: m.content })),
+        ...files.map(f => ({ kind: 'file', group: t('ui.file'), label: f.rel, meta: t('ui.file'), path: f.path, value: '@' + f.path + ' ' })),
+        ...agentMentionItems(q).map(a => ({ ...a, group: t('ui.agent_mention_meta') })),
+        ...sessions.map(s => ({ kind: 'session', group: t('x.session_word'), label: s.title || s.id.slice(0, 8), meta: t('x.session_word'), id: s.id })),
+        ...prompts.map(p => ({ kind: 'prompt', group: t('settings.prompts'), label: p.name, meta: t('settings.prompts'), content: p.content })),
+        ...memories.map(m => ({ kind: 'memory', group: t('x.memory_prefix').replace(/[:：]\s*$/, ''), label: m.content.slice(0, 60), meta: t('x.memory_prefix') + m.scope, content: m.content })),
       ].slice(0, 20);
     }
     if (pickerItems.length === 0) { hidePicker(); return; }
@@ -17230,7 +17258,7 @@ async function maybeShowPicker() {
 function renderPicker() {
   let lastGroup = '';
   filePicker.innerHTML = pickerItems.map((item, i) => {
-    const section = pickerMode === 'slash' && item.group !== lastGroup
+    const section = item.group && item.group !== lastGroup
       ? `<div class="picker-section-title">${escapeHtml(item.group || '')}</div>`
       : '';
     lastGroup = item.group || lastGroup;
@@ -17314,7 +17342,7 @@ async function insertPickerSelection(i) {
         insertText = d?.content || '';
       } catch {}
     } else if (item.kind === 'agent') {
-      insertText = buildAgentMentionText(item);
+      insertText = buildAgentMentionMarker(item);
     } else {
       insertText = item.content || '';
     }
@@ -18488,6 +18516,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let streamErrorEvent = null;
   let serverAccepted = false;
   let doneEvent = null;
+  let sessionAutoRecovered = false;
 
   const perm = buildPermissionPayload();
   // Only mobileCwdOrStop() returning null means "validation failed, abort".
@@ -18681,6 +18710,9 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
           }
           if (obj.type === 'user_input') continue;
           if (obj.type === 'done') doneEvent = obj;
+          if (obj.type === 'system' && obj.subtype === 'status' && obj.status === 'session_auto_recovered') {
+            sessionAutoRecovered = true;
+          }
           if (obj.type === 'error' || obj.type === 'permission_error') {
             streamErrorEvent = obj;
           }
@@ -18782,6 +18814,10 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       const reachedBackend = serverAccepted
         || !!doneEvent
         || !!collectedAssistantText.trim();
+      // When session auto-recovered, treat as success to resume queue
+      if (sessionAutoRecovered) {
+        return { ok: true, accepted: true, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
+      }
       return { ok: false, accepted: reachedBackend, error: streamErrorEvent, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
     }
     if (!quiet && String(doneEvent?.turn_state || '') !== 'waiting_plan') {
@@ -18958,7 +18994,9 @@ form.addEventListener('submit', async (e) => {
     return;
   }
   hidePicker();
-  const text = input.value.trim();
+  const rawText = input.value.trim();
+  // @智能体：把输入框里的紧凑角色标记展开成完整 Task 引导后再发送
+  const text = expandAgentMentions(rawText);
   const readyDocs = pendingDocs.filter(isReadyDocForSend).length;
   const loadingDocs = pendingDocs.filter(d => d.status === 'loading').length;
   if (!text && pendingImages.length === 0 && activeImageUploadPromises.size === 0 && readyDocs === 0 && loadingDocs === 0) return;
@@ -18973,7 +19011,7 @@ form.addEventListener('submit', async (e) => {
   const slashPayload = pendingSlashFork && pendingImages.length === 0 && readyDocs === 0 && loadingDocs === 0
     ? slashForkPayloadFor(text)
     : null;
-  if (codeMode) rememberCodeInput(text);
+  if (codeMode) rememberCodeInput(rawText);
   input.value = '';
   updateTokenCount();
   autosizeTextarea();
@@ -18985,7 +19023,7 @@ form.addEventListener('submit', async (e) => {
       entry = await captureCodeComposerEntry(text, owner, slashPayload, composerCapture);
     } catch (error) {
       if (owner === activeCodeQueueOwner) {
-        input.value = text;
+        input.value = rawText;
         saveDraft();
         autosizeTextarea();
       }
@@ -24284,7 +24322,7 @@ function renderDocChips() {
     const lead = isLoading
       ? '<span class="chip-spinner" title="上传中..."></span>'
       : (isError ? '<span title="' + escapeHtml(d.error || '') + '">⚠️</span>' : '📄');
-    const largeWarn = d.large ? ' <span title="文档较长，可能受模型 context 限制" style="color:#f59e0b;">⚠</span>' : '';
+    const largeWarn = d.large ? ' <span title="文档较大，将通过路径引用而非内联，Claude 会直接读取文件" style="color:#f59e0b;">⚠</span>' : '';
     const previewable = d.status === 'ready' && d.content;
     const nameClass = previewable ? 'name truncate' : 'truncate';
     const dataIdxAttr = previewable ? ` data-preview-idx="${i}"` : '';
@@ -24482,6 +24520,11 @@ function composeDocContext() {
   const ready = pendingDocs.filter(d => d.status !== 'error' && d.content);
   if (ready.length === 0) return '';
   return ready.map(d => {
+    // Large docs are referenced by path so Claude can read them with its tools,
+    // avoiding inline content that would exceed the 32MB API request limit.
+    if (d.large && d.path) {
+      return `【文档: ${d.name}（文件较大，已保存至 ${d.path}，请直接读取该路径）】`;
+    }
     return `【文档: ${d.name}】\n---\n${d.content}\n---`;
   }).join('\n\n') + '\n\n';
 }
