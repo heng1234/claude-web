@@ -18556,6 +18556,13 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let collectedAssistantText = '';
   let streamErrorEvent = null;
   let serverAccepted = false;
+  // Any business event parsed from the SSE stream proves the backend accepted
+  // and ran this turn — a far more reliable "reached backend" signal than the
+  // single `meta` frame, which proxies/SSE can drop. Without this, a lost meta
+  // on a turn the server actually completed makes the queue re-send the same
+  // message with force_new=true, opening a duplicate session (the "7–17s 内同一
+  // 句开 3 个会话" bug).
+  let sawServerEvent = false;
   let doneEvent = null;
   let sessionAutoRecovered = false;
 
@@ -18722,6 +18729,10 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         if (!line) continue;
         try {
           const obj = JSON.parse(line.slice(6));
+          // A parsed SSE event means the request reached the backend and it is
+          // streaming this turn. Used below so a dropped `meta` can't make a
+          // completed turn look un-sent and trigger a duplicate re-send.
+          sawServerEvent = true;
           const wasTurnViewActive = turnViewIsActive();
           if (obj.type === 'meta') {
             serverAccepted = true;
@@ -18866,6 +18877,8 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       // replaying would ask the same question twice.
       const reachedBackend = serverAccepted
         || !!doneEvent
+        || !!lastResultEvent
+        || sawServerEvent
         || !!collectedAssistantText.trim();
       // When session auto-recovered, treat as success to resume queue
       if (sessionAutoRecovered) {
@@ -18885,6 +18898,10 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     turnSucceeded = true;
     return { ok: true, accepted: serverAccepted, result: lastResultEvent, usage: lastResultEvent?.usage || null, text: collectedAssistantText.trim() };
   } catch (e) {
+    // If any event streamed back, the backend ran this turn — re-sending would
+    // duplicate it (new session even opens a second one via force_new). This
+    // must not depend on the drop-prone `meta`/turnSessionId alone.
+    const backendReached = serverAccepted || !!doneEvent || !!lastResultEvent || sawServerEvent || !!collectedAssistantText.trim();
     const recoverableDisconnect = serverAccepted
       && !!turnSessionId
       && e.name !== 'AbortError'
@@ -18920,7 +18937,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         addSystemInfo(t('status.aborted'));
       }
     }
-    return { ok: false, accepted: serverAccepted, error: e, aborted: e.name === 'AbortError', text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
+    return { ok: false, accepted: e.name === 'AbortError' ? serverAccepted : backendReached, error: e, aborted: e.name === 'AbortError', text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
   } finally {
     clearCodeSessionRun(turnRun);
     if (targetSessionState && targetSessionState.controller === turnController) {
