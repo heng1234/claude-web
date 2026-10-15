@@ -621,6 +621,8 @@
     "use_cli": "Or use the Claude Code CLI instead.",
     "root_no_auto": "Auto mode is unsupported under root/sudo; pre-authorize tools or use Agent Mode.",
     "preauth_common": "Pre-authorize common tools and retry",
+    "allow_tool_session": "Allow {tool} in this session and retry",
+    "allow_tool_session_done": "Allowed {tool} in this session, retrying",
     "allow_all_retry": "Allow all in this session and retry",
     "root_preauth_confirm": "Running under root/sudo where auto mode is unsupported. Common tools will be pre-authorized and retried — recommended only for trusted projects. Continue?",
     "allow_all_confirm": "This switches the session to local allow-all mode — recommended only for trusted local use. Continue?",

@@ -10270,6 +10270,7 @@ const sessionAttachmentSnapshots = new Map();
 let currentController = null;
 let currentControllerQueueOwner = '';
 let pendingPermissionAutoRetry = null;
+let permissionRetryInFlight = false;
 const permissionAutoRetryKeys = new Set();
 let archivedView = false;
 let cliView = false;
@@ -14306,10 +14307,22 @@ function addErrorBlock(message) {
 }
 async function retryTurnWithCurrentPermissions(targetSessionId, userIdx) {
   if (!targetSessionId) { alert(t('errors.no_session')); return; }
+  // Guard against double-clicks / overlapping calls: currentController only
+  // gets set once the stream is established, leaving a window where a second
+  // click would run prepare-inline-edit + resend again (duplicate send).
+  if (permissionRetryInFlight) return;
   if (currentController) {
     alert(t('errors.edit_while_running'));
     return;
   }
+  permissionRetryInFlight = true;
+  try {
+    await _retryTurnWithCurrentPermissions(targetSessionId, userIdx);
+  } finally {
+    permissionRetryInFlight = false;
+  }
+}
+async function _retryTurnWithCurrentPermissions(targetSessionId, userIdx) {
   if (userIdx < 0) {
     alert(t('errors.unknown_error'));
     return;
@@ -14853,11 +14866,11 @@ function addPermissionErrorBlock(container, info) {
 
   if (info.tool_name) {
     makeActionBtn(
-      `允许 ${info.tool_name} 并重试本轮`,
+      t('x.allow_tool_session').replace('{tool}', info.tool_name),
       'px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs',
       async () => {
         addSessionAllowedTool(targetSessionId, info.tool_name);
-        addSystemInfo(`已在本会话临时放行 ${info.tool_name}，正在重试本轮`);
+        addSystemInfo(t('x.allow_tool_session_done').replace('{tool}', info.tool_name));
         await retryTurnWithCurrentPermissions(targetSessionId, userIdx);
       },
     );
