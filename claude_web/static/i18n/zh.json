@@ -621,6 +621,8 @@
     "use_cli": "或改用 Claude Code CLI。",
     "root_no_auto": "root/sudo 环境下 Claude CLI 不支持自动模式，请预放行工具或使用代理模式。",
     "preauth_common": "预放行常用工具并重试",
+    "allow_tool_session": "本会话允许 {tool} 并重试",
+    "allow_tool_session_done": "已在本会话允许 {tool}，正在重试",
     "allow_all_retry": "本会话全放行并重试",
     "root_preauth_confirm": "当前是 root/sudo 环境，Claude CLI 不支持自动模式。将改为预放行常用工具并重试，仅建议在可信项目中使用。继续吗？",
     "allow_all_confirm": "这会把当前会话切到本机全放行模式，仅建议本地自用且确认任务可信时使用。继续吗？",

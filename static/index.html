@@ -10270,6 +10270,7 @@ const sessionAttachmentSnapshots = new Map();
 let currentController = null;
 let currentControllerQueueOwner = '';
 let pendingPermissionAutoRetry = null;
+let permissionRetryInFlight = false;
 const permissionAutoRetryKeys = new Set();
 let archivedView = false;
 let cliView = false;
@@ -10374,6 +10375,10 @@ class SessionState {
     this.contextTokens = null;
     this.feedback = {};
     this.needsPermission = false;
+    // Subagent (Task) cards are per-session: switching away and back must
+    // not drop the subagents the viewed conversation is actively running.
+    this.subagents = new Map();
+    this.subagentDismissed = false;
   }
 }
 
@@ -12314,10 +12319,32 @@ let toolUseBlocks = new Map();
 let pendingToolUseIds = [];
 
 // ===== Subagent panel state =====
-const subagentCards = new Map(); // tool_use.id -> card
+// Rebindable: loadSession swaps these to the viewed session's own state so a
+// conversation's running subagents survive switching away and back.
+let subagentCards = new Map(); // tool_use.id -> card
 const MAX_SUBAGENT_CARDS = 5;
 let subagentCollapsed = false;
 let subagentDismissed = false;
+
+// Stash the live subagent state onto the session that owns it, before
+// resetToolUseRuntimeState() clears the active bindings for the next session.
+function saveSubagentStateTo(sid) {
+  if (!sid) return;
+  const st = sessionStates.get(sid);
+  if (!st) return;
+  st.subagents = subagentCards;
+  st.subagentDismissed = subagentDismissed;
+}
+
+// Re-adopt a session's subagent cards. The Task pills live in the cached DOM
+// (or are rebuilt by replay), so restoring the Map is what makes the workspace
+// Agents tab and inner-event routing work again after a switch.
+function restoreSubagentStateFrom(sid) {
+  const st = sid ? sessionStates.get(sid) : null;
+  subagentCards = st && st.subagents instanceof Map ? st.subagents : new Map();
+  subagentDismissed = !!(st && st.subagentDismissed);
+  renderSubagentPanel();
+}
 
 // ===== Plan approval state =====
 const planCards = new Map(); // tool_use.id -> { id, plan, editedPlan, status, decision, cardEl }
@@ -12339,7 +12366,9 @@ function savePlanDecision(sid, toolId, patch) {
 function resetToolUseRuntimeState() {
   toolUseBlocks.clear();
   pendingToolUseIds = [];
-  subagentCards.clear();
+  // Rebind rather than clear(): the previous Map may now be owned by another
+  // session's SessionState (saved on switch), so mutating it would corrupt it.
+  subagentCards = new Map();
   subagentDismissed = false;
   hideSubagentPanel();
   closeSubagentModal();
@@ -14278,10 +14307,22 @@ function addErrorBlock(message) {
 }
 async function retryTurnWithCurrentPermissions(targetSessionId, userIdx) {
   if (!targetSessionId) { alert(t('errors.no_session')); return; }
+  // Guard against double-clicks / overlapping calls: currentController only
+  // gets set once the stream is established, leaving a window where a second
+  // click would run prepare-inline-edit + resend again (duplicate send).
+  if (permissionRetryInFlight) return;
   if (currentController) {
     alert(t('errors.edit_while_running'));
     return;
   }
+  permissionRetryInFlight = true;
+  try {
+    await _retryTurnWithCurrentPermissions(targetSessionId, userIdx);
+  } finally {
+    permissionRetryInFlight = false;
+  }
+}
+async function _retryTurnWithCurrentPermissions(targetSessionId, userIdx) {
   if (userIdx < 0) {
     alert(t('errors.unknown_error'));
     return;
@@ -14825,11 +14866,11 @@ function addPermissionErrorBlock(container, info) {
 
   if (info.tool_name) {
     makeActionBtn(
-      `允许 ${info.tool_name} 并重试本轮`,
+      t('x.allow_tool_session').replace('{tool}', info.tool_name),
       'px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs',
       async () => {
         addSessionAllowedTool(targetSessionId, info.tool_name);
-        addSystemInfo(`已在本会话临时放行 ${info.tool_name}，正在重试本轮`);
+        addSystemInfo(t('x.allow_tool_session_done').replace('{tool}', info.tool_name));
         await retryTurnWithCurrentPermissions(targetSessionId, userIdx);
       },
     );
@@ -18528,6 +18569,13 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let collectedAssistantText = '';
   let streamErrorEvent = null;
   let serverAccepted = false;
+  // Any business event parsed from the SSE stream proves the backend accepted
+  // and ran this turn — a far more reliable "reached backend" signal than the
+  // single `meta` frame, which proxies/SSE can drop. Without this, a lost meta
+  // on a turn the server actually completed makes the queue re-send the same
+  // message with force_new=true, opening a duplicate session (the "7–17s 内同一
+  // 句开 3 个会话" bug).
+  let sawServerEvent = false;
   let doneEvent = null;
   let sessionAutoRecovered = false;
 
@@ -18694,6 +18742,10 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         if (!line) continue;
         try {
           const obj = JSON.parse(line.slice(6));
+          // A parsed SSE event means the request reached the backend and it is
+          // streaming this turn. Used below so a dropped `meta` can't make a
+          // completed turn look un-sent and trigger a duplicate re-send.
+          sawServerEvent = true;
           const wasTurnViewActive = turnViewIsActive();
           if (obj.type === 'meta') {
             serverAccepted = true;
@@ -18838,6 +18890,8 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
       // replaying would ask the same question twice.
       const reachedBackend = serverAccepted
         || !!doneEvent
+        || !!lastResultEvent
+        || sawServerEvent
         || !!collectedAssistantText.trim();
       // When session auto-recovered, treat as success to resume queue
       if (sessionAutoRecovered) {
@@ -18857,6 +18911,10 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
     turnSucceeded = true;
     return { ok: true, accepted: serverAccepted, result: lastResultEvent, usage: lastResultEvent?.usage || null, text: collectedAssistantText.trim() };
   } catch (e) {
+    // If any event streamed back, the backend ran this turn — re-sending would
+    // duplicate it (new session even opens a second one via force_new). This
+    // must not depend on the drop-prone `meta`/turnSessionId alone.
+    const backendReached = serverAccepted || !!doneEvent || !!lastResultEvent || sawServerEvent || !!collectedAssistantText.trim();
     const recoverableDisconnect = serverAccepted
       && !!turnSessionId
       && e.name !== 'AbortError'
@@ -18892,7 +18950,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         addSystemInfo(t('status.aborted'));
       }
     }
-    return { ok: false, accepted: serverAccepted, error: e, aborted: e.name === 'AbortError', text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
+    return { ok: false, accepted: e.name === 'AbortError' ? serverAccepted : backendReached, error: e, aborted: e.name === 'AbortError', text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
   } finally {
     clearCodeSessionRun(turnRun);
     if (targetSessionState && targetSessionState.controller === turnController) {
@@ -19974,6 +20032,9 @@ async function loadSession(id, options = {}) {
     streamedIds.clear();
     lastStreamingMsgId = null;
     pendingNativeRewind = null;
+    // Preserve the leaving session's live subagents before the reset wipes the
+    // active bindings; the target's are re-adopted once its state exists below.
+    saveSubagentStateTo(prevSessionIdSnap);
     resetToolUseRuntimeState();
     hideTodoPanel();
     clearArtifacts();
@@ -20026,6 +20087,12 @@ async function loadSession(id, options = {}) {
 
     const hasDomCache = codeMode && targetState.dom && !options.historyExpansion;
     if (hasDomCache) {
+      // The fast path replays no events, so re-adopt this session's saved
+      // subagent cards — otherwise the Agents tab shows nothing for a Task the
+      // conversation is still running. On the replay path below the cards are
+      // rebuilt from history, so the reset empty Map is left in place to avoid
+      // double-counting inner events.
+      restoreSubagentStateFrom(data.id);
       observerSuppressed++;
       try {
         chatInner.innerHTML = '';
