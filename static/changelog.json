@@ -2,6 +2,28 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.4.4",
+      "date": "2026-10-15",
+      "highlights": [
+        {
+          "type": "fix",
+          "text": "工作模式消息发完后被重发并新建会话：丢失 meta 帧时已完成的轮次被误判未送达而兜底重发，改为收到任何事件即认定后端已处理"
+        },
+        {
+          "type": "fix",
+          "text": "工作模式切换会话后当前对话正在调用的子代理不显示（子代理状态按会话隔离）"
+        },
+        {
+          "type": "fix",
+          "text": "工作模式权限审批重试防连点，避免空窗期连点导致重复重发"
+        },
+        {
+          "type": "improve",
+          "text": "权限卡片「允许 X 并重试本轮」实为整会话放行，文案改为「本会话允许 X 并重试」"
+        }
+      ]
+    },
+    {
       "version": "2.4.3",
       "date": "2026-09-27",
       "highlights": [
