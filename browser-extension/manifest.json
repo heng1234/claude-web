@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Claude Code Web Assistant",
-  "description": "Ask Claude Code Web about selected text or the current page from the Chrome side panel.",
+  "name": "CCW Desk Assistant",
+  "description": "Ask CCW Desk about selected text or the current page from the Chrome side panel.",
   "version": "2.1.2",
   "permissions": ["activeTab", "contextMenus", "scripting", "sidePanel", "storage", "tabs"],
   "host_permissions": [
@@ -24,6 +24,6 @@
   },
   "options_page": "src/options.html",
   "action": {
-    "default_title": "Claude Code Web"
+    "default_title": "CCW Desk"
   }
 }

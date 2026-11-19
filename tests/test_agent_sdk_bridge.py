@@ -6,9 +6,10 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
-from claude_web.agent_sdk_bridge import AgentSdkBridge, AgentSdkBridgeError
+from claude_web.agent_sdk_bridge import AgentSdkBridge, AgentSdkBridgeError, AgentSdkTurn
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is required for the bridge protocol test")
@@ -233,6 +234,11 @@ class AgentSdkBridgeProtocolTest(unittest.IsolatedAsyncioTestCase):
             {"message": "needs permission", "cwd": self.temp_dir.name, "sessionId": "restart-native"},
         )
         original_pid = self.bridge.process.pid
+        # Acknowledgement does not guarantee the next frame has arrived. Wait
+        # for the permission frame whose preservation this test exercises.
+        permission = await asyncio.wait_for(turn.queue.get(), timeout=2.0)
+        self.assertEqual("permission_request", permission["type"])
+        turn.queue.put_nowait(permission)
 
         self.assertTrue(await self.bridge.restart("test restart"))
         self.assertNotEqual(original_pid, self.bridge.process.pid)
@@ -255,6 +261,119 @@ class AgentSdkBridgeProtocolTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("error", queue.get_nowait()["type"])
         self.assertEqual("done", queue.get_nowait()["type"])
+
+
+class AgentSdkEventBufferTest(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.bridge = AgentSdkBridge()
+        self.stdout = asyncio.StreamReader()
+        self.bridge.process = SimpleNamespace(stdout=self.stdout)
+        self.bridge._best_effort_interrupt = AsyncMock()
+        self.queue = asyncio.Queue(maxsize=8)
+        self.bridge._queues["turn"] = self.queue
+        self.bridge._turn_sessions["turn"] = "session"
+        self.turn = AgentSdkTurn("turn", "session", self.queue)
+        self.reader_task = asyncio.create_task(self.bridge._read_stdout())
+
+    async def asyncTearDown(self):
+        self.reader_task.cancel()
+        await asyncio.gather(self.reader_task, return_exceptions=True)
+
+    async def feed(self, envelopes):
+        response = asyncio.get_running_loop().create_future()
+        self.bridge._responses["barrier"] = response
+        for envelope in [*envelopes, {"id": "barrier", "type": "response", "ok": True}]:
+            body = json.dumps(envelope).encode("utf-8")
+            self.stdout.feed_data(len(body).to_bytes(4, "big") + body)
+        await asyncio.wait_for(response, timeout=2.0)
+
+    def event(self, event_type, **fields):
+        return {"id": "turn", "type": "event", "event": {"type": event_type, **fields}}
+
+    async def test_incoming_token_delta_does_not_interrupt_full_essential_queue(self):
+        essential = [self.event("assistant", sequence=index) for index in range(8)]
+        for envelope in essential:
+            self.queue.put_nowait(envelope)
+
+        await self.feed([self.event("stream_event")])
+
+        self.assertIs(self.bridge._queues.get("turn"), self.queue)
+        self.assertEqual(essential, [self.queue.get_nowait() for _ in range(8)])
+        self.bridge._best_effort_interrupt.assert_not_awaited()
+
+    async def test_buffered_burst_gives_active_consumer_time_to_drain(self):
+        consumer = asyncio.create_task(self._collect_turn(self.turn))
+        try:
+            events = [self.event("assistant", sequence=index) for index in range(128)]
+            events.extend([
+                self.event("user", message={"content": [{"type": "tool_result", "tool_use_id": "task-1"}]}),
+                self.event("result", subtype="success"),
+                {"id": "turn", "type": "done", "success": True},
+            ])
+            await self.feed(events)
+            received = await asyncio.wait_for(consumer, timeout=2.0)
+            self.assertEqual(events, received)
+            self.bridge._best_effort_interrupt.assert_not_awaited()
+        finally:
+            consumer.cancel()
+            await asyncio.gather(consumer, return_exceptions=True)
+
+    async def test_burst_does_not_evict_turn_acknowledgement(self):
+        self.bridge.ensure_started = AsyncMock(return_value=True)
+
+        async def send(command):
+            envelopes = [
+                {"type": "accepted"},
+                *[{"type": "event", "event": {"type": "assistant", "sequence": index}} for index in range(24)],
+                {"type": "done", "success": True},
+            ]
+            for envelope in envelopes:
+                body = json.dumps({"id": command["id"], **envelope}).encode("utf-8")
+                self.stdout.feed_data(len(body).to_bytes(4, "big") + body)
+
+        self.bridge._write = AsyncMock(side_effect=send)
+        with patch("claude_web.agent_sdk_bridge.DEFAULT_EVENT_QUEUE_SIZE", 8):
+            turn = await self.bridge.open_turn("burst-session", {"message": "hello"}, timeout=1.0)
+        received = await asyncio.wait_for(
+            self._collect_turn(turn), timeout=2.0,
+        )
+        self.assertEqual(list(range(24)), [item["event"]["sequence"] for item in received[:-1]])
+        self.assertEqual({"id": turn.request_id, "type": "done", "success": True}, received[-1])
+        self.bridge._best_effort_interrupt.assert_not_awaited()
+
+    async def _collect_turn(self, turn):
+        return [envelope async for envelope in turn.events(idle_heartbeat=15.0)]
+
+    async def test_shedding_deltas_keeps_permission_tool_result_and_final_result(self):
+        essential = [
+            {"id": "turn", "type": "permission_request", "approvalId": "approval-1"},
+            self.event("assistant", sequence=1),
+            self.event("assistant", sequence=2),
+        ]
+        for envelope in [*essential, *[self.event("stream_event") for _ in range(5)]]:
+            self.queue.put_nowait(envelope)
+        terminal = [
+            self.event("user", message={"content": [{"type": "tool_result", "tool_use_id": "task-1"}]}),
+            self.event("result", subtype="success"),
+            {"id": "turn", "type": "done", "success": True},
+        ]
+
+        await self.feed(terminal)
+
+        self.assertEqual(essential + terminal, [item async for item in self.turn.events()])
+        self.bridge._best_effort_interrupt.assert_not_awaited()
+
+    async def test_stalled_consumer_still_fails_without_losing_control_response(self):
+        for index in range(8):
+            self.queue.put_nowait(self.event("assistant", sequence=index))
+
+        await self.feed([self.event("result", subtype="success")])
+
+        received = [item async for item in self.turn.events()]
+        self.assertEqual(["error", "done"], [item["type"] for item in received[-2:]])
+        self.assertIn("event buffer overflowed", received[-2]["message"])
+        self.assertNotIn("turn", self.bridge._queues)
+        self.bridge._best_effort_interrupt.assert_awaited_once_with("session")
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is required for the bridge runtime-limit test")
@@ -540,3 +659,57 @@ class AgentSdkSelectedVersionTest(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which('node'), 'Node.js is required for plugin runtime tests')
+class AgentSdkPluginRuntimeTest(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.sdk_dir = Path(self.temp_dir.name) / 'sdk'
+        self.sdk_dir.mkdir()
+        (self.sdk_dir / 'package.json').write_text('{"name":"@anthropic-ai/claude-agent-sdk","version":"0.2.112","type":"module","exports":"./sdk.mjs"}')
+        (self.sdk_dir / 'sdk.mjs').write_text(textwrap.dedent('''
+            let generation = 0;
+            export function query({prompt, options}) {
+              const current = ++generation;
+              return {
+                async *[Symbol.asyncIterator]() {
+                  for await (const message of prompt) {
+                    const decision = await options.hooks.PreToolUse[0].hooks[0]({tool_name:'Bash',tool_input:{command:'pwd'}});
+                    yield {type:'assistant',message:{content:[{type:'text',text:JSON.stringify({generation:current,plugins:options.plugins||[],marker:options.env?.CCW_TEST_MARKER,decision})}]}};
+                    yield {type:'result',subtype:'success',is_error:false,session_id:'plugin-native'};
+                  }
+                },
+                async setModel() {}, async setPermissionMode() {}, async interrupt() {},
+                close() {},
+              };
+            }
+            export async function forkSession() { return {sessionId:'forked'}; }
+            export async function getSessionMessages() { return []; }
+        '''))
+        self.env = patch.dict(os.environ, {'CLAUDE_AGENT_SDK_PATH':str(self.sdk_dir),'CLAUDE_WEB_CODE_RUNTIME':'agent-sdk'})
+        self.env.start()
+        self.bridge = AgentSdkBridge()
+
+    async def asyncTearDown(self):
+        await self.bridge.shutdown()
+        self.env.stop()
+        self.temp_dir.cleanup()
+
+    async def send(self, plugins, **extra):
+        turn=await self.bridge.open_turn('plugin-session',{'message':'test','cwd':self.temp_dir.name,'sessionId':'plugin-native','plugins':plugins,**extra})
+        frames=[item async for item in turn.events()]
+        assistant=next(item['event'] for item in frames if item.get('event',{}).get('type')=='assistant')
+        return json.loads(assistant['message']['content'][0]['text'])
+
+    async def test_plugins_and_provider_environment_reach_sdk_with_readonly_policy(self):
+        plugins=[{'type':'local','path':self.temp_dir.name+'/plugin'}]
+        result=await self.send(plugins,providerEnv={'CCW_TEST_MARKER':'isolated-provider'},providerSignature='provider-test',readOnly=True,permissionMode='bypassPermissions')
+        self.assertEqual(plugins,result['plugins'])
+        self.assertEqual('isolated-provider',result['marker'])
+        self.assertEqual('deny',result['decision']['hookSpecificOutput']['permissionDecision'])
+
+    async def test_changing_extensions_rebuilds_idle_query(self):
+        first=await self.send([])
+        second=await self.send([{'type':'local','path':self.temp_dir.name+'/plugin'}])
+        self.assertGreater(second['generation'],first['generation'])
