@@ -363,7 +363,7 @@ async function captureCurrentPage() {
       throw new Error("当前页面类型不支持读取");
     }
     if (!chrome.scripting?.executeScript) {
-      throw new Error("当前扩展未启用页面读取权限，请在 chrome://extensions 刷新 Claude Code Web 扩展后重试");
+      throw new Error("当前扩展未启用页面读取权限，请在 chrome://extensions 刷新 CCW Desk 扩展后重试");
     }
     const [injection] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
@@ -530,7 +530,7 @@ async function sendAsk() {
   $("copyBtn").disabled = true;
   $("continueBtn").disabled = true;
   show($("answerState"), true);
-  setStatus("连接 Claude Code Web...");
+  setStatus("连接 CCW Desk...");
   saveCurrentTabState().catch(() => {});
 
   try {

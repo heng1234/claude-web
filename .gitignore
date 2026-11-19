@@ -25,6 +25,7 @@ claude-web.db
 claude-web.db-journal
 claude-web.db-wal
 claude-web.db-shm
+workbench/
 
 # Editor / OS
 .DS_Store

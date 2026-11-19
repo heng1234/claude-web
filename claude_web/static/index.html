@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Claude Code Web</title>
+<title>CCW Desk</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23fb923c'/><stop offset='1' stop-color='%23c2410c'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(%23g)'/><text x='16' y='22' font-family='system-ui,sans-serif' font-weight='700' font-size='20' fill='white' text-anchor='middle'>C</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,6 +35,7 @@
     --text-muted: #78716c;
     --text-subtle: #a8a29e;
     --accent: #c2410c;       /* muted amber, not loud orange */
+    --danger: #b91c1c;
     --accent-hover: #9a3412;
     --accent-soft: #fef3c7;  /* soft warm bg */
     --accent-soft-2: #fff7ed;
@@ -55,6 +56,7 @@
     --text-muted: #a8a29e;
     --text-subtle: #78716c;
     --accent: #fb923c;
+    --danger: #fca5a5;
     --accent-hover: #fdba74;
     --accent-soft: #451a03;
     --accent-soft-2: #292524;
@@ -8182,13 +8184,18 @@ async function switchLang(lang) {
 // Load on page start (synchronous-ish via blocking promise before DOMContentLoaded)
 (async () => {
   await loadI18n(_i18nLang);
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', applyI18n);
-  } else {
+  const applyLoadedLanguage = () => {
     applyI18n();
+    window.dispatchEvent(new CustomEvent('cwLangChanged', { detail: { lang: _i18nLang } }));
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyLoadedLanguage);
+  } else {
+    applyLoadedLanguage();
   }
 })();
 </script>
+<link rel="stylesheet" href="/static/workbench.css?v=8500ab3bf48c">
 </head>
 <body class="h-screen flex">
 <div id="cwConversationSearch" class="cw-conversation-search hidden cw-code-only" role="search" aria-label="搜索当前工作区会话" data-i18n-aria="html.aria_search_code_session">
@@ -8204,7 +8211,7 @@ async function switchLang(lang) {
   <div class="px-3 pt-3 pb-2 flex items-center justify-between">
     <div class="flex items-center gap-2 min-w-0">
       <div class="avatar" style="width:26px; height:26px; border-radius:7px; font-size:11px;">C</div>
-      <div class="font-semibold text-[13px] truncate" style="letter-spacing:-0.01em;">Claude Code Web</div>
+      <div class="font-semibold text-[13px] truncate" style="letter-spacing:-0.01em;">CCW Desk</div>
     </div>
     <div class="flex items-center gap-1">
       <button id="cwLangToggle" class="sb-icon-btn" title="Switch language / 切换语言" style="font-size:11px;font-weight:600;letter-spacing:0.02em;" data-i18n-title="html.switch_language">EN</button>
@@ -8256,6 +8263,10 @@ async function switchLang(lang) {
     <button type="button" class="cw-nav-row" id="cwCodeNav" data-cw-view="code">
       <span class="cw-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg></span>
       <span data-i18n="nav.code_mode">工作模式</span>
+    </button>
+    <button type="button" class="cw-nav-row" id="cwWorkbenchNav" aria-controls="ccwWorkbench" title="管理扩展、配置档、工作流与模型路由" data-i18n-title="nav.workbench_hint">
+      <span class="cw-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7m-3.5-3.5v7"/></svg></span>
+      <span data-i18n="nav.workbench">扩展与工作台</span>
     </button>
   </nav>
 
@@ -8420,6 +8431,7 @@ async function switchLang(lang) {
     </div>
     <select id="permSelect" class="text-xs px-2.5 py-1.5" title="工具权限策略" data-i18n-title="html.tool_permission_policy">
       <option value="free" data-i18n="settings.permission_mode">默认模式</option>
+      <option value="default" data-i18n="ui.confirm_tools">逐次确认</option>
       <option value="plan" data-i18n="html.plan_mode">规划模式</option>
       <option value="acceptEdits" data-i18n="html.agent_mode">代理模式</option>
       <option value="bypassPermissions" data-i18n="settings.permission_allow_all">自动模式</option>
@@ -8462,6 +8474,7 @@ async function switchLang(lang) {
         <span data-i18n="settings.permission_mode">权限</span>
         <select id="cwProjectPermSelect" class="cw-project-perm-select">
           <option value="free" data-i18n="settings.permission_mode">默认模式</option>
+      <option value="default" data-i18n="ui.confirm_tools">逐次确认</option>
           <option value="plan" data-i18n="html.plan_mode">规划模式</option>
           <option value="acceptEdits" data-i18n="html.agent_mode">代理模式</option>
           <option value="bypassPermissions" data-i18n="settings.permission_allow_all">自动模式</option>
@@ -8589,6 +8602,13 @@ async function switchLang(lang) {
         <div id="cwWorkspaceActivityBody" class="cw-activity-body" role="tabpanel" aria-live="polite"></div>
       </section>
       <div class="composer relative" id="composer">
+        <div id="wbWorkModeStatus" class="wb-work-mode-status" hidden>
+          <span id="wbWorkModeText" role="status"></span>
+          <span id="wbResearchWeb" class="wb-research-web" hidden>
+            <span data-i18n="work_mode.web_off">网页搜索未开启</span>
+            <button id="wbEnableWebSearch" type="button" data-i18n="work_mode.enable_web">开启工作区网页搜索</button>
+          </span>
+        </div>
         <div id="cwCodeMessageQueue" class="cw-code-message-queue hidden" aria-live="polite" aria-label="Code 待发送队列" data-i18n-aria="html.code_pending_queue">
           <div class="cw-code-queue-head">
             <div class="cw-code-queue-title">
@@ -8699,6 +8719,7 @@ async function switchLang(lang) {
                   <svg class="cw-mode-trigger-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
                 </button>
                 <span id="cwSettingsMenu" class="cw-mode-menu cw-settings-menu hidden" role="menu" aria-label="模型设置" data-i18n-aria="html.model_settings">
+                  <span id="cwSessionModelSummary" class="wb-session-model" role="status">尚未发送消息；会话模型将在运行后显示</span>
                   <button type="button" class="cw-settings-section-trigger" data-settings-section="model" aria-haspopup="menu" aria-expanded="false">
                     <span data-i18n="settings.model">模型</span>
                     <span id="cwSettingsModelValue" class="cw-settings-section-value" data-i18n="composer.model">默认模型</span>
@@ -8795,11 +8816,11 @@ async function switchLang(lang) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6"/></svg>
           <span data-i18n="html.explain_error">解释报错</span>
         </button>
-        <button type="button" class="cw-quick-action cw-code-only" data-prompt="请根据下面需求直接修改代码，并说明改动点：">
+        <button type="button" class="cw-quick-action cw-code-only wb-write-action" data-prompt="请根据下面需求直接修改代码，并说明改动点：">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m14 6 4 4-9 9H5v-4z"/><path d="m16 4 4 4"/></svg>
           <span data-i18n="html.generate_patch">生成补丁</span>
         </button>
-        <button type="button" class="cw-quick-action cw-code-only" data-prompt="请为当前改动补充关键测试，并运行相关测试验证：">
+        <button type="button" class="cw-quick-action cw-code-only wb-write-action" data-prompt="请为当前改动补充关键测试，并运行相关测试验证：">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19V5"/><path d="M8 19V9"/><path d="M12 19V13"/><path d="M16 19V7"/><path d="M20 19V11"/></svg>
           <span data-i18n="html.write_tests">写测试</span>
         </button>
@@ -10296,6 +10317,7 @@ let activeCodeQueueOwner = `draft:${Date.now()}:0`;
 const codeQueueOwnerBySession = new Map();
 const codeMessageQueues = new Map();
 const codeQueueDispatchingOwners = new Set();
+const codeQueueCapturingOwners = new Set();
 const codeQueueDispatchingEntryIds = new Set();
 const codeQueuePauseReasons = new Map();
 // A Code turn belongs to the session that started it, even when the user
@@ -10596,10 +10618,11 @@ if (sidebarSearchRow && sidebarSearchRow.parentElement !== document.body) {
 }
 const permSelect = $('permSelect');
 const PERMISSION_MODE_LABELS = Object.freeze({
-  free: t('ui.default_mode'),
-  plan: t('ui.planning_mode'),
-  acceptEdits: t('ui.agent_mode'),
-  bypassPermissions: t('ui.auto_mode'),
+  get free() { return t('ui.default_mode'); },
+  get default() { return t('ui.confirm_tools'); },
+  get plan() { return t('ui.planning_mode'); },
+  get acceptEdits() { return t('ui.agent_mode'); },
+  get bypassPermissions() { return t('ui.auto_mode'); },
 });
 const PERMISSION_MODE_VALUES = Object.freeze(Object.keys(PERMISSION_MODE_LABELS));
 const CODE_WORKSPACE_DEFAULT_PERMISSION_MODE = 'bypassPermissions';
@@ -11396,8 +11419,9 @@ function persistSessionPermissionOverrides() {
 function getStoredCustomTools() {
   return normalizeToolNames(LS.get('customAllowedTools', ALL_TOOLS));
 }
-function getSessionPermissionOverride(targetSessionId = sessionId) {
-  const raw = (targetSessionId && sessionPermissionOverrides[targetSessionId]) || {};
+function getSessionPermissionOverride(targetSessionId = sessionId, fresh = false) {
+  const overrides = fresh ? LS.get(SESSION_PERMISSION_OVERRIDES_KEY, {}) : sessionPermissionOverrides;
+  const raw = (targetSessionId && overrides[targetSessionId]) || {};
   return {
     mode: raw.mode === 'bypassPermissions' ? 'bypassPermissions' : null,
     extraAllowedTools: normalizeToolNames(raw.extraAllowedTools || []),
@@ -11577,6 +11601,9 @@ if (cwLangToggle) {
 }
 
 window.addEventListener('cwLangChanged', () => {
+  renderPermissionModeMenu();
+  updateWorkspaceLabels();
+  tokenCounter?.setAttribute('aria-label',t('x.view_code_ctx'));
   refreshSessions();
   if (typeof renderCodeMessageQueue === 'function') renderCodeMessageQueue();
   if (typeof refreshCwds === 'function') refreshCwds();
@@ -15605,6 +15632,8 @@ function handleEvent(obj, container, options = {}) {
   if (handleSubagentLifecycleEvent(obj)) return container;
   if (obj.type === 'meta') {
     sessionId = obj.session_id;
+    window.ccwWorkbench?.bindSession();
+    window.ccwWorkbench?.observeSessionModel(sessionId, obj);
     rememberWorkspaceSession(sessionId, codeMode);
     bindCodeQueueOwnerToSession(sessionId, options.queueOwner || activeCodeQueueOwner);
     if (obj.runtime) currentCodeRuntime = obj.runtime;
@@ -15826,10 +15855,8 @@ function handleEvent(obj, container, options = {}) {
         changeSetId: obj.change_set_id || '',
         eventIndex,
         userIndex: lastUserIndex,
+        changesRecorded: Array.isArray(obj.changed_files),
       });
-      if (!replay && (obj.changed_files || []).length && currentCodeProjectSettings?.validation_mode === 'ask') {
-        addSystemInfo(t('x.code_modified_validate'));
-      }
     }
     const denials = obj.permission_denials;
     if (Array.isArray(denials) && denials.length > 0) {
@@ -17273,7 +17300,8 @@ async function maybeShowPicker() {
           content: p.content,
           disabledReason: builtInTriggers.has(p.slash_trigger) ? t('x.cmd_conflict') : '',
         }));
-      pickerItems = [...builtins, ...promptSlash].slice(0, 24);
+      const workbenchSlash = await window.ccwWorkbench?.slashItems(q) || [];
+      pickerItems = [...builtins, ...promptSlash, ...workbenchSlash].slice(0, 32);
     } else {
       const cwd = cwdInput.value.trim() || '~';
       const [filesResp, sessionsResp, promptsResp, memoriesResp] = await Promise.all([
@@ -17404,12 +17432,12 @@ async function insertPickerSelection(i) {
 }
 
 // ===== send / stop =====
-function buildPermissionPayload() {
-  const mode = effectivePermissionModeForWorkspace(permSelect.value);
+function buildPermissionPayload(webEnabled = isWebSearchEnabled(), checkFreshGrants = false) {
+  const mode = effectivePermissionModeForWorkspace(checkFreshGrants && codeMode ? LS.get('permMode', permSelect.value) : permSelect.value);
   const out = { permission_mode: null, allowed_tools: null, disallowed_tools: null };
   const applyWebToolPolicy = () => {
     const webTools = new Set(['WebSearch', 'WebFetch']);
-    if (isWebSearchEnabled()) {
+    if (webEnabled) {
       if (Array.isArray(out.allowed_tools)) {
         for (const t of webTools) {
           if (!out.allowed_tools.includes(t)) out.allowed_tools.push(t);
@@ -17451,7 +17479,7 @@ function buildPermissionPayload() {
   if (codeMode && out.permission_mode === 'acceptEdits' && !out.disallowed_tools) {
     out.allowed_tools = normalizeToolNames([...(out.allowed_tools || []), ...CODE_WORKSPACE_ALLOWED_TOOLS]);
   }
-  const override = getSessionPermissionOverride(sessionId);
+  const override = getSessionPermissionOverride(sessionId, checkFreshGrants);
   if (override.mode === 'bypassPermissions') {
     if (runtimeStatus.root_or_sudo) {
       out.permission_mode = 'acceptEdits';
@@ -17676,6 +17704,33 @@ function codeQueueEntryPreview(entry) {
   return text || t('ui.empty_message');
 }
 
+async function captureCodeQueueSettings(workbenchFields, webEnabled) {
+  const cwd = mobileCwdOrStop();
+  if (cwd === null) throw new Error(t('mobile.only_saved_projects'));
+  const model = modelSelect.value || null;
+  const effort = effectiveEffortForSend() || null;
+  const systemPrompt = settings.systemPrompt || null;
+  const browserEnabled = !!settings.codeBrowser;
+  const permission = buildPermissionPayload(webEnabled, true);
+  const response = await fetch('/api/code/queue-context', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({...workbenchFields, ...permission, message:'', session_id:sessionId, cwd,
+      workspace_mode:'code', model, effort, system_prompt:systemPrompt, browser_enabled:browserEnabled}),
+  });
+  const target = await response.json().catch(() => ({}));
+  if (!response.ok || !target.revision) throw new Error(target.detail || t('work_queue.capture_failed'));
+  return {cwd, model, effort, systemPrompt, browserEnabled, webEnabled, permission, target};
+}
+
+function codeQueueContextProblem(saved, cwd, browserEnabled, permission) {
+  if (!saved?.target?.revision) return t('work_queue.missing_snapshot');
+  if (cwd !== saved.cwd) return t('work_queue.project_changed');
+  if (browserEnabled !== saved.browserEnabled || JSON.stringify(permission) !== JSON.stringify(saved.permission)) {
+    return t('work_queue.permission_changed');
+  }
+  return '';
+}
+
 function codeQueueEntryMeta(entry) {
   const details = [];
   const imageCount = entry?.imagePaths?.length || 0;
@@ -17684,6 +17739,13 @@ function codeQueueEntryMeta(entry) {
   if (docCount) details.push(`${docCount} 个文件`);
   if (entry?.snapshot?.urlEntries?.length) details.push(`${entry.snapshot.urlEntries.length} 个链接`);
   if (entry?.snapshot?.contextPacks?.length) details.push(`${entry.snapshot.contextPacks.length} 个图谱上下文`);
+  const saved = entry?.snapshot?.queueSettings;
+  if (saved?.target) {
+    const {model, provider, branch} = saved.target;
+    details.push([provider, model || t('x.default_model')].filter(Boolean).join(' / '));
+    if (branch) details.push(branch);
+    details.push(t(saved.webEnabled ? 'work_mode.web_on' : 'work_mode.web_off'));
+  }
   return details.join(' · ');
 }
 
@@ -17802,8 +17864,8 @@ async function loadPersistedCodeQueue(targetSessionId) {
       owner,
       ...(item.payload || {}),
     })));
-    const paused = visibleItems.some(item => item.state === 'paused' || item.state === 'dispatching');
-    if (paused && queue.length) codeQueuePauseReasons.set(owner, t('x.queue_restored'));
+    const paused = visibleItems.find(item => item.state === 'paused' || item.state === 'dispatching');
+    if (paused && queue.length) codeQueuePauseReasons.set(owner, paused.error || t('x.queue_restored'));
     else codeQueuePauseReasons.delete(owner);
     if (owner === activeCodeQueueOwner) renderCodeMessageQueue();
   } catch {}
@@ -17873,18 +17935,20 @@ async function drainCodeMessageQueue(owner = activeCodeQueueOwner) {
 
 async function captureCodeComposerEntry(text, owner, slashPayload = null, composerCapture = null) {
   const capture = composerCapture || snapshotComposerState();
-  if (capture.imagePromises.length > 0 || capture.docPromises.length > 0) {
-    sendBtn.disabled = true;
-    input.disabled = true;
-    try { await resolveComposerCapture(capture); }
-    finally {
-      sendBtn.disabled = false;
-      input.disabled = false;
-      input.focus();
-    }
+  codeQueueCapturingOwners.add(owner);
+  const wasReadOnly = input.readOnly;
+  input.readOnly = sendBtn.disabled = true;
+  let queueSettings;
+  try {
+    queueSettings = await captureCodeQueueSettings(capture.workbenchFields, capture.webEnabled);
+    await resolveComposerCapture(capture);
+  } finally {
+    codeQueueCapturingOwners.delete(owner);
+    input.readOnly = wasReadOnly;
+    syncActiveCodeRunControls();
+    if (owner === activeCodeQueueOwner) input.focus();
   }
   const ownerStillActive = owner === activeCodeQueueOwner;
-  await resolveComposerCapture(capture);
   if (capture.failedUploads > 0) throw new Error(t('x.attach_fail_remove'));
   const imagePaths = capture.images.map(item => item.path).filter(Boolean);
   const docs = capture.docs
@@ -17905,8 +17969,10 @@ async function captureCodeComposerEntry(text, owner, slashPayload = null, compos
     snapshot: {
       docs,
       urlEntries,
-      webSearchPrefix: isWebSearchEnabled() ? webSearchPrefix() : '',
+      webSearchPrefix: capture.webSearchPrefix,
+      queueSettings,
       contextPacks: (capture.contextPacks || []).map(item => ({ ...item })),
+      workbenchFields: capture.workbenchFields,
     },
     queuedAt: Date.now(),
   };
@@ -17933,6 +17999,12 @@ async function dispatchCodeQueueEntry(entry) {
   renderCodeMessageQueue();
   let result = null;
   try {
+    const saved = entry.snapshot?.queueSettings;
+    const problem = codeQueueContextProblem(saved, mobileCwdOrStop(), !!settings.codeBrowser, buildPermissionPayload(saved?.webEnabled, true));
+    if (problem) {
+      await persistCodeQueueEntry(entry);
+      throw new Error(problem);
+    }
     // Immediate sends do not pass through enqueueCodeMessage(), so make sure
     // the authoritative queue row exists before marking it dispatching. This
     // also serializes the POST/PATCH pair and removes the former 404 race.
@@ -17943,7 +18015,9 @@ async function dispatchCodeQueueEntry(entry) {
       pauseCodeMessageQueue(owner, t('x.compact_queue_paused'));
       return;
     }
-    result = await sendCore(
+    if (!codeMode || owner !== activeCodeQueueOwner) {
+      result = {ok:false, busy:true};
+    } else result = await sendCore(
       entry.message,
       entry.isFork ? entry.displayMessage : null,
       entry.imagePaths,
@@ -17990,7 +18064,7 @@ async function dispatchCodeQueueEntry(entry) {
       ).catch(() => loadPersistedCodeQueue(queueSessionId(owner)));
     }
     if (!result?.busy) {
-      pauseCodeMessageQueue(owner, result?.aborted ? t('x.task_stopped_queue') : t('ui.queue_paused'));
+      pauseCodeMessageQueue(owner, result?.aborted ? t('x.task_stopped_queue') : (result?.error?.message || t('ui.queue_paused')));
     }
   }
   renderCodeMessageQueue();
@@ -18081,6 +18155,7 @@ async function send(message, options = {}) {
       urlEntries: capture.urlEntries,
       webSearchPrefix: capture.webSearchPrefix,
       contextPacks: (capture.contextPacks || []).map(item => ({ ...item })),
+      workbenchFields: capture.workbenchFields,
     },
   });
 }
@@ -18471,8 +18546,10 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   const forceNew = options.forceNew === true;
   const quiet = options.quiet === true;
   const composerSnapshot = options.composerSnapshot || null;
+  const queued = options.queueManaged ? composerSnapshot?.queueSettings : null;
   const queueOwner = options.queueOwner || activeCodeQueueOwner;
   let turnSessionId = Object.prototype.hasOwnProperty.call(options, 'sessionId') ? options.sessionId : sessionId;
+  const workbenchFields = options.composerSnapshot?.workbenchFields || window.ccwWorkbench?.requestFields(turnSessionId,turnIsCode?'code':'chat') || {};
   const turnTitle = titleLabel.textContent;
   let snapshotUrlBlock = '';
   let turnSucceeded = false;
@@ -18579,11 +18656,11 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   let doneEvent = null;
   let sessionAutoRecovered = false;
 
-  const perm = buildPermissionPayload();
+  const perm = buildPermissionPayload(queued?.webEnabled, !!queued);
   // Only mobileCwdOrStop() returning null means "validation failed, abort".
   // An explicit cwd: null from the caller is normal for chat mode.
   const cwdExplicit = Object.prototype.hasOwnProperty.call(options, 'cwd');
-  const cwd = cwdExplicit ? options.cwd : mobileCwdOrStop();
+  const cwd = queued?.target.cwd ?? (cwdExplicit ? options.cwd : mobileCwdOrStop());
   if (!cwdExplicit && cwd === null) {
     hideThinking(container, { force: true });
     sendBtn.disabled = false;
@@ -18603,10 +18680,15 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
   }
 
   try {
+    if (queued) {
+      const problem = codeQueueContextProblem(queued, mobileCwdOrStop(), !!settings.codeBrowser, perm);
+      if (problem || !turnViewIsActive()) throw new Error(problem || t('work_queue.project_changed'));
+    }
     const resp = await fetch('/api/chat', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
+        ...workbenchFields,
         message: actualMessage,
         session_id: turnSessionId,
         cwd: cwd || null,
@@ -18614,9 +18696,10 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         docs: docMetadata.length ? docMetadata : null,
         workspace_mode: turnIsCode ? 'code' : 'chat',
         browser_enabled: turnIsCode ? !!settings.codeBrowser : false,
-        model: modelSelect.value || null,
-        effort: effectiveEffortForSend() || null,
-        system_prompt: settings.systemPrompt || null,
+        model: queued ? queued.model : modelSelect.value || null,
+        effort: queued ? queued.effort : effectiveEffortForSend() || null,
+        system_prompt: queued ? queued.systemPrompt : settings.systemPrompt || null,
+        queue_context: queued?.target.revision,
         display_message: actualDisplay || null,
         permission_mode: perm.permission_mode,
         allowed_tools: perm.allowed_tools,
@@ -18701,10 +18784,19 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
         };
       }
       if (turnViewIsActive()) {
-        hideThinking(container, { force: true });
-        addErrorBlock(message);
+        if (queued && resp.status === 409 && message.startsWith('排队时的项目、分支或配置已变化')) {
+          container?.closest('.asst-wrap')?.remove();
+          optimisticUserElement?.remove();
+          if (lastUserIndex === optimisticUserIndex) {
+            currentUserIndex = Math.max(0, optimisticUserIndex);
+            lastUserIndex = optimisticUserIndex - 1;
+          }
+        } else {
+          hideThinking(container, { force: true });
+          addErrorBlock(message);
+        }
       }
-      return { ok: false, accepted: false, status: resp.status, text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
+      return { ok: false, accepted: false, status: resp.status, error: new Error(message), text: collectedAssistantText.trim(), usage: lastResultEvent?.usage || null };
     }
 
     const reader = resp.body.getReader();
@@ -18809,6 +18901,7 @@ async function sendCore(message, displayMessage, imagePaths, options = {}) {
           // event for a new active draft is still foreground before it assigns
           // the server session id, hence the captured wasTurnViewActive flag.
           if (turnViewIsActive() || (obj.type === 'meta' && wasTurnViewActive)) {
+            if (obj.type !== 'meta') window.ccwWorkbench?.observeSessionModel(turnSessionId, obj);
             const result = handleEvent(obj, asstContainer, { queueOwner });
             if (result) asstContainer = result;
           } else if (targetSessionState) {
@@ -19076,6 +19169,7 @@ form.addEventListener('submit', async (e) => {
     toast(t('x.al_running_stop'));
     return;
   }
+  if (codeQueueCapturingOwners.has(activeCodeQueueOwner)) return;
   hidePicker();
   const rawText = input.value.trim();
   // @智能体：把输入框里的紧凑角色标记展开成完整 Task 引导后再发送
@@ -19204,6 +19298,7 @@ function switchConversationWorkspaceMode(nextCodeMode) {
 }
 
 function openSessionInWorkspace(targetSession) {
+  if (window.ccwWorkbench?.leave() === false) return;
   if (!targetSession?.id) return;
   const targetCode = isCodeWorkspaceSession(targetSession);
   if (targetCode !== codeMode) {
@@ -19220,6 +19315,8 @@ function openSessionInWorkspace(targetSession) {
 }
 
 function startNewSession() {
+  if (window.ccwWorkbench?.leave() === false) return;
+  window.ccwWorkbench?.resetSession();
   sessionLoadRequestId += 1;
   conversationViewEpoch += 1;
   window.CWProjectMap?.close({ silent:true });
@@ -20000,23 +20097,25 @@ async function loadSession(id, options = {}) {
     sessionId = data.id;
     syncContextCompactionStatus();
     rememberWorkspaceSession(data.id, loadedWorkspaceMode === 'code');
+    if (codeMode && codeInspectorState.sessionId && codeInspectorState.sessionId !== data.id) resetCodeInspector();
+    codeInspectorState.sessionId = data.id;
+    if (codeMode) {
+      activateCodeQueueForSession(data.id);
+      loadPersistedCodeQueue(data.id);
+    }
+    await window.ccwWorkbench?.restoreSession(data.id, data.events);
+    if(requestId !== sessionLoadRequestId || sessionId !== data.id) return false;
     // Restore the permission selector from the session's stored mode so a page
     // reload / tab switch does not silently revert the dropdown while the user
     // still believes the session is in auto mode (which caused unexpected
     // tool-permission denials on the next turn). Only applied when the server
     // has a non-default stored mode for this session; otherwise the global
     // localStorage preference (restored at startup) remains authoritative.
-    if (data.permission_mode && data.permission_mode !== 'default') {
+    if (data.permission_mode && !window.ccwWorkbench?.isReadOnlyMode()) {
       const restoredMode = data.permission_mode;
       if ([...permSelect.options].some(opt => opt.value === restoredMode)) {
         setPermissionMode(restoredMode);
       }
-    }
-    if (codeMode && codeInspectorState.sessionId && codeInspectorState.sessionId !== data.id) resetCodeInspector();
-    codeInspectorState.sessionId = data.id;
-    if (codeMode) {
-      activateCodeQueueForSession(data.id);
-      loadPersistedCodeQueue(data.id);
     }
     currentCodeRuntime = data.runtime_origin || 'unknown';
     currentCodeAutoApprove = !!data.auto_approve;
@@ -20474,21 +20573,26 @@ function registerCodeValidation(event) {
   if (existing >= 0) codeReviewState.validations[existing] = event;
   else codeReviewState.validations.push(event);
   if (codeValidationResult) codeValidationResult.innerHTML = renderCodeValidationCard(event);
+  if (event.change_set_id) {
+    chatInner.querySelectorAll('[data-round-change-set]').forEach(card => {
+      if (card.dataset.roundChangeSet === event.change_set_id) renderRoundValidation(card, event.change_set_id);
+    });
+  }
 }
 
 function renderCodeValidationCard(event) {
   if (!event) return '';
-  const passed = Number(event.returncode) === 0 && !event.timed_out;
+  const passed = event.returncode === 0 && !event.timed_out && !event.not_run;
   const output = [event.stdout || '', event.stderr ? `--- stderr ---\n${event.stderr}` : ''].filter(Boolean).join('\n');
   const duration = event.duration_ms !== undefined ? `${(Number(event.duration_ms) / 1000).toFixed(1)}s` : '';
   return `<section class="cw-validation-card" data-validation-id="${escapeHtml(event.validation_id || '')}">
     <div class="cw-validation-card-head">
-      <span class="cw-validation-status ${passed ? 'pass' : 'fail'}">${passed ? t('x.valid_pass') : t('x.valid_fail')}</span>
+      <span class="cw-validation-status ${passed ? 'pass' : 'fail'}">${event.not_run ? t('work_queue.validation_not_run') : passed ? t('x.valid_pass') : t('x.valid_fail')}</span>
       <code class="cw-validation-command" title="${escapeHtml(event.command || '')}">${escapeHtml(event.command || '')}</code>
       <span class="cw-validation-duration">${escapeHtml(duration)}</span>
     </div>
     ${output ? `<pre class="cw-validation-output">${escapeHtml(output)}</pre>` : '<div class="cw-code-diff-empty">命令没有输出</div>'}
-    ${passed ? '' : `<div class="cw-validation-actions"><button type="button" class="cw-review-btn primary" data-fix-validation="${escapeHtml(event.validation_id || '')}">让 Claude 修</button></div>`}
+    ${passed || event.not_run ? '' : `<div class="cw-validation-actions"><button type="button" class="cw-review-btn primary" data-fix-validation="${escapeHtml(event.validation_id || '')}">让 Claude 修</button></div>`}
   </section>`;
 }
 
@@ -20838,24 +20942,27 @@ async function runCodeValidation() {
     return;
   }
   if (currentController) { toast(t('x.claude_running_valid')); return; }
+  const targetSessionId = sessionId;
   const command = (codeValidationCommand?.value || '').trim();
-  await saveCodeProjectSettings({ silent: true });
+  const timeout = Number(currentCodeProjectSettings?.validation_timeout || 120);
   codeValidationRun.disabled = true;
   codeValidationRun.textContent = t('toasts.validating');
   if (codeValidationResult) codeValidationResult.innerHTML = '<div class="cw-code-diff-empty">正在运行测试或构建命令…</div>';
   try {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/validate`, {
+    await saveCodeProjectSettings({ silent: true });
+    const response = await fetch(`/api/sessions/${encodeURIComponent(targetSessionId)}/validate`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ command, timeout: Number(currentCodeProjectSettings?.validation_timeout || 120) }),
+      body: JSON.stringify({ command, timeout }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    if (sessionId !== targetSessionId || !codeMode) return;
     registerCodeValidation(data.event);
     addCodeValidationBlock(null, data.event);
     renderCodeReviewPanel();
   } catch (error) {
-    if (codeValidationResult) codeValidationResult.innerHTML = `<div class="cw-code-diff-empty" style="color:#b53d38;">${escapeHtml(error.message || error)}</div>`;
+    if (sessionId === targetSessionId && codeValidationResult) codeValidationResult.innerHTML = `<div class="cw-code-diff-empty" style="color:#b53d38;">${escapeHtml(error.message || error)}</div>`;
   } finally {
     codeValidationRun.disabled = false;
     codeValidationRun.textContent = t('x.run_validation');
@@ -21151,28 +21258,44 @@ document.addEventListener('click', event => {
   sendRaw(prompt, t('x.fix_valid_short'), []);
 });
 
+function renderRoundValidation(card, changeSetId) {
+  const result = card.querySelector('[data-round-verification]');
+  const events = changeSetId ? codeReviewState.validations.filter(event => event.change_set_id === changeSetId) : [];
+  const checks = events.map(event => {
+    const label = event.not_run ? t('work_queue.validation_not_run') : event.timed_out ? t('work_queue.validation_timeout')
+      : event.returncode === 0 ? t('x.valid_pass') : t('x.valid_fail');
+    return `${label}${event.command ? ' · ' + event.command : ''}`;
+  });
+  result.textContent = checks.length ? checks.join('\n') : t('work_queue.unverified');
+}
+
 async function renderChangedFilesSummary(container, changedFiles = [], meta = {}) {
   if (!codeMode || !container) return;
   container.querySelector(':scope > .cw-changed-files')?.remove();
   const set = registerCodeChangeSet(changedFiles, meta);
   const files = set?.files || [];
-  if (!files.length) return;
+  const changeSetId = meta.changeSetId || '';
   try {
     const card = document.createElement('section');
     card.className = 'cw-changed-files';
+    card.dataset.roundChangeSet = changeSetId;
     card.innerHTML = `
       <div class="cw-changed-files-head">
         <span class="cw-changed-files-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/></svg></span>
-        <strong>本轮修改</strong>
-        <span>${files.length}</span>
+        <strong>${t('work_queue.outcome')}</strong>
+        <span>${meta.changesRecorded ? (files.length ? files.length + ' ' + t('work_queue.changed_files') : t('work_queue.no_changes')) : t('work_queue.changes_unknown')}</span>
       </div>
-      <div class="cw-changed-files-list">
+      <div class="cw-round-verification">
+        <span data-round-verification role="status"></span>
+        <button type="button" class="cw-review-btn" data-inline-open-validation>${t('work_queue.verify_project')}</button>
+      </div>
+      ${files.length ? `<details class="cw-round-changes"><summary>${t('work_queue.view_changes')}</summary><div class="cw-changed-files-list">
         ${files.map((file, index) => {
           const persisted = /^[0-9a-f]{32}$/.test(set.id);
           const state = file.review_state || 'pending';
           const stateLabel = state === 'kept' ? t('ui.kept') : state === 'reverted' ? t('ui.reverted') : t('ui.pending_review');
           const cannotRevert = !persisted || !file.revertible || file.diff_truncated || state !== 'pending';
-          return `<details class="cw-changed-file-review" data-inline-review-index="${index}" ${index === 0 ? 'open' : ''}>
+          return `<details class="cw-changed-file-review" data-inline-review-index="${index}">
             <summary class="cw-changed-file">
               <span class="cw-changed-file-status status-${escapeHtml(file.status || 'M')}">${gitStatusLabel(file.status || 'M')}</span>
               <code title="${escapeHtml(file.path)}">${escapeHtml(file.path)} · +${file.additions || 0} / -${file.deletions || 0}</code>
@@ -21183,7 +21306,6 @@ async function renderChangedFilesSummary(container, changedFiles = [], meta = {}
               <div class="cw-inline-review-actions">
                 <span class="cw-inline-review-state ${escapeHtml(state)}">${stateLabel}${file.diff_truncated ? t('x.diff_trunc_dot') : ''}</span>
                 <button type="button" class="cw-review-btn" data-inline-view-source="${index}">查看源码</button>
-                <button type="button" class="cw-review-btn" data-inline-open-validation>运行验证</button>
                 <button type="button" class="cw-review-btn" data-inline-view-diff="${index}">查看 Diff</button>
                 <button type="button" class="cw-review-btn primary" data-inline-review-action="keep" data-inline-review-file="${index}" ${!persisted || state !== 'pending' ? 'disabled' : ''}>保留</button>
                 <button type="button" class="cw-review-btn danger" data-inline-review-action="revert" data-inline-review-file="${index}" ${cannotRevert ? 'disabled' : ''} title="${cannotRevert && state === 'pending' ? '没有完整可逆补丁，请使用整轮回退' : '撤销这个文件的本轮 AI 修改'}">撤销</button>
@@ -21191,7 +21313,8 @@ async function renderChangedFilesSummary(container, changedFiles = [], meta = {}
             </div>
           </details>`;
         }).join('')}
-      </div>`;
+      </div></details>` : ''}`;
+    renderRoundValidation(card, changeSetId);
     card.querySelectorAll('[data-inline-view-diff]').forEach(btn => {
       btn.addEventListener('click', () => {
         const file = files[Number(btn.dataset.inlineViewDiff)];
@@ -21206,6 +21329,7 @@ async function renderChangedFilesSummary(container, changedFiles = [], meta = {}
     });
     card.querySelectorAll('[data-inline-open-validation]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (!sessionId || currentCodeRuntime !== 'claude_agent_sdk') { toast(t('x.not_sdk_no_valid')); return; }
         renderCodeReviewPanel();
         openModal(codeReviewModal);
         void refreshCodeReviewIndexStatus({ silent:true });
@@ -23585,7 +23709,7 @@ cwWorktreeCreate?.addEventListener('click', async () => {
 
 function setPermissionModeMenuOpen(open, options = {}) {
   if (!cwPermissionModeMenu || !cwComposerPermBtn) return;
-  const nextOpen = !!open;
+  const nextOpen = !!open && !window.ccwWorkbench?.isReadOnlyMode();
   cwPermissionModeMenu.classList.toggle('hidden', !nextOpen);
   cwComposerPermBtn.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
   cwComposerPermBtn.classList.toggle('toolbar-btn-active', nextOpen);
@@ -24343,6 +24467,8 @@ async function waitForDocUploads() {
 
 function snapshotComposerState() {
   return {
+    workbenchFields: window.ccwWorkbench?.requestFields() || {},
+    webEnabled: isWebSearchEnabled(),
     images: pendingImages.map(item => ({ ...item })),
     docs: pendingDocs.filter(isReadyDocForSend).map(item => ({ ...item })),
     imagePromises: Array.from(activeImageUploadPromises),
@@ -25033,7 +25159,9 @@ function applyWebSearchBtnState() {
   const enabled = isWebSearchEnabled();
   webSearchBtn.classList.toggle('toolbar-btn-active', enabled);
   webSearchBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-  if (codeMode) {
+  if (window.ccwWorkbench?.isReadOnlyMode()) {
+    webSearchBtn.title = t(enabled ? 'work_mode.web_on' : 'work_mode.web_off');
+  } else if (codeMode) {
     webSearchBtn.title = enabled
       ? t('x.code_web_on_desc')
       : t('x.code_web_off_desc');
@@ -25042,6 +25170,7 @@ function applyWebSearchBtnState() {
       ? t('x.websearch_on_desc')
       : t('x.websearch_off_desc');
   }
+  window.ccwWorkbench?.renderWorkMode();
 }
 webSearchBtn.addEventListener('click', () => {
   setWebSearchEnabled(!isWebSearchEnabled());
@@ -25483,6 +25612,7 @@ function currentProjectName() {
 }
 
 function currentPermissionLabel() {
+  if (window.ccwWorkbench?.isReadOnlyMode()) return t('work_mode.readonly_permission');
   return PERMISSION_MODE_LABELS[effectivePermissionModeForWorkspace(permSelect?.value)] || t('ui.default_mode');
 }
 
@@ -25519,15 +25649,20 @@ function sidebarSectionLabel() {
 }
 
 function updateShellNav(active) {
-  const activeKey = active || (cliView ? 'cli' : (codeMode ? 'code' : (archivedView ? 'records' : (searchInput?.value.trim() ? 'search' : 'chat'))));
+  const activeKey = document.body.classList.contains('wb-view') ? 'workbench' : (active || (cliView ? 'cli' : (codeMode ? 'code' : (archivedView ? 'records' : (searchInput?.value.trim() ? 'search' : 'chat')))));
   [
     [cwChatNav, 'chat'],
     [cwSearchNav, 'search'],
     [cwRecordsNav, 'records'],
     [cwCliNav, 'cli'],
-    [cwCodeNav, 'code']
+    [cwCodeNav, 'code'],
+    [$('cwWorkbenchNav'), 'workbench']
   ].forEach(([btn, key]) => {
-    if (btn) btn.classList.toggle('active', key === activeKey);
+    if (btn) {
+      btn.classList.toggle('active', key === activeKey);
+      if (key === activeKey) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
+    }
   });
   setText(sessionSectionTitle, sidebarSectionLabel());
 }
@@ -25784,6 +25919,7 @@ function syncEmptyShellState() {
 }
 
 function activateShellView(view) {
+  if (window.ccwWorkbench?.leave() === false) return;
   if (view === 'cli') {
     if (mobileQuestionMode) {
       toast(t('mobile.no_cli_import'));
@@ -28434,5 +28570,6 @@ $('helpReplayTour').addEventListener('click', () => {
 // and a second confirmation.
 setTimeout(() => refreshAgentSdkStatus(false), 1600);
 </script>
+<script src="/static/workbench.js?v=4ea30865bc45"></script>
 </body>
 </html>
