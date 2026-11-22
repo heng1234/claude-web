@@ -305,7 +305,7 @@ git config core.hooksPath .githooks
 
 ## 💬 交流群
 
-扫码加入微信交流群（二维码 7 天有效，2026 年 11 月 24 日前有效；过期后请提 Issue 提醒更新）：
+扫码加入微信交流群（二维码 7 天有效，2026 年 11 月 29 日前有效；过期后请提 Issue 提醒更新）：
 
 <img src="docs/wechat-group.jpg" alt="微信群二维码" width="300">
 
