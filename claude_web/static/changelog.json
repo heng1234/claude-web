@@ -2,6 +2,24 @@
   "$schema": "https://json.schemastore.org/changelog.json",
   "releases": [
     {
+      "version": "2.5.0",
+      "date": "2026-11-22",
+      "highlights": [
+        {
+          "type": "feat",
+          "text": "全新 CCW Desk 工作台：聚合项目、会话与工作模式入口，提供统一的工作流体验"
+        },
+        {
+          "type": "improve",
+          "text": "Code 工作流与工作模式体验优化，交互更顺畅"
+        },
+        {
+          "type": "feat",
+          "text": "新增 research-kit 与 review-kit 工作台扩展（研究报告、变更审查）"
+        }
+      ]
+    },
+    {
       "version": "2.4.4",
       "date": "2026-10-15",
       "highlights": [

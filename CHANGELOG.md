@@ -2,7 +2,13 @@
 
 所有重要变更按版本记录。应用内的 What's New 和帮助面板使用 `static/changelog.json`，这里是给 GitHub / Git diff 浏览的 Markdown 版本。
 
-当前稳定版本：`2.4.4`。
+当前稳定版本：`2.5.0`。
+
+## v2.5.0 - 2026-11-22
+
+- **FEAT** 全新 CCW Desk 工作台：聚合项目、会话与工作模式入口，提供统一的工作流体验
+- **IMPROVE** Code 工作流与工作模式体验优化，交互更顺畅
+- **FEAT** 新增 research-kit 与 review-kit 工作台扩展（研究报告、变更审查）
 
 ## v2.4.4 - 2026-10-15
 

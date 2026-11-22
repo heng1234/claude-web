@@ -1,6 +1,6 @@
 # CCW Desk
 
-[![Version](https://img.shields.io/badge/version-2.4.4-c65f31.svg)](https://github.com/heng1234/claude-web)
+[![Version](https://img.shields.io/badge/version-2.5.0-c65f31.svg)](https://github.com/heng1234/claude-web)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![CSDN Blog](https://img.shields.io/badge/博客-CSDN-red.svg)](https://blog.csdn.net/qq_39313596?type=blog)
@@ -18,7 +18,7 @@ claude-web --open
 
 > 🔒 **隐私说明**：对话、附件和会话历史默认保存在本机。模型推理会把本轮请求及所需上下文发往所选服务。Claude 原生认证沿用本机登录态；用户手动填写的第三方模型与连接器凭据在本机加密保存，仅用于对应服务。
 
-> 当前文档对应 `2.4.4`。历史变更见 [CHANGELOG.md](CHANGELOG.md)，Authenticator 配置见 [TOTP_SETUP.md](TOTP_SETUP.md)。
+> 当前文档对应 `2.5.0`。历史变更见 [CHANGELOG.md](CHANGELOG.md)，Authenticator 配置见 [TOTP_SETUP.md](TOTP_SETUP.md)。
 
 ## 📸 截图
 
