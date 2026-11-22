@@ -1,20 +1,24 @@
-# Claude Code Web
+# CCW Desk
 
-[![Version](https://img.shields.io/badge/version-2.1.2-c65f31.svg)](https://github.com/heng1234/claude-web)
+[![Version](https://img.shields.io/badge/version-2.5.0-c65f31.svg)](https://github.com/heng1234/claude-web)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![CSDN Blog](https://img.shields.io/badge/博客-CSDN-red.svg)](https://blog.csdn.net/qq_39313596?type=blog)
 
-Claude Code Web 2.0 是 [Claude Code](https://docs.claude.com/claude-code) 的本地 Web 界面。Code 模式使用 Claude Agent SDK 原生持久会话，普通聊天保留 `claude` CLI 路径；两种 runtime 有严格的会话归属，不会在失败时隐式串线。前端通过 SSE 展示回答、工具执行、思考状态和文件改动。
+**Claude Code 的本地可视化工作台。**
+
+CCW Desk（原 Claude Code Web）是 [Claude Code](https://docs.claude.com/claude-code) 的本地 Web 界面。Code 模式使用 Claude Agent SDK 原生持久会话，普通聊天保留 `claude` CLI 路径；两种 runtime 有严格的会话归属，不会在失败时隐式串线。前端通过 SSE 展示回答、工具执行、思考状态和文件改动。
+
+> **项目识别**：CCW Desk 的 Python 安装包为 `claude-web-ui`，启动命令为 `claude-web`，项目仓库为 [heng1234/claude-web](https://github.com/heng1234/claude-web)。
 
 ```bash
 pip install --upgrade claude-web-ui
 claude-web --open
 ```
 
-> 🔒 **隐私说明**：本工具只是 `claude` CLI 的本地 GUI 包装器，不上传任何数据到第三方服务。所有对话、图片、会话历史都存在本机 `history/` `uploads/` `claude-web.db` 中。认证沿用你本地 `claude` 的登录态（`~/.claude/`），本工具不接触任何 API Key。
+> 🔒 **隐私说明**：对话、附件和会话历史默认保存在本机。模型推理会把本轮请求及所需上下文发往所选服务。Claude 原生认证沿用本机登录态；用户手动填写的第三方模型与连接器凭据在本机加密保存，仅用于对应服务。
 
-> 当前文档对应 `2.1.2`。历史变更见 [CHANGELOG.md](CHANGELOG.md)，Authenticator 配置见 [TOTP_SETUP.md](TOTP_SETUP.md)。
+> 当前文档对应 `2.5.0`。历史变更见 [CHANGELOG.md](CHANGELOG.md)，Authenticator 配置见 [TOTP_SETUP.md](TOTP_SETUP.md)。
 
 ## 📸 截图
 
@@ -22,25 +26,25 @@ claude-web --open
 
 普通聊天保持轻量，不显示项目、Git 分支和工具权限。适合问答、写作、解释资料和联网查询。
 
-![Claude Code Web 2.0 普通聊天](screenshots/v2-chat.png)
+![CCW Desk 2.0 普通聊天](screenshots/v2-chat.png)
 
 ### 代码工作区
 
 切换到「代码工作区」后才显示项目、Git 分支、运行模式、模型与推理强度、Token 上下文和代码快捷操作。
 
-![Claude Code Web 2.0 代码工作区](screenshots/v2-code.png)
+![CCW Desk 2.0 代码工作区](screenshots/v2-code.png)
 
 ### 手机端
 
 手机端使用抽屉导航和完整宽度的搜索浮层；输入框适配安全区，代码块、表格和工具结果支持窄屏滚动。
 
-![Claude Code Web 2.0 手机端](screenshots/v2-mobile.png)
+![CCW Desk 2.0 手机端](screenshots/v2-mobile.png)
 
 ### 浏览器插件
 
-Chrome MV3 Side Panel 支持读取当前页、选中文字右键提问，并把草稿转入完整 Claude Web 会话。
+Chrome MV3 Side Panel 支持读取当前页、选中文字右键提问，并把草稿转入完整 CCW Desk 会话。
 
-![Claude Code Web 2.0 浏览器插件](screenshots/v2-browser-extension.png)
+![CCW Desk 2.0 浏览器插件](screenshots/v2-browser-extension.png)
 
 以上截图使用独立脱敏数据目录生成，不包含真实会话、完整本机路径、IP、Token、费用或账号信息。
 
@@ -59,6 +63,20 @@ Chrome MV3 Side Panel 支持读取当前页、选中文字右键提问，并把�
 - **工具执行进度**：工具条展示执行数量、类型、完成度和运行状态。
 - **手机端重构**：搜索浮层、侧栏抽屉、底部输入框、模态框和安全区统一优化。
 - **设置中心**：通知、手机访问、浏览器插件、费用统计、记忆等配置集中管理。
+
+## 扩展与工作台
+
+在左侧主导航「扩展与工作台」（位于「工作模式」下方）中管理；顶部「更多工具」也保留入口。工作台使用主内容区页面，支持返回会话并保留聊天草稿：
+
+- 本地目录、ZIP 和 HTTPS Git 扩展安装，保留 Skill 脚本与参考资料，兼容标准 Claude Code 插件布局。
+- Skills、Agents、命令、MCP、Hooks 和工作流独立启停，支持全局 / 项目 / 会话范围覆盖。
+- 安装预览、版本更新与回滚、离线示例目录、自定义目录来源和本机评分。
+- 工作区配置档、自定义 Slash Commands，以及 Chat / Code / Research / Browser / Review / Automation 模式。
+- 顺序工作流、命令审批、任务状态、失败续跑、浏览器验收证据等待和 Markdown 报告。
+- OpenAI 兼容文本模型、Anthropic 兼容工具运行时与按工作模式配置的模型路由。
+- JSON / ZIP 工作区配置导入导出，模型凭据由本机 SecretStore 加密保存。
+
+完整格式、安装方法和能力边界见 [扩展与工作台指南](docs/WORKBENCH.md)。
 
 ## 主要能力
 
@@ -102,7 +120,7 @@ Chrome MV3 Side Panel 支持读取当前页、选中文字右键提问，并把�
 - **本机加密保存密钥**：勾选"加密保存密钥"后，API Key / Bearer 等敏感头与环境变量会用本机主密钥（优先 OS keychain，否则 `~/.claude/.cw_connector_key`，权限 `0600`）加密存入 `claude-web.db`，`.mcp.json` 只留 `cwsecret://` 引用；运行会话时才解密并注入，不写回明文、不上传。
 - **OAuth 连接器**：需要 OAuth 的连接器委托本机 `claude mcp add` 完成授权，令牌由 CLI 保存在 SDK 读取的位置，本工具不自建回调、不保存 client secret。
 
-> 说明：上面隐私声明中的"不接触 API Key"指的是 Claude 自身的登录态；连接器密钥是你自愿提供的第三方服务凭据，仅本机加密存储、绝不上传。
+> 说明：连接器密钥只用于所配置的服务鉴权，不写回配置明文，也不参与工作台配置导出。
 
 ### 渲染与通知
 
@@ -197,7 +215,7 @@ http://192.168.x.x:8765
 
 ## Chrome 插件安装
 
-1. 启动 Claude Code Web。
+1. 启动 CCW Desk。
 2. 打开「设置 → 浏览器插件」。
 3. 复制插件目录，或下载 ZIP 后解压。
 4. 生成插件 Token。
@@ -209,7 +227,7 @@ http://192.168.x.x:8765
 
 ## 安全边界
 
-- Claude Code Web 可以读写本地文件、执行命令并消耗 Claude 配额，只应在可信设备上运行。
+- CCW Desk 可以读写本地文件、执行命令并消耗 Claude 配额，只应在可信设备上运行。
 - 普通聊天不显示项目和分支，但仍由本机 Claude Code 处理；涉及代码修改时请切换到代码工作区。
 - 代码块运行和 Code 工作区自动模式没有系统级沙盒；认证远程设备也具备同等执行能力，不要授权不可信设备或执行不可信代码。
 - Git checkpoint 仅在 Git 仓库中生效。
@@ -287,7 +305,7 @@ git config core.hooksPath .githooks
 
 ## 💬 交流群
 
-扫码加入微信交流群（二维码 7 天有效，10 月 22 日前有效；过期后请提 Issue 提醒更新）：
+扫码加入微信交流群（二维码 7 天有效，2026 年 11 月 24 日前有效；过期后请提 Issue 提醒更新）：
 
 <img src="docs/wechat-group.jpg" alt="微信群二维码" width="300">
 

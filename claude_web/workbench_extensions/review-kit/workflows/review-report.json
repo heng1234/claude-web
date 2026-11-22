@@ -1,0 +1,1 @@
+{"id":"review-report","name":"代码审查与报告","steps":[{"type":"prompt","name":"审查改动","value":"只读审查当前项目的改动：{{input}}。不要修改文件；给出有证据的缺陷和测试建议。"},{"type":"report","name":"生成审查报告"}]}

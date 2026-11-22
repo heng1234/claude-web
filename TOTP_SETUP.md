@@ -1,8 +1,8 @@
-# Claude Code Web 2.0 Authenticator 指南
+# CCW Desk 2.0 Authenticator 指南
 
-本文对应 Claude Code Web `2.0.2`。
+本文对应 CCW Desk `2.0.2`。
 
-Authenticator 使用标准 TOTP 六位动态验证码，适合需要通过公网或非可信网络访问 Claude Code Web 的场景。本机和可信私有网络请求不要求验证码。
+Authenticator 使用标准 TOTP 六位动态验证码，适合需要通过公网或非可信网络访问 CCW Desk 的场景。本机和可信私有网络请求不要求验证码。
 
 ## 先了解访问范围
 
@@ -22,7 +22,7 @@ Authenticator 使用标准 TOTP 六位动态验证码，适合需要通过公网
 
 ## 推荐：在设置界面启用
 
-1. 在电脑本机打开 Claude Code Web。
+1. 在电脑本机打开 CCW Desk。
 2. 进入「设置 → 手机访问」。
 3. 开启手机访问。
 4. 在「Authenticator 动态验证」区域点击「开始设置」。
@@ -56,7 +56,7 @@ claude-web --setup-totp
 
 - TOTP 配置二维码（安装 `qrcode` 时）
 - 手动输入 Secret
-- Issuer：`Claude Code Web`
+- Issuer：`CCW Desk`
 - 当前主机对应的账户名称
 - 六位验证码输入提示
 
@@ -79,7 +79,7 @@ pip install 'qrcode[pil]'
 Nginx / Caddy（TLS、限速）
     │ 转发到本机或私网
     ▼
-Claude Code Web
+CCW Desk
 ```
 
 建议：
@@ -88,10 +88,10 @@ Claude Code Web
 - 反向代理只把请求转发到 `127.0.0.1` 或明确的私网地址。
 - 为 `/mobile-login` 和 `/api/mobile-access/login` 设置速率限制。
 - 正确传递 `X-Forwarded-For` 和 `X-Forwarded-Proto`。
-- 不要让公网直接访问 Claude Code Web 的监听端口。
+- 不要让公网直接访问 CCW Desk 的监听端口。
 - 不建议使用 `--host 0.0.0.0`；优先绑定明确地址。
 
-Claude Code Web 只在直连节点来自本机回环地址时信任转发头。局域网、私网代理和公网客户端都必须完成设备认证，无法靠伪造 `X-Forwarded-For` 把自己标记成本机来源。
+CCW Desk 只在直连节点来自本机回环地址时信任转发头。局域网、私网代理和公网客户端都必须完成设备认证，无法靠伪造 `X-Forwarded-For` 把自己标记成本机来源。
 
 ## 停用或重新配置
 

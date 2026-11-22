@@ -28,6 +28,58 @@ class CodeWorkspaceLoopTest(unittest.IsolatedAsyncioTestCase):
             conn.execute("DELETE FROM code_permission_rules WHERE session_id = ?", (self.session_id,))
             conn.execute("DELETE FROM sessions WHERE id = ?", (self.session_id,))
 
+    async def test_queue_target_changes_are_rejected_before_execution(self):
+        req = server.ChatRequest(message="queued", session_id=self.session_id, cwd=self.cwd,
+                                 workspace_mode="code", work_mode="code", model="sonnet", permission_mode="default")
+        row = {"cwd": self.cwd, "auto_approve": False}
+        with patch.object(server, "_git_run", AsyncMock(return_value="refs/heads/main")):
+            snapshot = await server._code_queue_context(req, row)
+            self.assertEqual("main", snapshot["branch"])
+            self.assertEqual("sonnet", snapshot["model"])
+            self.assertNotEqual(snapshot["revision"], (await server._code_queue_context(req, {**row, "auto_approve": True}))["revision"])
+            with tempfile.TemporaryDirectory() as another:
+                self.assertNotEqual(snapshot["revision"], (await server._code_queue_context(req.model_copy(update={"cwd": another}), row))["revision"])
+        with patch.object(server, "_git_run", AsyncMock(return_value="refs/heads/other")):
+            with self.assertRaises(HTTPException) as raised:
+                await server._chat_response(req.model_copy(update={"queue_context": snapshot["revision"]}))
+            self.assertEqual(409, raised.exception.status_code)
+            self.assertIn("分支", raised.exception.detail)
+            self.assertEqual([], server.load_events(self.session_id))
+
+    async def test_queue_check_preserves_bound_model_and_detects_new_draft_route_edits(self):
+        from claude_web.workbench import Workbench
+        with tempfile.TemporaryDirectory() as path:
+            store = Workbench(path)
+            with patch.object(server._workbench_runtime, "store", store), patch.object(server, "_git_run", AsyncMock(return_value=None)):
+                store.put("providers", "fixture", {"id":"fixture", "name":"Test", "model":"original", "protocol":"anthropic"})
+                store.put("routes", "code", {"id":"code", "provider_id":"fixture", "model":"original"})
+                req = server.ChatRequest(message="", workspace_mode="code", work_mode="code", cwd=self.cwd)
+                old = await server._code_queue_context(req, None)
+                store.put("session_providers", self.session_id, {"id":self.session_id, "provider_id":"fixture", "model":"original"})
+                store.put("routes", "code", {"id":"code", "provider_id":"fixture", "model":"replacement"})
+                fresh = await server._code_queue_context(req, None)
+                self.assertEqual("replacement", fresh["model"])
+                self.assertNotEqual(old["revision"], fresh["revision"])
+                bound = await server._code_queue_context(req.model_copy(update={"session_id":self.session_id}), {"cwd":self.cwd, "auto_approve":False})
+                self.assertEqual("original", bound["model"])
+                self.assertEqual(old["revision"], bound["revision"])
+
+    async def test_manual_validation_links_to_latest_main_result_and_persists(self):
+        for change_set_id, parent in (("prior", None), ("current", None), ("subagent", "tool-id")):
+            server.append_event(self.session_id, {"type":"result", "change_set_id":change_set_id, "parent_tool_use_id":parent})
+        result = {"command":"fixture check", "returncode":0, "stdout":"ok", "stderr":"", "timed_out":False}
+        with patch.object(server, "_run_validation_command", AsyncMock(return_value=result)):
+            response = await server.validate_code_session(self.session_id, server.CodeValidationRequest(command="true"))
+        self.assertEqual("current", response["event"]["change_set_id"])
+        self.assertEqual(response["event"], server.load_events(self.session_id)[-1])
+
+    async def test_auto_validation_records_not_run_when_no_command_is_available(self):
+        with patch.object(server, "_code_project_settings", return_value={"validation_mode":"auto", "validation_command":"", "validation_timeout":20}), patch.object(server, "_agent_loop_detect_test_command", return_value=("", "")), patch.object(server, "_run_validation_command", AsyncMock()) as runner:
+            event = await server._maybe_auto_validate_code_changes(self.session_id, self.cwd, [{"path":"fixture"}], change_set_id="exact")
+        runner.assert_not_awaited()
+        self.assertTrue(event["not_run"])
+        self.assertEqual("exact", event["change_set_id"])
+
     async def test_persistent_queue_reorders_and_turn_idempotency_removes_accepted_item(self):
         first = "queue-" + uuid.uuid4().hex
         second = "queue-" + uuid.uuid4().hex
@@ -391,7 +443,7 @@ class CodeWorkspaceStaticContractTest(unittest.TestCase):
         self.assertNotIn("压缩期间切换了会话，请重新发送", source)
         self.assertIn("const codeQueueDispatchingEntryIds = new Set()", source)
         self.assertIn("const visibleItems = (data.items || []).filter", source)
-        self.assertIn("const paused = visibleItems.some", source)
+        self.assertIn("const paused = visibleItems.find", source)
         self.assertIn("function removeLocalCodeQueueEntry(owner, entryId)", source)
         self.assertIn("removeLocalCodeQueueEntry(queueOwner, options.clientTurnId)", source)
         self.assertIn("removeLocalCodeQueueEntry(owner, entry.id)", source)

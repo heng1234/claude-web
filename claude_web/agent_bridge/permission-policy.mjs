@@ -84,11 +84,19 @@ function decision(permissionDecision, permissionDecisionReason, updatedInput) {
   };
 }
 
-export function createPreToolUseHook(permissionModeState, cwd) {
+export function createPreToolUseHook(permissionModeState, cwd, readOnly = false, browserInteraction = false) {
   return async (hookInput) => {
     const toolName = hookInput?.tool_name;
     const toolInput = hookInput?.tool_input || {};
     let mode = permissionModeState?.value || 'default';
+
+    const browserTool = /^mcp__(?:playwright|claude-in-chrome|chrome|browser)__/.test(String(toolName || ''));
+    const browserRead = /__(?:browser_(navigate|snapshot|take_screenshot|console_messages|network_requests|tabs|wait_for)|navigate|read_page|find|tabs_context_mcp)$/.test(String(toolName || ''));
+    if (readOnly && (EXECUTION_TOOLS.has(toolName) || EDIT_TOOLS.has(toolName) ||
+        (String(toolName || '').startsWith('mcp__') && !isReadOnlyMcpTool(toolName) &&
+         !(browserTool && (browserRead || browserInteraction))))) {
+      return decision('deny', 'This work mode is read-only; use Code mode for file changes or tool side effects.');
+    }
 
     if (toolName === 'EnterPlanMode') {
       if (permissionModeState) permissionModeState.value = 'plan';
