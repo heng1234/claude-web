@@ -269,6 +269,10 @@ function runtimeSignature(params) {
     allowedTools: stringList(params.allowedTools) || [],
     disallowedTools: stringList(params.disallowedTools) || [],
     browserEnabled: browserEnabled(params),
+    plugins: params.plugins || [],
+    readOnly: params.readOnly === true,
+    browserInteraction: params.browserInteraction === true,
+    providerSignature: params.providerSignature || '',
     systemPromptAppend: params.systemPromptAppend || '',
     runtimeEpoch: params.runtimeEpoch || '',
     resumeSessionAt: params.resumeSessionAt || '',
@@ -406,11 +410,13 @@ function buildOptions(params, abortController, runtime) {
     canUseTool: (toolName, input, options) => permissionRequest(runtime, toolName, input, options),
     hooks: {
       PreToolUse: [{
-        hooks: [createPreToolUseHook(runtime.permissionModeState, resolve(params.cwd || process.cwd()))],
+        hooks: [createPreToolUseHook(runtime.permissionModeState, resolve(params.cwd || process.cwd()), params.readOnly === true, params.browserInteraction === true)],
       }],
     },
     ...(permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
   };
+  if (params.providerEnv && typeof params.providerEnv === 'object') options.env = { ...process.env, ...params.providerEnv };
+  if (Array.isArray(params.plugins) && params.plugins.length) options.plugins = params.plugins;
   if (params.model) options.model = params.model;
   if (['low', 'medium', 'high', 'xhigh', 'max'].includes(params.effort)) options.effort = params.effort;
   // Connector secrets are encrypted at rest, so the stored MCP config holds

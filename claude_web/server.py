@@ -37,7 +37,7 @@ from urllib.parse import quote, unquote, urlencode, urljoin, urlparse
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 if os.name != "nt":
     import fcntl
@@ -506,7 +506,9 @@ async def _discard_warm_session(session_id: str) -> None:
 
 
 def _session_runtime_busy(session_id: str) -> bool:
-    return session_id in _running_processes or session_id in _agent_sdk_running_sessions
+    workbench = globals().get("_workbench_runtime")
+    return (session_id in _running_processes or session_id in _agent_sdk_running_sessions
+            or bool(workbench and session_id in workbench.provider_sessions))
 
 
 def _agent_sdk_turn_state(session_id: str, events: Optional[List[dict]] = None) -> dict:
@@ -1174,6 +1176,7 @@ async def _scheduler_loop() -> None:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    _workbench_runtime.store.recover_tasks()
     # Prune stale uploads in a background thread so startup isn't blocked on disk IO.
     asyncio.get_event_loop().run_in_executor(None, _prune_old_uploads)
     await asyncio.to_thread(_get_code_worktree_manager)
@@ -1193,6 +1196,7 @@ async def _lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await _workbench_runtime.shutdown()
         await _project_map_service.shutdown()
         if not bridge_start_task.done():
             bridge_start_task.cancel()
@@ -1225,7 +1229,7 @@ async def _lifespan(app: FastAPI):
         await _shutdown_terminate_running_processes()
 
 
-app = FastAPI(title="Claude Code Web", lifespan=_lifespan)
+app = FastAPI(title="CCW Desk", lifespan=_lifespan)
 
 
 @app.middleware("http")
@@ -2904,7 +2908,15 @@ class ChatRequest(BaseModel):
     # Code mode passes local paths so Claude Code can Read/Bash the files itself.
     docs: Optional[List[dict]] = None
     client_turn_id: Optional[str] = None
+    queue_context: Optional[str] = None
     context_pack_ids: Optional[List[str]] = None
+    work_mode: Optional[str] = None
+    profile_id: Optional[str] = None
+    command_id: Optional[str] = None
+    _workbench_literal_input: bool = PrivateAttr(default=False)
+    provider_id: Optional[str] = None
+    model_provider_id: Optional[str] = None
+    extension_ids: Optional[List[str]] = None
 
 
 class NativeCompactRequest(BaseModel):
@@ -5390,7 +5402,7 @@ def _cli_setup_totp() -> None:
         print("✓ Cleared existing TOTP configuration.\n")
 
     totp_seed = _mobile_access_totp_generate_secret()
-    issuer = "Claude Code Web"
+    issuer = "CCW Desk"
     account = socket.gethostname() or "local"
     label = f"{issuer}:{account}"
     provisioning_uri = (
@@ -5901,7 +5913,7 @@ def _mobile_login_response(request: Request) -> Response:
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>手机访问授权 · Claude Code Web</title>
+<title>手机访问授权 · CCW Desk</title>
 <style>
 :root { color-scheme: light dark; --accent:#c2410c; --bg:#fafaf9; --surface:#fff; --border:#e7e5e4; --text:#1c1917; --muted:#78716c; }
 @media (prefers-color-scheme: dark) { :root { --bg:#0c0a09; --surface:#1c1917; --border:#292524; --text:#fafaf9; --muted:#a8a29e; --accent:#fb923c; } }
@@ -6205,7 +6217,7 @@ def _extension_install_info() -> dict:
             "点击“加载已解压的扩展程序”",
             "选择 extension_path 指向的插件目录，或先下载 ZIP 后解压再选择",
             "回到插件设置页，填入服务地址和 Token，保存后测试连接",
-            "在任意网页选中代码或文字，右键 Claude Code Web 提问",
+            "在任意网页选中代码或文字，右键 CCW Desk 提问",
         ],
     }
 
@@ -6368,7 +6380,7 @@ def _notification_record_delivery(entry: dict) -> None:
 
 
 def _notification_format_text(event: str, payload: dict) -> str:
-    title = str(payload.get("title") or "Claude Code Web 通知").strip()
+    title = str(payload.get("title") or "CCW Desk 通知").strip()
     message = str(payload.get("message") or "").strip()
     status = str(payload.get("status") or "").strip()
     parts = [f"{title}"]
@@ -6647,7 +6659,7 @@ def _notification_maybe_send_update(data: dict) -> None:
     _notification_fire_and_forget(
         "version.update_available",
         _notification_payload(
-            "Claude Code Web 发现新版",
+            "CCW Desk 发现新版",
             f"当前 v{data.get('current_version') or __version__}，最新版 v{latest}",
             status="update_available",
             latest_version=latest,
@@ -6663,7 +6675,7 @@ def _notification_send_chat_error(session_id: str, cwd: str, err_event: dict) ->
     _notification_fire_and_forget(
         "chat.error",
         _notification_payload(
-            "Claude Code Web 聊天出错",
+            "CCW Desk 聊天出错",
             _clip_text(message, 800),
             status="error",
             session_id=session_id,
@@ -8177,6 +8189,7 @@ async def _drain_detached_agent_sdk_turn(
                             session_id,
                             work_dir,
                             obj.get("changed_files") or [],
+                            change_set_id=obj["change_set_id"],
                         )
         if (
             daemon_done
@@ -8295,6 +8308,7 @@ def _agent_sdk_streaming_response(
             "has_checkpoint": checkpoint is not None,
             "runtime": "claude_agent_sdk",
             "sdk_version": sdk_version,
+            "session_model": _workbench_runtime.session_model(session_id),
         }
         try:
             yield f"data: {json.dumps(meta, ensure_ascii=False)}\n\n"
@@ -8439,6 +8453,7 @@ def _agent_sdk_streaming_response(
                         session_id,
                         work_dir,
                         obj.get("changed_files") or [],
+                        change_set_id=obj["change_set_id"],
                     )
                     if validation_event:
                         yield f"data: {json.dumps(validation_event, ensure_ascii=False)}\n\n"
@@ -8619,6 +8634,48 @@ def _agent_sdk_streaming_response(
     )
 
 
+async def _code_queue_context(req: ChatRequest, row) -> dict:
+    """Describe the resolved target without executing a turn or granting access."""
+    cwd = str(Path(req.cwd or (row["cwd"] if row else "") or Path.home()).expanduser().resolve())
+    if not Path(cwd).is_dir():
+        raise HTTPException(400, "工作目录不可用，请检查项目后重新提交")
+    # A detached HEAD is tracked by commit, but commits on the same named branch
+    # don't invalidate the queue. Worktrees are distinguished by their paths.
+    branch = await _git_run(cwd, "symbolic-ref", "--quiet", "HEAD")
+    if branch:
+        branch = branch.removeprefix("refs/heads/")
+    else:
+        branch = await _git_run(cwd, "rev-parse", "--verify", "HEAD") or ""
+    probe = (req.model_copy if hasattr(req, "model_copy") else req.copy)(update={"workspace_mode": "code"})
+    store = _workbench_runtime.store
+    try:
+        resolved = store.resolve_request(probe, cwd, req.session_id or "", expand_commands=False, existing_session=row is not None)
+        provider_id = resolved["provider_id"]
+        provider = store.get("providers", provider_id) if provider_id else {}
+        extensions = [(item["id"], item["revision"], item["binding"]["components"])
+                      for item in store.effective(cwd, req.session_id or "", resolved["extension_ids"])]
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    context = {
+        "cwd": cwd, "branch": branch, "model": probe.model or "", "provider": provider.get("name") or "",
+        "mode": resolved["mode"], "permission": _effective_permission_mode_for_workspace("code", probe.permission_mode),
+    }
+    authority = [context, provider_id, provider.get("base_url"), provider.get("protocol"), provider.get("key_ref"),
+                 resolved["config"], extensions,
+                 probe.allowed_tools, probe.disallowed_tools, bool(probe.browser_enabled), bool(row and row["auto_approve"])]
+    context["revision"] = hashlib.sha256(json.dumps(authority, sort_keys=True).encode()).hexdigest()
+    return context
+
+
+@app.post("/api/code/queue-context")
+async def preview_code_queue_context(request: Request, req: ChatRequest):
+    req = _authenticated_remote_chat_request(request, req)
+    _require_local_same_origin(request)
+    with db_connect() as conn:
+        row = conn.execute("SELECT cwd, auto_approve FROM sessions WHERE id=?", (req.session_id,)).fetchone()
+    return await _code_queue_context(req, row)
+
+
 @app.post("/api/chat")
 async def chat(request: Request, req: ChatRequest):
     return await _chat_response(_authenticated_remote_chat_request(request, req))
@@ -8701,11 +8758,27 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
         row = conn.execute(
             """
             SELECT cwd, remote_session_id, remote_ready, runtime_origin, workspace_mode,
-                   native_user_offset, browser_enabled
+                   native_user_offset, browser_enabled, auto_approve
             FROM sessions WHERE id = ?
             """,
             (session_id,),
         ).fetchone()
+    if row is not None and req.workspace_mode in {"chat", "code"} and req.workspace_mode != (row["workspace_mode"] or "chat"):
+        raise HTTPException(409, "session mode mismatch: start a new session to change workspace mode")
+    if req.queue_context:
+        current = await _code_queue_context(req, row)
+        if current["revision"] != req.queue_context:
+            raise HTTPException(409, "排队时的项目、分支或配置已变化；请恢复原设置或重新提交任务")
+        req.cwd = current["cwd"]
+    workbench_cwd = req.cwd or (row["cwd"] if row and row["cwd"] else os.path.expanduser("~"))
+    if not req.workspace_mode:
+        req.workspace_mode = (row["workspace_mode"] or "chat") if row else "chat"
+    try:
+        workbench_context = _workbench_runtime.store.resolve_request(req, workbench_cwd, session_id, expand_commands=not req._workbench_literal_input, existing_session=row is not None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    from claude_web.workbench import MODES as _WORK_MODES
+    req.workspace_mode = _WORK_MODES[workbench_context["mode"]]["workspace_mode"]
     requested_workspace_mode = (req.workspace_mode or "").strip().lower()
     stored_workspace_mode = ((row["workspace_mode"] or "chat").strip().lower() if row else "chat")
     if (
@@ -8720,6 +8793,8 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                 f"start or restore a {requested_workspace_mode} session instead"
             ),
         )
+    if session_id in _workbench_runtime.provider_sessions:
+        raise HTTPException(status_code=409, detail="此会话已有兼容模型任务运行中")
     if _session_runtime_busy(session_id) or session_id in _compacting_sessions:
         if session_id in _agent_sdk_running_sessions:
             task = _agent_sdk_detached_turn_tasks.get(session_id)
@@ -8740,6 +8815,35 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
     if not agent_loop_owner and _session_agent_loop_busy(session_id):
         raise HTTPException(status_code=409, detail="session is owned by a running Agent Loop")
     existing_events = await async_load_events(session_id) if req.session_id else []
+    pinned_provider = next((p["provider_id"] for p in _workbench_runtime.store.list("session_providers") if p["id"] == session_id), "")
+    provider_id = workbench_context["provider_id"] or pinned_provider
+    if pinned_provider and provider_id != pinned_provider:
+        raise HTTPException(409, "此会话已绑定兼容模型服务，请新建会话后切换")
+    workbench_mode_record = {
+        "id": session_id, "mode": workbench_context["mode"],
+        "config": {k: v for k, v in workbench_context["config"].items() if k not in {"prompt", "id", "name"}},
+        "extension_ids": workbench_context["extension_ids"], "route_model": workbench_context["route_model"],
+    }
+    provider_env = None
+    provider_signature = ""
+    if provider_id:
+        if row is not None and not pinned_provider and existing_events:
+            raise HTTPException(409, "请新建会话以切换模型服务，避免改变原有会话的运行时归属")
+        try:
+            provider = _workbench_runtime.store.get("providers", provider_id)
+            if provider.get("protocol", "openai") == "openai":
+                req.system_prompt = compose_system_prompt(load_enabled_memories(workbench_cwd, session_id), req.system_prompt, load_session_pinned_docs(session_id))
+                response = await _workbench_runtime.provider_chat(req, session_id, workbench_cwd, existing_events, provider_id)
+                _workbench_runtime.store.put("session_modes", session_id, workbench_mode_record)
+                return response
+            provider_key = _get_secret_store().resolve_secret(provider["key_ref"]) if provider.get("key_ref") else ""
+            provider_env = {"ANTHROPIC_BASE_URL": provider["base_url"], "ANTHROPIC_AUTH_TOKEN": provider_key, "ANTHROPIC_API_KEY": ""}
+            provider_signature = hashlib.sha256((provider_id + provider["base_url"] + provider.get("key_ref", "")).encode()).hexdigest()
+            req.model = req.model or provider["model"]
+            _workbench_runtime.store.put("session_providers", session_id, {"id": session_id, "provider_id": provider_id, "model": req.model})
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    _workbench_runtime.store.put("session_modes", session_id, workbench_mode_record)
 
     runtime_origin = normalize_runtime_origin(row["runtime_origin"] if row else "")
     remote_session_id, remote_ready = resolve_remote_session_state(session_id, row, existing_events)
@@ -8876,7 +8980,14 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             "disallowedTools": req.disallowed_tools,
             "browserEnabled": effective_browser_enabled,
             "runtimeEpoch": remote_session_id,
+            "readOnly": workbench_context["mode"] in {"research", "review", "browser"},
+            "browserInteraction": workbench_context["mode"] == "browser",
         }
+        if provider_env:
+            agent_params["providerEnv"] = provider_env
+            agent_params["providerSignature"] = provider_signature
+        plugin_ids = req.extension_ids if req.extension_ids is not None else workbench_context["extension_ids"]
+        agent_params["plugins"] = await asyncio.to_thread(_workbench_runtime.store.runtime_plugins, work_dir, session_id, plugin_ids)
         # Inject system prompt (and for chat mode: memories + pinned docs).
         # Code mode keeps Claude Code's built-in system prompt intact so we
         # only append the user/template override. Chat mode has no built-in
@@ -8984,6 +9095,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             "cwd": work_dir,
             "has_checkpoint": checkpoint is not None,
             "runtime": "claude_cli",
+            "session_model": _workbench_runtime.session_model(session_id),
         }
         yield f"data: {json.dumps(meta)}\n\n"
 
@@ -9004,6 +9116,10 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
             req.model, req.effort, effective_permission_mode, effective_system_prompt,
             work_dir, req.allowed_tools, req.disallowed_tools, effective_browser_enabled,
         )
+
+        cli_plugin_paths = _workbench_runtime.store.runtime_plugins(work_dir, session_id, req.extension_ids if req.extension_ids is not None else workbench_context["extension_ids"]) if code_workspace else []
+        if cli_plugin_paths or provider_signature:
+            current_sig += (json.dumps(cli_plugin_paths, sort_keys=True), provider_signature)
 
         # ── Claim ownership atomically BEFORE any await ─────────────────────
         # generate() only starts iterating after the handler returns, and the
@@ -9056,6 +9172,9 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                         effort=req.effort or "high",
                         browser_enabled=effective_browser_enabled,
                     )
+                    if code_workspace:
+                        for plugin in cli_plugin_paths:
+                            args += ["--plugin-dir", plugin["path"]]
                 except ClaudeCliResolutionError as e:
                     err_event = {"type": "error", "message": str(e), "turn_id": turn_id}
                     await async_append_event(session_id, err_event)
@@ -9067,6 +9186,7 @@ async def _chat_response(req: ChatRequest, *, agent_loop_owner: bool = False):
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                         cwd=work_dir,
+                        env={**os.environ, **provider_env} if provider_env else None,
                         limit=16 * 1024 * 1024,
                     )
                 except FileNotFoundError:
@@ -9574,8 +9694,21 @@ async def _run_validation_command(
     cwd: str,
     timeout: int = 120,
     on_process=None,
+    start_new_session: bool = False,
 ) -> dict:
     started = time.time()
+    proc = None
+
+    def kill_process():
+        if proc is None:
+            return
+        try:
+            if start_new_session and os.name != "nt":
+                os.killpg(proc.pid, signal.SIGKILL)
+            elif proc.returncode is None:
+                proc.kill()
+        except ProcessLookupError:
+            pass
     result = {
         "command": command,
         "returncode": None,
@@ -9591,6 +9724,7 @@ async def _run_validation_command(
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
             limit=4 * 1024 * 1024,
+            start_new_session=start_new_session and os.name != "nt",
         )
         if on_process is not None:
             on_process(proc)
@@ -9598,11 +9732,16 @@ async def _run_validation_command(
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
             result["timed_out"] = True
-            proc.kill()
+            kill_process()
             stdout, stderr = await proc.communicate()
         result["returncode"] = proc.returncode if proc.returncode is not None else -1
         result["stdout"] = stdout.decode("utf-8", errors="replace")[:50_000]
         result["stderr"] = stderr.decode("utf-8", errors="replace")[:20_000]
+    except asyncio.CancelledError:
+        kill_process()
+        if proc is not None:
+            await proc.communicate()
+        raise
     except FileNotFoundError as e:
         result["returncode"] = -1
         result["stderr"] = f"test runner not found: {e}"
@@ -10190,6 +10329,12 @@ async def stop_agent_loop(job_id: str):
 
 @app.post("/api/chat/stop/{session_id}")
 async def stop_chat(session_id: str, reason: Optional[str] = Query(default=None)):
+    if session_id in _workbench_runtime.provider_sessions:
+        _stopped_sessions.add(session_id)
+        stream = _workbench_runtime.provider_streams.get(session_id)
+        if stream is not None:
+            await stream.aclose()
+        return {"ok": True, "runtime": "openai_compatible"}
     stop_reason = str(reason or "").strip().lower()
     plan_ready = stop_reason == "plan_ready"
     turn_id = _latest_session_turn_id(session_id)
@@ -10367,6 +10512,22 @@ def _agent_sdk_control_params(row: sqlite3.Row, req: NativeCompactRequest) -> di
         ),
         "runtimeEpoch": remote_session_id,
     }
+    provider_binding = next((p for p in _workbench_runtime.store.list("session_providers") if p["id"] == row["id"]), {})
+    if provider_binding:
+        provider = _workbench_runtime.store.get("providers", provider_binding["provider_id"])
+        if provider.get("protocol") == "anthropic":
+            key = _get_secret_store().resolve_secret(provider["key_ref"]) if provider.get("key_ref") else ""
+            params["providerEnv"] = {"ANTHROPIC_BASE_URL": provider["base_url"], "ANTHROPIC_AUTH_TOKEN": key, "ANTHROPIC_API_KEY": ""}
+            params["providerSignature"] = hashlib.sha256((provider["id"] + provider["base_url"] + provider.get("key_ref", "")).encode()).hexdigest()
+            params["model"] = provider_binding.get("model") or provider["model"]
+    session_mode = next((m for m in _workbench_runtime.store.list("session_modes") if m["id"] == row["id"]), {})
+    params["plugins"] = _workbench_runtime.store.runtime_plugins(params["cwd"], row["id"], session_mode.get("extension_ids"))
+    from claude_web.workbench import MODES as _WORK_MODES, WRITE_TOOLS as _WRITE_TOOLS
+    if _WORK_MODES.get(session_mode.get("mode"), {}).get("readonly"):
+        params["disallowedTools"] = sorted(set((params["disallowedTools"] or []) + _WRITE_TOOLS))
+        params["permissionMode"] = "default"
+        params["readOnly"] = True
+        params["browserInteraction"] = session_mode.get("mode") == "browser"
     if bool(row["remote_ready"]):
         params["resumeSessionId"] = remote_session_id
     else:
@@ -11979,6 +12140,7 @@ async def _execute_code_validation(
     command: str = "",
     timeout: int = 120,
     source: str = "manual",
+    change_set_id: str = "",
 ) -> dict:
     normalized = _normalize_agent_loop_test_command(command or "")
     detected_source = source
@@ -12009,6 +12171,7 @@ async def _execute_code_validation(
         "type": "code_validation",
         "validation_id": uuid.uuid4().hex,
         "source": detected_source,
+        "change_set_id": change_set_id,
         **result,
         "ts": time.time(),
     }
@@ -12016,7 +12179,7 @@ async def _execute_code_validation(
     return event
 
 
-async def _maybe_auto_validate_code_changes(session_id: str, cwd: str, changed_files: List[dict]) -> Optional[dict]:
+async def _maybe_auto_validate_code_changes(session_id: str, cwd: str, changed_files: List[dict], *, change_set_id: str) -> Optional[dict]:
     if not changed_files:
         return None
     settings = _code_project_settings(cwd)
@@ -12029,12 +12192,15 @@ async def _maybe_auto_validate_code_changes(session_id: str, cwd: str, changed_f
             command=settings["validation_command"],
             timeout=settings["validation_timeout"],
             source="project_auto",
+            change_set_id=change_set_id,
         )
     except HTTPException as exc:
         event = {
             "type": "code_validation",
             "validation_id": uuid.uuid4().hex,
             "source": "project_auto",
+            "change_set_id": change_set_id,
+            "not_run": True,
             "command": settings["validation_command"],
             "stdout": "",
             "stderr": str(exc.detail),
@@ -12053,12 +12219,17 @@ async def validate_code_session(session_id: str, req: CodeValidationRequest):
         raise HTTPException(status_code=409, detail="session is busy")
     row = _agent_sdk_session_row(session_id)
     cwd = row["cwd"] or os.path.expanduser("~")
+    events = await async_load_events(session_id)
+    # Manual checks run against the current project, not a historical snapshot.
+    change_set_id = next((str(ev.get("change_set_id") or "") for ev in reversed(events)
+                          if ev.get("type") == "result" and not ev.get("parent_tool_use_id")), "")
     event = await _execute_code_validation(
         session_id,
         cwd,
         command=req.command or "",
         timeout=int(req.timeout or 120),
         source="manual" if (req.command or "").strip() else "",
+        change_set_id=change_set_id,
     )
     return {"ok": True, "event": event}
 
@@ -12231,7 +12402,7 @@ async def mobile_access_totp_setup(request: Request):
     _require_local_admin(request)
     secret = _mobile_access_totp_generate_secret()
     _app_meta_set(_MOBILE_ACCESS_TOTP_PENDING_META_KEY, secret)
-    issuer = "Claude Code Web"
+    issuer = "CCW Desk"
     account = socket.gethostname() or "local"
     label = f"{issuer}:{account}"
     provisioning_uri = (
@@ -12360,7 +12531,7 @@ async def test_notification(request: Request, req: NotificationTestRequest):
     if channel is None:
         raise HTTPException(status_code=404, detail="notification channel not found")
     payload = _notification_payload(
-        "Claude Code Web 测试通知",
+        "CCW Desk 测试通知",
         f"{channel.get('name') or channel.get('type')} 已连接。",
         status="test",
     )
@@ -14062,17 +14233,24 @@ async def compact_session(request: Request, session_id: str, keep_last: int = Qu
             "使用简洁 markdown，最多 40 行。\n\n"
             + snippet
         )
-        proc = await asyncio.create_subprocess_exec(
-            *claude_cli_argv("-p", summary_prompt, "--output-format", "text", "--model", "haiku"),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            raise HTTPException(status_code=504, detail="summary timeout")
+        if _workbench_runtime.provider_binding(session_id):
+            try:
+                completion = await _workbench_runtime.session_completion(session_id, summary_prompt, max_tokens=2048)
+                stdout = completion["reply"].encode("utf-8")
+            except Exception as exc:
+                raise HTTPException(502, "会话绑定的模型服务无法完成压缩，不会切换到其他服务") from exc
+        else:
+            proc = await asyncio.create_subprocess_exec(
+                *claude_cli_argv("-p", summary_prompt, "--output-format", "text", "--model", "haiku"),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                raise HTTPException(status_code=504, detail="summary timeout")
 
         summary = stdout.decode("utf-8", errors="replace").strip()
         if not summary:
@@ -14122,24 +14300,31 @@ async def suggest_title(session_id: str):
     if not summary.strip():
         raise HTTPException(status_code=400, detail="no textual content")
     prompt = f"根据下面的对话，用中文生成一个不超过15字、不带引号的会话标题（只输出标题本身）：\n\n{summary}"
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *claude_cli_argv("-p", prompt, "--output-format", "text"),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+    if _workbench_runtime.provider_binding(session_id):
         try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            raise HTTPException(status_code=504, detail="title generation timeout")
-    except HTTPException:
-        raise
-    except ClaudeCliResolutionError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"title generation failed: {e}")
+            completion = await _workbench_runtime.session_completion(session_id, prompt, max_tokens=128)
+            stdout = completion["reply"].encode("utf-8")
+        except Exception as exc:
+            raise HTTPException(502, "会话绑定的模型服务无法生成标题，不会切换到其他服务") from exc
+    else:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *claude_cli_argv("-p", prompt, "--output-format", "text"),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                raise HTTPException(status_code=504, detail="title generation timeout")
+        except HTTPException:
+            raise
+        except ClaudeCliResolutionError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"title generation failed: {e}")
     title = stdout.decode("utf-8", errors="replace").strip().splitlines()[0].strip(' "\'"""''').strip()[:60]
     if not title:
         raise HTTPException(status_code=500, detail="empty title")
@@ -14523,20 +14708,27 @@ async def suggest_followups(session_id: str = ""):
         "只输出3行，每行一个问题，不要编号、不要引号、不要其他内容。\n\n"
         f"{snippet}"
     )
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *claude_cli_argv("-p", prompt, "--output-format", "text", "--model", "haiku"),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+    if _workbench_runtime.provider_binding(session_id):
         try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
+            completion = await _workbench_runtime.session_completion(session_id, prompt, max_tokens=256)
+            stdout = completion["reply"].encode("utf-8")
+        except Exception:
             return {"suggestions": []}
-    except Exception:
-        return {"suggestions": []}
+    else:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *claude_cli_argv("-p", prompt, "--output-format", "text", "--model", "haiku"),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                return {"suggestions": []}
+        except Exception:
+            return {"suggestions": []}
     lines = [l.strip() for l in stdout.decode("utf-8", errors="replace").splitlines() if l.strip()]
     suggestions = [l.lstrip("0123456789.-、）) ") for l in lines[:3]]
     return {"suggestions": suggestions}
@@ -16976,7 +17168,7 @@ def main():
     except Exception:
         pass
 
-    parser = argparse.ArgumentParser(description="Claude Code Web - Web UI for Claude Code CLI")
+    parser = argparse.ArgumentParser(description="CCW Desk - Web UI for Claude Code CLI")
     parser.add_argument("--port", "-p", type=int, default=int(os.environ.get("PORT", "8765")), help="Port to listen on (default: 8765)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
     parser.add_argument("--open", action="store_true", help="Open browser after starting")
@@ -17002,7 +17194,7 @@ def main():
         _cli_setup_totp()
         return
 
-    print(f"Claude Code Web v{__version__}")
+    print(f"CCW Desk v{__version__}")
     print(f"  → http://{args.host}:{args.port}")
     print(f"  → Data: {_DATA_DIR}")
 
@@ -17062,6 +17254,11 @@ def print_extension_path():
         print("Chrome extension files were not found in this installation.", file=sys.stderr)
         sys.exit(1)
     print(path)
+
+
+from claude_web.workbench_api import create_router as _create_workbench_router
+_workbench_router, _workbench_runtime = _create_workbench_router(sys.modules[__name__])
+app.include_router(_workbench_router)
 
 
 if __name__ == "__main__":

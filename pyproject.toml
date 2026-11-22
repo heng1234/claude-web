@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "claude-web-ui"
 dynamic = ["version"]
-description = "Web UI for Claude Code CLI — token streaming, tool visualization, checkpoint rollback, multi-session management"
+description = "CCW Desk — Local visual workspace for Claude Code"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.9"
 authors = [
     { name = "heng1234" },
 ]
-keywords = ["claude", "claude-code", "anthropic", "llm", "web-ui", "fastapi"]
+keywords = ["ccw-desk", "claude", "claude-code", "anthropic", "llm", "web-ui", "fastapi"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Web Environment",

@@ -277,16 +277,27 @@ class AgentSdkBridge:
                         # which is what clears a Task chip's running state.
                         if _shed_stream_events(queue):
                             queue.put_nowait(payload)
-                        else:
-                            self._queues.pop(request_id, None)
-                            session_key = self._turn_sessions.pop(request_id, "")
-                            self._force_fail_queue(
-                                queue,
-                                "Claude Agent SDK event buffer overflowed; the stalled turn was interrupted",
-                            )
-                            if session_key:
-                                asyncio.create_task(self._best_effort_interrupt(session_key))
+                        elif payload_type == "event" and (payload.get("event") or {}).get("type") == "stream_event":
+                            # A new token delta is also replaceable. A queue of
+                            # essential events must not be interrupted for it.
                             continue
+                        else:
+                            try:
+                                # readexactly() may return buffered frames without
+                                # yielding. Give the SSE/history consumer a chance
+                                # to drain before treating a burst as a stall.
+                                # Bound the wait so control replies still progress.
+                                await asyncio.wait_for(queue.put(payload), timeout=0.1)
+                            except asyncio.TimeoutError:
+                                self._queues.pop(request_id, None)
+                                session_key = self._turn_sessions.pop(request_id, "")
+                                self._force_fail_queue(
+                                    queue,
+                                    "Claude Agent SDK event buffer overflowed; the stalled turn was interrupted",
+                                )
+                                if session_key:
+                                    asyncio.create_task(self._best_effort_interrupt(session_key))
+                                continue
                     if payload_type == "done":
                         self._queues.pop(request_id, None)
                         self._turn_sessions.pop(request_id, None)
@@ -380,8 +391,8 @@ class AgentSdkBridge:
         if not await self.ensure_started():
             raise AgentSdkBridgeError(self.last_error or "Claude Agent SDK is unavailable")
         request_id = str(uuid.uuid4())
-        # Bound native streaming events so a disconnected/slow browser applies
-        # backpressure to the bridge instead of growing Python memory forever.
+        # Bound native streaming events so a stalled SSE/history consumer
+        # cannot grow Python memory forever.
         queue: "asyncio.Queue[dict]" = asyncio.Queue(maxsize=DEFAULT_EVENT_QUEUE_SIZE)
         self._queues[request_id] = queue
         self._turn_sessions[request_id] = session_key

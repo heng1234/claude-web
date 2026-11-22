@@ -40,7 +40,7 @@ async function createMenus() {
     await chrome.contextMenus.removeAll();
     chrome.contextMenus.create({
       id: MENU_ROOT,
-      title: mode === "code" ? "Claude Code" : "Claude 网页问答",
+      title: mode === "code" ? "CCW Desk · Code" : "CCW Desk · 网页问答",
       contexts: ["selection"],
     });
     for (const action of visibleActions) {
